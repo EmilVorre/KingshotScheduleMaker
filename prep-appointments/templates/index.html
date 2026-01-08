@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SvS Preparation Week - Appointment Scheduler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .glass-effect { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div id="app">
+        <div class="container mx-auto px-4 py-8">
+            <header class="text-center mb-12">
+                <h1 class="text-5xl font-bold text-white mb-4 drop-shadow-lg">
+                    <i class="fas fa-calendar-alt mr-3"></i>SvS Preparation Week
+                </h1>
+                <p class="text-xl text-white/90 font-light">Appointment Scheduling System</p>
+            </header>
+            
+            <nav class="flex justify-center gap-4 mb-12 flex-wrap">
+                <a href="/" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all" :class="{'bg-white/20': currentPage === 'home'}">
+                    <i class="fas fa-home mr-2"></i>Home
+                </a>
+                <a href="/schedules" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all" :class="{'bg-white/20': currentPage === 'schedules'}">
+                    <i class="fas fa-calendar-check mr-2"></i>Schedules
+                </a>
+                <a href="/stats" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all" :class="{'bg-white/20': currentPage === 'stats'}">
+                    <i class="fas fa-chart-bar mr-2"></i>Statistics
+                </a>
+                <a href="/admin" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all" :class="{'bg-white/20': currentPage === 'admin'}">
+                    <i class="fas fa-shield-alt mr-2"></i>Admin
+                </a>
+            </nav>
+            
+            <main class="max-w-6xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8 mb-8">
+                    <div class="text-center mb-8">
+                        <h2 class="text-3xl font-bold text-gray-800 mb-3">Welcome</h2>
+                        <p class="text-gray-600 text-lg">Manage and view appointment schedules for SvS Preparation Week</p>
+                    </div>
+                    
+                    <div class="grid md:grid-cols-3 gap-6">
+                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 card-hover border-2 border-blue-200" 
+                             @mouseenter="hoverCard = 'schedules'" @mouseleave="hoverCard = null">
+                            <div class="text-4xl mb-4 text-blue-600" :class="{'scale-110': hoverCard === 'schedules'}" style="transition: transform 0.3s;">
+                                <i class="fas fa-calendar-check"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">View Schedules</h3>
+                            <p class="text-gray-600 mb-4">Check the appointment schedules for Construction, Research, and Troops Training days.</p>
+                            <a href="/schedules" class="inline-block bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl">
+                                View Schedules <i class="fas fa-arrow-right ml-2"></i>
+                            </a>
+                        </div>
+                        
+                        <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 card-hover border-2 border-purple-200"
+                             @mouseenter="hoverCard = 'stats'" @mouseleave="hoverCard = null">
+                            <div class="text-4xl mb-4 text-purple-600" :class="{'scale-110': hoverCard === 'stats'}" style="transition: transform 0.3s;">
+                                <i class="fas fa-chart-pie"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Statistics</h3>
+                            <p class="text-gray-600 mb-4">View alliance statistics and time slot popularity (no player names).</p>
+                            <a href="/stats" class="inline-block bg-purple-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-purple-700 transition-all shadow-lg hover:shadow-xl">
+                                View Stats <i class="fas fa-arrow-right ml-2"></i>
+                            </a>
+                        </div>
+                        
+                        <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-6 card-hover border-2 border-red-200"
+                             @mouseenter="hoverCard = 'admin'" @mouseleave="hoverCard = null">
+                            <div class="text-4xl mb-4 text-red-600" :class="{'scale-110': hoverCard === 'admin'}" style="transition: transform 0.3s;">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-3">Admin Panel</h3>
+                            <p class="text-gray-600 mb-4">Upload CSV files and generate new schedules (password protected).</p>
+                            <a href="/admin" class="inline-block bg-red-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl">
+                                Admin Panel <i class="fas fa-arrow-right ml-2"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            
+            <footer class="text-center mt-12 text-white/80">
+                <p>&copy; 2025 SvS Preparation Week Scheduler</p>
+            </footer>
+        </div>
+    </div>
+    
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    currentPage: 'home',
+                    hoverCard: null
+                }
+            },
+            mounted() {
+                // Determine current page from URL
+                const path = window.location.pathname;
+                if (path.includes('schedules')) this.currentPage = 'schedules';
+                else if (path.includes('stats')) this.currentPage = 'stats';
+                else if (path.includes('admin')) this.currentPage = 'admin';
+                else this.currentPage = 'home';
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
