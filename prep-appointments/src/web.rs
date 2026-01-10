@@ -3,9 +3,9 @@ use actix_files::Files;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use crate::{load_appointments, schedule_construction_day, schedule_research_day, schedule_troops_day, AppointmentEntry, DaySchedule};
-use crate::slot_to_time;
-use crate::format_player_name;
+use crate::parser::{load_appointments, AppointmentEntry};
+use crate::schedule::{schedule_construction_day, schedule_research_day, schedule_troops_day, DaySchedule, slot_to_time};
+use crate::display::format_player_name;
 
 // In-memory storage for schedules (in production, use a database)
 pub struct AppState {
