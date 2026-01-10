@@ -4,23 +4,32 @@ A Rust-based appointment scheduling system for SvS Preparation Week with a web i
 
 ## Features
 
-- **CSV Parsing**: Reads appointment data from CSV files
+- **CSV Parsing**: Reads appointment data from CSV files with resubmission handling
 - **Smart Scheduling**: Automatic scheduling with priority-based slot assignment
 - **Slot Stealing**: Advanced algorithm that can move players up to 5 levels deep to optimize assignments
+- **Day-Specific Logic**: 
+  - Construction Day: Prioritizes slot 49 for players who want research and have slot 1 available
+  - Research Day: Automatically locks slot 1 for the player in Construction Day's slot 49
+  - Troops Training Day: Standard priority-based scheduling
 - **Web Interface**: 
   - Admin panel (password protected) for CSV upload
   - Statistics page showing alliance counts and time slot popularity (no player names)
   - Schedule display page for all three days
+- **Modular Architecture**: Clean separation of concerns with dedicated modules for parsing, scheduling, and display
 
 ## Usage
 
-### CLI Mode (Original)
+### CLI Mode
 
 ```bash
 cargo run
 ```
 
-This will process the hardcoded CSV file and generate schedule text files.
+This will:
+1. Process the CSV file (looks for `data/testData2.csv` or falls back to a hardcoded path)
+2. Generate schedules for all three days
+3. Print schedules to the terminal
+4. Write schedule files: `schedule_construction.txt`, `schedule_research.txt`, `schedule_troops.txt`
 
 ### Web Server Mode
 
@@ -94,17 +103,42 @@ To deploy to name.com hosting:
 ```
 prep-appointments/
 ├── src/
-│   ├── main.rs      # Core scheduling logic
-│   └── web.rs       # Web server and API endpoints
-├── templates/       # HTML templates
+│   ├── main.rs           # Main entry point (CLI and web server launcher)
+│   ├── parser.rs         # CSV parsing and AppointmentEntry struct
+│   ├── display.rs        # Terminal output and file writing functions
+│   ├── web.rs            # Web server and API endpoints
+│   └── schedule/         # Scheduling algorithm modules
+│       ├── mod.rs        # Module declarations and public exports
+│       ├── types.rs      # Data structures (ScheduledAppointment, DaySchedule, Move)
+│       ├── slot_utils.rs # Slot conversion and ranking utilities
+│       ├── move_chain.rs # Slot reassignment chain logic
+│       ├── generic.rs    # Generic scheduling functions
+│       ├── construction.rs # Construction day scheduler
+│       ├── research.rs   # Research day scheduler
+│       └── troops.rs     # Troops training day scheduler
+├── templates/            # HTML templates
 │   ├── index.html
 │   ├── admin.html
 │   ├── stats.html
 │   └── schedules.html
-├── static/          # Static assets
+├── static/               # Static assets
 │   └── style.css
 └── Cargo.toml
 ```
+
+### Module Overview
+
+- **`parser.rs`**: Handles CSV file parsing, time slot conversion, and data validation. Contains the `AppointmentEntry` struct that represents each player's appointment preferences.
+- **`schedule/`**: Contains the scheduling algorithms, organized by function:
+  - **`types.rs`**: Core data structures used throughout the scheduling system
+  - **`slot_utils.rs`**: Utility functions for converting between time strings and slot numbers, and calculating slot popularity
+  - **`move_chain.rs`**: Implements the slot "stealing" mechanism that can rearrange players up to 5 levels deep
+  - **`generic.rs`**: Generic scheduling functions used by all day types
+  - **`construction.rs`**: Specialized logic for Construction Day (handles slot 49 priority)
+  - **`research.rs`**: Specialized logic for Research Day (handles locked slot 1 from Construction Day)
+  - **`troops.rs`**: Simple wrapper for Troops Training Day scheduling
+- **`display.rs`**: Handles all output formatting, including terminal display and file writing
+- **`web.rs`**: Web server implementation using Actix-web, handles API endpoints and serves HTML pages
 
 ## Security Note
 
