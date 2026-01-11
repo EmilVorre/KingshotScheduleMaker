@@ -39,47 +39,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("Loaded {} appointment entries (resubmissions merged)", entries.len());
     
-    // Verify resubmission handling - check Jobie (37924862) who had a resubmission
-    if let Some(jobie) = entries.iter().find(|e| e.player_id == "37924862") {
-        println!("\n=== Resubmission Verification ===");
-        println!("Jobie (ID: 37924862) - Should have resubmission values:");
-        println!("  Construction Speedups: {} hours (should be 2100)", jobie.construction_speedups);
-        println!("  Construction Truegold: {} (should be 2500)", jobie.construction_truegold);
-        println!("  Construction Score: {}", jobie.construction_score);
-    }
-    
-    // Print first few entries as example
-    println!("\n=== Sample Entries ===");
-    
-    // Debug: Print Bunny's entry specifically
-    if let Some(bunny) = entries.iter().find(|e| e.player_id == "39874858") {
-        println!("\n=== DEBUG: Bunny Entry ===");
-        println!("Name: {}", bunny.name);
-        println!("Player ID: {}", bunny.player_id);
-        println!("Wants Research: {}", bunny.wants_research);
-        println!("Research Available Slots: {:?}", bunny.research_available_slots);
-        println!("Research Score: {}", bunny.research_score);
-    }
-    
-    for (i, entry) in entries.iter().take(3).enumerate() {
-        println!("\n--- Entry {} ---", i + 1);
-        let formatted_name = format_player_name(&entry.alliance, &entry.name);
-        println!("Name: {}", formatted_name);
-        println!("Player ID: {}", entry.player_id);
-        println!("Wants Construction: {}", entry.wants_construction);
-        println!("Wants Research: {}", entry.wants_research);
-        println!("Wants Troops: {}", entry.wants_troops);
-        println!("Construction Speedups: {} hours", entry.construction_speedups);
-        println!("Construction Truegold: {}", entry.construction_truegold);
-        println!("Construction Score: {}", entry.construction_score);
-        println!("Research Speedups: {} hours", entry.research_speedups);
-        println!("Research Truegold Dust: {}", entry.research_truegold_dust);
-        println!("Research Score: {}", entry.research_score);
-        println!("Construction Available Slots: {:?}", entry.construction_available_slots);
-        println!("Research Available Slots: {:?}", entry.research_available_slots);
-        println!("Troops Available Slots: {:?}", entry.troops_available_slots);
-    }
-    
     // Run the scheduler
     println!("\n\n=== Running Auto-Scheduler ===");
     
