@@ -93,7 +93,7 @@ To deploy to name.com hosting:
 
 4. Run the server:
    ```bash
-   ./prep-appointments web 80
+   ./prep-appointments web 3000
    ```
 
 5. Configure your domain to point to the server and set up port forwarding if needed.

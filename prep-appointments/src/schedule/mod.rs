@@ -7,7 +7,7 @@ pub mod research;
 pub mod troops;
 
 pub use types::DaySchedule;
-pub use slot_utils::slot_to_time;
+pub use slot_utils::{slot_to_time, calculate_time_slots, parse_time_to_minutes, minutes_to_time_string};
 pub use construction::schedule_construction_day;
 pub use research::schedule_research_day;
 pub use troops::schedule_troops_day;

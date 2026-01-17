@@ -2,10 +2,11 @@ mod parser;
 mod schedule;
 mod display;
 mod web;
+mod form;
 
 use parser::load_appointments;
 use schedule::{schedule_construction_day, schedule_research_day, schedule_troops_day};
-use display::{format_player_name, print_day_schedule, write_schedule_to_file};
+use display::{print_day_schedule, write_schedule_to_file};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,7 +36,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     
     println!("Loading appointments from CSV...");
-    let entries = load_appointments(csv_path)?;
+    // For command-line usage, use None for time slot mappings (backward compatibility with old CSV format)
+    let entries = load_appointments(csv_path, None, None, None)?;
     
     println!("Loaded {} appointment entries (resubmissions merged)", entries.len());
     

@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit Appointment Form - Schedule Maker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+        }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s, transform 0.3s; }
+        .fade-enter-from { opacity: 0; transform: translateY(-10px); }
+        .fade-leave-to { opacity: 0; transform: translateY(-10px); }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-900 text-white">
+    <div id="app">
+        <div class="container mx-auto px-4 py-8 max-w-4xl">
+            <header class="text-center mb-12">
+                <h1 class="text-4xl font-bold text-blue-400 mb-4">
+                    <i class="fas fa-calendar-check mr-3"></i>{{ t('submitAppointmentForm') }}
+                </h1>
+                <p class="text-gray-400">{{ t('fillOutFormDescription') }}</p>
+            </header>
+            
+            <!-- Language Selector -->
+            <div class="flex justify-end mb-4">
+                <select 
+                    v-model="currentLanguage" 
+                    @change="changeLanguage"
+                    class="px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all">
+                    <option value="en">English</option>
+                    <option value="ko">한국어</option>
+                    <option value="zh">中文</option>
+                    <option value="ja">日本語</option>
+                </select>
+            </div>
+            
+            <nav class="flex justify-center gap-4 mb-12 flex-wrap">
+                <a :href="baseUrl + '/stats'" class="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all border border-gray-700">
+                    <i class="fas fa-chart-bar mr-2"></i>{{ t('statistics') }}
+                </a>
+                <a :href="baseUrl" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all border border-blue-500">
+                    <i class="fas fa-edit mr-2"></i>{{ t('submitForm') }}
+                </a>
+            </nav>
+            
+            <main>
+                <div v-if="loading" class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                    <i class="fas fa-spinner fa-spin text-4xl text-blue-400 mb-4"></i>
+                    <p class="text-xl text-gray-400">{{ t('loadingFormConfiguration') }}</p>
+                </div>
+                
+                <transition name="fade" mode="out-in" v-else>
+                    <div v-if="errorMessage" key="error" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-red-700">
+                        <div class="text-center">
+                            <i class="fas fa-exclamation-triangle text-4xl text-red-400 mb-4"></i>
+                            <h2 class="text-2xl font-bold text-red-400 mb-2">{{ t('error') }}</h2>
+                            <p class="text-gray-300">{{ errorMessage }}</p>
+                        </div>
+                    </div>
+                    <div v-else-if="!submitted" key="form">
+                        <!-- Introduction Text -->
+                        <div v-if="config.intro_text" class="bg-blue-900/30 border-l-4 border-blue-500 rounded-lg p-6 mb-8">
+                            <div class="prose prose-invert max-w-none">
+                                <div class="whitespace-pre-line text-gray-200">{{ t('introText') }}</div>
+                            </div>
+                        </div>
+                        
+                        <form @submit.prevent="handleSubmit" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700 space-y-8">
+                            <!-- Basic Information -->
+                            <div class="border-b border-gray-700 pb-6">
+                                <h2 class="text-2xl font-bold text-blue-400 mb-6">
+                                    <i class="fas fa-user mr-2"></i>{{ t('basicInformation') }}
+                                </h2>
+                                
+                                <div class="space-y-6">
+                                    <div>
+                                        <label for="alliance" class="block text-sm font-semibold text-gray-300 mb-2">
+                                            {{ t('allianceQuestion') }} <span class="text-red-400">*</span>
+                                        </label>
+                                        <select 
+                                            id="alliance" 
+                                            v-model="form.alliance"
+                                            @change="handleAllianceChange"
+                                            required
+                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all">
+                                            <option v-for="alliance in config.alliances" :key="alliance" :value="alliance">{{ alliance === 'Non of the above' ? t('nonOfAbove') : alliance }}</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div v-if="form.alliance === 'Non of the above'" class="transition-all">
+                                        <label for="custom_alliance" class="block text-sm font-semibold text-gray-300 mb-2">
+                                            {{ t('customAllianceLabel') }} <span class="text-red-400">*</span>
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            id="custom_alliance" 
+                                            v-model="form.custom_alliance"
+                                            :required="form.alliance === 'Non of the above'"
+                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                            :placeholder="t('customAlliancePlaceholder')">
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="character_name" class="block text-sm font-semibold text-gray-300 mb-2">
+                                            {{ t('characterNameQuestion') }} <span class="text-red-400">*</span>
+                                        </label>
+                                        <p class="text-xs text-gray-500 mb-2">{{ t('characterNameNote') }}</p>
+                                        <p class="text-xs text-gray-500 mb-2">{{ t('characterNameProTip') }}</p>
+                                        <input 
+                                            type="text" 
+                                            id="character_name" 
+                                            v-model="form.character_name"
+                                            required
+                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                            :placeholder="t('characterNamePlaceholder')">
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="player_id" class="block text-sm font-semibold text-gray-300 mb-2">
+                                            {{ t('playerIdQuestion') }} <span class="text-red-400">*</span>
+                                        </label>
+                                        <p class="text-xs text-gray-500 mb-2">{{ t('playerIdNote') }}</p>
+                                        <input 
+                                            type="text" 
+                                            id="player_id" 
+                                            v-model="form.player_id"
+                                            required
+                                            pattern="[0-9]+"
+                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                            :placeholder="t('playerIdPlaceholder')">
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="submission_type" class="block text-sm font-semibold text-gray-300 mb-2">
+                                            {{ t('submissionType') }} <span class="text-red-400">*</span>
+                                        </label>
+                                        <select 
+                                            id="submission_type" 
+                                            v-model="form.submission_type"
+                                            required
+                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all">
+                                            <option value="New submission">{{ t('newSubmission') }}</option>
+                                            <option value="Re-Submission">{{ t('updateSubmission') }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Construction Day -->
+                            <div class="border-b border-gray-700 pb-6">
+                                <h2 class="text-2xl font-bold text-orange-400 mb-6">
+                                    <i class="fas fa-hammer mr-2"></i>{{ t('constructionDay') }}
+                                </h2>
+                                
+                                <div class="space-y-6">
+                                    <div class="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            id="wants_construction" 
+                                            v-model="form.wants_construction"
+                                            class="w-5 h-5 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2">
+                                        <label for="wants_construction" class="ml-3 text-gray-300 font-medium">
+                                            {{ t('wantsConstruction') }}
+                                        </label>
+                                    </div>
+                                    
+                                    <div v-if="form.wants_construction" class="space-y-4 pl-8 border-l-2 border-orange-500/30">
+                                        <div>
+                                            <label for="construction_speedups" class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('constructionSpeedupsLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <p class="text-xs text-gray-500 mb-2">{{ t('constructionSpeedupsNote') }}</p>
+                                            <input 
+                                                type="number" 
+                                                id="construction_speedups" 
+                                                v-model.number="form.construction_speedups"
+                                                :required="form.wants_construction"
+                                                min="0"
+                                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                                :placeholder="t('constructionSpeedupsPlaceholder')">
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="construction_truegold" class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('constructionTruegoldLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <input 
+                                                type="number" 
+                                                id="construction_truegold" 
+                                                v-model.number="form.construction_truegold"
+                                                :required="form.wants_construction"
+                                                min="0"
+                                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                                :placeholder="t('constructionTruegoldPlaceholder')">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('constructionTimeSlotsLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <p class="text-xs text-gray-500 mb-4">{{ t('constructionTimeSlotsNote') }}</p>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 bg-gray-900/50 p-4 rounded-lg">
+                                                <label v-for="slot in constructionTimeSlots" :key="slot.value" class="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        :value="slot.value"
+                                                        v-model="form.construction_time_slots"
+                                                        class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500">
+                                                    <span class="text-sm text-gray-300">{{ slot.label }}</span>
+                                                </label>
+                                            </div>
+                                            <p v-if="form.wants_construction && form.construction_time_slots.length < 5" class="text-xs text-red-400 mt-2">
+                                                {{ t('constructionTimeSlotsError', { count: form.construction_time_slots.length }) }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Research Day -->
+                            <div class="border-b border-gray-700 pb-6">
+                                <h2 class="text-2xl font-bold text-purple-400 mb-6">
+                                    <i class="fas fa-flask mr-2"></i>{{ t('researchDay') }}
+                                </h2>
+                                
+                                <div class="space-y-6">
+                                    <div class="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            id="wants_research" 
+                                            v-model="form.wants_research"
+                                            class="w-5 h-5 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2">
+                                        <label for="wants_research" class="ml-3 text-gray-300 font-medium">
+                                            {{ t('wantsResearch') }}
+                                        </label>
+                                    </div>
+                                    
+                                    <div v-if="form.wants_research" class="space-y-4 pl-8 border-l-2 border-purple-500/30">
+                                        <div>
+                                            <label for="research_speedups" class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('researchSpeedupsLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <p class="text-xs text-gray-500 mb-2">{{ t('researchSpeedupsNote') }}</p>
+                                            <input 
+                                                type="number" 
+                                                id="research_speedups" 
+                                                v-model.number="form.research_speedups"
+                                                :required="form.wants_research"
+                                                min="0"
+                                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                                :placeholder="t('researchSpeedupsPlaceholder')">
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="research_truegold_dust" class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('researchTruegoldDustLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <input 
+                                                type="number" 
+                                                id="research_truegold_dust" 
+                                                v-model.number="form.research_truegold_dust"
+                                                :required="form.wants_research"
+                                                min="0"
+                                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                                :placeholder="t('researchTruegoldDustPlaceholder')">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('researchTimeSlotsLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <p class="text-xs text-gray-500 mb-4">{{ t('researchTimeSlotsNote') }}</p>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 bg-gray-900/50 p-4 rounded-lg">
+                                                <label v-for="slot in researchTimeSlots" :key="slot.value" class="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        :value="slot.value"
+                                                        v-model="form.research_time_slots"
+                                                        class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500">
+                                                    <span class="text-sm text-gray-300">{{ slot.label }}</span>
+                                                </label>
+                                            </div>
+                                            <p v-if="form.wants_research && form.research_time_slots.length < 5" class="text-xs text-red-400 mt-2">
+                                                {{ t('researchTimeSlotsError', { count: form.research_time_slots.length }) }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Troops Training Day -->
+                            <div class="border-b border-gray-700 pb-6">
+                                <h2 class="text-2xl font-bold text-green-400 mb-6">
+                                    <i class="fas fa-users mr-2"></i>{{ t('troopsTrainingDay') }}
+                                </h2>
+                                
+                                <div class="space-y-6">
+                                    <div class="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            id="wants_troops" 
+                                            v-model="form.wants_troops"
+                                            class="w-5 h-5 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2">
+                                        <label for="wants_troops" class="ml-3 text-gray-300 font-medium">
+                                            {{ t('wantsTroops') }}
+                                        </label>
+                                    </div>
+                                    
+                                    <div v-if="form.wants_troops" class="space-y-4 pl-8 border-l-2 border-green-500/30">
+                                        <div>
+                                            <label for="troops_speedups" class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('troopsSpeedupsLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <p class="text-xs text-gray-500 mb-2">{{ t('troopsSpeedupsNote') }}</p>
+                                            <input 
+                                                type="number" 
+                                                id="troops_speedups" 
+                                                v-model.number="form.troops_speedups"
+                                                :required="form.wants_troops"
+                                                min="0"
+                                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                                :placeholder="t('troopsSpeedupsPlaceholder')">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('troopsTimeSlotsLabel') }} <span class="text-red-400">*</span>
+                                            </label>
+                                            <p class="text-xs text-gray-500 mb-4">{{ t('troopsTimeSlotsNote') }}</p>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 bg-gray-900/50 p-4 rounded-lg">
+                                                <label v-for="slot in troopsTimeSlots" :key="slot.value" class="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        :value="slot.value"
+                                                        v-model="form.troops_time_slots"
+                                                        class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500">
+                                                    <span class="text-sm text-gray-300">{{ slot.label }}</span>
+                                                </label>
+                                            </div>
+                                            <p v-if="form.wants_troops && form.troops_time_slots.length < 5" class="text-xs text-red-400 mt-2">
+                                                {{ t('troopsTimeSlotsError', { count: form.troops_time_slots.length }) }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Additional Fields -->
+                            <div class="space-y-6">
+                                <div>
+                                    <label for="additional_notes" class="block text-sm font-semibold text-gray-300 mb-2">
+                                        {{ t('additionalNotesLabel') }}
+                                    </label>
+                                    <textarea 
+                                        id="additional_notes" 
+                                        v-model="form.additional_notes"
+                                        rows="4"
+                                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                        :placeholder="t('additionalNotesPlaceholder')"></textarea>
+                                </div>
+                                
+                                <div>
+                                    <label for="suggestions" class="block text-sm font-semibold text-gray-300 mb-2">
+                                        {{ t('suggestionsLabel') }}
+                                    </label>
+                                    <textarea 
+                                        id="suggestions" 
+                                        v-model="form.suggestions"
+                                        rows="4"
+                                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                        :placeholder="t('suggestionsPlaceholder')"></textarea>
+                                </div>
+                            </div>
+                            
+                            <!-- Submit Button -->
+                            <div class="flex justify-center pt-6">
+                                <button 
+                                    type="submit"
+                                    :disabled="isSubmitting"
+                                    class="px-8 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-lg transition-all shadow-lg hover:shadow-xl">
+                                    <i class="fas fa-paper-plane mr-2"></i>
+                                    <span v-if="!isSubmitting">{{ t('submitButton') }}</span>
+                                    <span v-else><i class="fas fa-spinner fa-spin mr-2"></i>{{ t('submitting') }}</span>
+                                </button>
+                            </div>
+                            
+                            <div v-if="errorMessage" class="mt-4 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+                                <i class="fas fa-exclamation-circle mr-2"></i>{{ errorMessage }}
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div v-else key="success" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700 text-center">
+                        <div class="inline-block bg-green-900/50 rounded-full p-6 mb-6">
+                            <i class="fas fa-check-circle text-green-400 text-5xl"></i>
+                        </div>
+                        <h2 class="text-3xl font-bold text-green-400 mb-4">{{ t('formSubmittedSuccessfully') }}</h2>
+                        <p class="text-gray-300 mb-8">{{ t('formSubmittedMessage') }}</p>
+                        <div class="flex justify-center gap-4">
+                            <button @click="resetForm" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all">
+                                <i class="fas fa-plus mr-2"></i>{{ t('submitAnotherForm') }}
+                            </button>
+                        </div>
+                    </div>
+                </transition>
+            </main>
+        </div>
+    </div>
+    
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                // Extract form code from URL path (/form/{code})
+                const pathParts = window.location.pathname.split('/').filter(p => p);
+                const formCode = pathParts[1] || ''; // pathParts[0] is 'form', pathParts[1] is the code
+                
+                // Load saved language preference
+                const savedLanguage = localStorage.getItem('form_language') || 'en';
+                
+                return {
+                    formCode: formCode,
+                    baseUrl: `/form/${formCode}`,
+                    currentLanguage: savedLanguage,
+                    translations: {
+                        en: {
+                            submitAppointmentForm: 'Submit Appointment Form',
+                            fillOutFormDescription: 'Fill out the form to submit your appointment preferences',
+                            statistics: 'Statistics',
+                            submitForm: 'Submit Form',
+                            loadingFormConfiguration: 'Loading form configuration...',
+                            error: 'Error',
+                            basicInformation: 'Basic Information',
+                            allianceQuestion: 'What alliance do you belong to?',
+                            nonOfAbove: 'Non of the above',
+                            customAllianceLabel: 'If chosen "Non of the above" please type it here',
+                            customAlliancePlaceholder: 'Enter your alliance name',
+                            characterNameQuestion: 'What is your character name?',
+                            characterNameNote: 'Note: Copy your name from your profile and paste it in the answer below.',
+                            characterNameProTip: 'Pro Tip: Please do not change your character name after filling this form and before Friday of SvS preparation week.',
+                            characterNamePlaceholder: 'Enter your character name',
+                            playerIdQuestion: 'What is your player ID?',
+                            playerIdNote: 'Note: Your ID must be a number',
+                            playerIdPlaceholder: 'Enter your player ID',
+                            submissionType: 'Is this form a...',
+                            newSubmission: 'New submission',
+                            updateSubmission: 'Re-Submission',
+                            constructionDay: 'Construction Day',
+                            wantsConstruction: 'Do you want a Construction day appointment?',
+                            constructionSpeedupsLabel: 'How many hours of speedups do you plan to use on Construction day?',
+                            constructionSpeedupsNote: 'Note: Your response must be in hours. Add together amount of general speedup hours and construction speedup hours you are planning to use on this day.',
+                            constructionSpeedupsPlaceholder: 'Enter hours',
+                            constructionTruegoldLabel: 'How much truegold do you plan to spend?',
+                            constructionTruegoldPlaceholder: 'Enter amount',
+                            constructionTimeSlotsLabel: 'What times are you available for your Construction day appointment? (UTC time)',
+                            constructionTimeSlotsNote: 'Note: Choose a minimum of 5 times.',
+                            constructionTimeSlotsError: 'Please select at least 5 time slots (currently selected: {count})',
+                            researchDay: 'Research Day',
+                            wantsResearch: 'Do you want a Research day appointment?',
+                            researchSpeedupsLabel: 'How many hours of speedups do you plan to use on Research day?',
+                            researchSpeedupsNote: 'Note: Your response must be in hours. Add together amount of general speedup hours and research speedup hours you are planning to use during this day.',
+                            researchSpeedupsPlaceholder: 'Enter hours',
+                            researchTruegoldDustLabel: 'How much truegold dust do you plan to spend?',
+                            researchTruegoldDustPlaceholder: 'Enter amount',
+                            researchTimeSlotsLabel: 'What times are you available for your Research day appointment? (UTC time)',
+                            researchTimeSlotsNote: 'Note: Choose a minimum of 5 times.',
+                            researchTimeSlotsError: 'Please select at least 5 time slots (currently selected: {count})',
+                            troopsTrainingDay: 'Troops Training Day',
+                            wantsTroops: 'Do you want a Troops Training day appointment?',
+                            troopsSpeedupsLabel: 'How many hours of speedups do you plan to use on Troops Training day?',
+                            troopsSpeedupsNote: 'Note: Your response must be in hours. Add together amount of general speedup hours and troops training speedup hours you are planning to use during this day.',
+                            troopsSpeedupsPlaceholder: 'Enter hours',
+                            troopsTimeSlotsLabel: 'What times are you available for your Troops Training day appointment? (UTC time)',
+                            troopsTimeSlotsNote: 'Note: Choose a minimum of 5 times.',
+                            troopsTimeSlotsError: 'Please select at least 5 time slots (currently selected: {count})',
+                            additionalNotesLabel: 'Please share any additional notes, clarifications, or comments about your responses on this form.',
+                            additionalNotesPlaceholder: 'Enter any additional notes (optional)',
+                            suggestionsLabel: 'What suggestions do you have for improving our state? We value your feedback!',
+                            suggestionsPlaceholder: 'Enter your suggestions (optional)',
+                            submitButton: 'Submit Form',
+                            submitting: 'Submitting...',
+                            formSubmittedSuccessfully: 'Form Submitted Successfully!',
+                            formSubmittedMessage: 'Your appointment form has been submitted. Thank you for your submission!',
+                            submitAnotherForm: 'Submit Another Form',
+                            // Validation messages
+                            pleaseSelectAlliance: 'Please select an alliance',
+                            pleaseEnterCustomAlliance: 'Please enter your custom alliance name',
+                            pleaseEnterCharacterName: 'Please enter your character name',
+                            playerIdMustBeNumber: 'Player ID must be a number',
+                            pleaseSelectAtLeastOneDay: 'Please select at least one day type (Construction, Research, or Troops)',
+                            pleaseEnterConstructionSpeedups: 'Please enter construction speedup hours',
+                            pleaseEnterConstructionTruegold: 'Please enter construction truegold amount',
+                            pleaseSelectConstructionTimeSlots: 'Please select at least 5 construction time slots',
+                            pleaseEnterResearchSpeedups: 'Please enter research speedup hours',
+                            pleaseEnterResearchTruegoldDust: 'Please enter research truegold dust amount',
+                            pleaseSelectResearchTimeSlots: 'Please select at least 5 research time slots',
+                            pleaseEnterTroopsSpeedups: 'Please enter troops speedup hours',
+                            pleaseSelectTroopsTimeSlots: 'Please select at least 5 troops time slots',
+                            formNotFound: 'Form not found. Please check the link.',
+                            failedToLoadConfig: 'Failed to load form configuration. Please try again later.',
+                            failedToSubmitForm: 'An error occurred while submitting the form. Please try again.',
+                            // Game terms
+                            truegold: 'Truegold',
+                            truegoldDust: 'Truegold Dust',
+                            universalAcceleration: 'Universal Acceleration',
+                            constructionAcceleration: 'Construction Acceleration',
+                            researchAcceleration: 'Research Acceleration',
+                            troopsTrainingAcceleration: 'Troops Training Acceleration',
+                            introText: 'Fill out this form to apply for Chief Minister (CM) and Noble Advisor (NA) appointments.\n\nSchedule:\n- Construction Day (Monday) [CM]\n- Research Day (Tuesday) [CM]\n- Troops Training Day (Thursday) [NA]\n\nRequirements:\n\n- Form must be filled out in order to be considered for an appointment during SvS preparation week. \n- Form must be filled out by THE SUNDAY OF MATCHMAKING.\n- Form filled out after the deadline will be added to the "Late" submission wait list.\n- Rally leaders and rally leader substitutes may be given priority (if necessary).\n- Verification of items, speedups, and resources may be requested (eg. during situations where the score is very close in points and to make sure our state wins by ensuring appointments go to players who can maximize points).\n\n\nFor more information:\n- Contact form support: #140 [COB]Vor and /or the current Minister of Justice if you have questions on filling out this form or changes to your form submission!'
+                        },
+                        ko: {
+                            submitAppointmentForm: '임명서 제출',
+                            fillOutFormDescription: '임명 선호도를 제출하려면 양식을 작성하세요',
+                            statistics: '통계',
+                            submitForm: '양식 제출',
+                            loadingFormConfiguration: '양식 구성 로드 중...',
+                            error: '오류',
+                            basicInformation: '기본 정보',
+                            allianceQuestion: '어떤 동맹에 속해 있나요?',
+                            nonOfAbove: '위의 항목 없음',
+                            customAllianceLabel: '"위의 항목 없음"을 선택한 경우 여기에 입력하세요',
+                            customAlliancePlaceholder: '동맹 이름을 입력하세요',
+                            characterNameQuestion: '캐릭터 이름은 무엇인가요?',
+                            characterNameNote: '참고: 프로필에서 이름을 복사하여 아래 답변에 붙여넣으세요.',
+                            characterNameProTip: '팁: 이 양식을 작성한 후 SvS 준비 주간 금요일 전까지 캐릭터 이름을 변경하지 마세요.',
+                            characterNamePlaceholder: '캐릭터 이름을 입력하세요',
+                            playerIdQuestion: '플레이어 ID는 무엇인가요?',
+                            playerIdNote: '참고: ID는 숫자여야 합니다',
+                            playerIdPlaceholder: '플레이어 ID를 입력하세요',
+                            submissionType: '이 양식은...',
+                            newSubmission: '새 제출',
+                            updateSubmission: '재제출',
+                            constructionDay: '건설의 날',
+                            wantsConstruction: '건설의 날 임명을 원하시나요?',
+                            constructionSpeedupsLabel: '건설의 날에 사용할 속도 향상 시간(시간)은 얼마인가요?',
+                            constructionSpeedupsNote: '참고: 답변은 시간 단위여야 합니다. 이 날 사용할 일반 속도 향상 시간과 건설 속도 향상 시간을 합산하세요.',
+                            constructionSpeedupsPlaceholder: '시간을 입력하세요',
+                            constructionTruegoldLabel: '얼마나 많은 순금을 사용할 계획인가요?',
+                            constructionTruegoldPlaceholder: '수량을 입력하세요',
+                            constructionTimeSlotsLabel: '건설의 날 임명에 사용 가능한 시간은 언제인가요? (UTC 시간)',
+                            constructionTimeSlotsNote: '참고: 최소 5개의 시간을 선택하세요.',
+                            constructionTimeSlotsError: '최소 5개의 시간대를 선택하세요 (현재 선택됨: {count})',
+                            researchDay: '연구의 날',
+                            wantsResearch: '연구의 날 임명을 원하시나요?',
+                            researchSpeedupsLabel: '연구의 날에 사용할 속도 향상 시간(시간)은 얼마인가요?',
+                            researchSpeedupsNote: '참고: 답변은 시간 단위여야 합니다. 이 날 사용할 일반 속도 향상 시간과 연구 속도 향상 시간을 합산하세요.',
+                            researchSpeedupsPlaceholder: '시간을 입력하세요',
+                            researchTruegoldDustLabel: '얼마나 많은 순금 조각을 사용할 계획인가요?',
+                            researchTruegoldDustPlaceholder: '수량을 입력하세요',
+                            researchTimeSlotsLabel: '연구의 날 임명에 사용 가능한 시간은 언제인가요? (UTC 시간)',
+                            researchTimeSlotsNote: '참고: 최소 5개의 시간을 선택하세요.',
+                            researchTimeSlotsError: '최소 5개의 시간대를 선택하세요 (현재 선택됨: {count})',
+                            troopsTrainingDay: '병사 훈련의 날',
+                            wantsTroops: '병사 훈련의 날 임명을 원하시나요?',
+                            troopsSpeedupsLabel: '병사 훈련의 날에 사용할 속도 향상 시간(시간)은 얼마인가요?',
+                            troopsSpeedupsNote: '참고: 답변은 시간 단위여야 합니다. 이 날 사용할 일반 속도 향상 시간과 병사 훈련 속도 향상 시간을 합산하세요.',
+                            troopsSpeedupsPlaceholder: '시간을 입력하세요',
+                            troopsTimeSlotsLabel: '병사 훈련의 날 임명에 사용 가능한 시간은 언제인가요? (UTC 시간)',
+                            troopsTimeSlotsNote: '참고: 최소 5개의 시간을 선택하세요.',
+                            troopsTimeSlotsError: '최소 5개의 시간대를 선택하세요 (현재 선택됨: {count})',
+                            additionalNotesLabel: '이 양식에 대한 응답에 대한 추가 메모, 명확화 또는 의견을 공유해 주세요.',
+                            additionalNotesPlaceholder: '추가 메모를 입력하세요 (선택 사항)',
+                            suggestionsLabel: '우리 주를 개선하기 위한 제안이 있나요? 귀하의 의견을 소중히 여깁니다!',
+                            suggestionsPlaceholder: '제안을 입력하세요 (선택 사항)',
+                            submitButton: '양식 제출',
+                            submitting: '제출 중...',
+                            formSubmittedSuccessfully: '양식이 성공적으로 제출되었습니다!',
+                            formSubmittedMessage: '임명 양식이 제출되었습니다. 제출해 주셔서 감사합니다!',
+                            submitAnotherForm: '다른 양식 제출',
+                            pleaseSelectAlliance: '동맹을 선택하세요',
+                            pleaseEnterCustomAlliance: '사용자 지정 동맹 이름을 입력하세요',
+                            pleaseEnterCharacterName: '캐릭터 이름을 입력하세요',
+                            playerIdMustBeNumber: '플레이어 ID는 숫자여야 합니다',
+                            pleaseSelectAtLeastOneDay: '최소한 하나의 날 유형(건설, 연구 또는 병사)을 선택하세요',
+                            pleaseEnterConstructionSpeedups: '건설 속도 향상 시간을 입력하세요',
+                            pleaseEnterConstructionTruegold: '건설 순금 수량을 입력하세요',
+                            pleaseSelectConstructionTimeSlots: '최소 5개의 건설 시간대를 선택하세요',
+                            pleaseEnterResearchSpeedups: '연구 속도 향상 시간을 입력하세요',
+                            pleaseEnterResearchTruegoldDust: '연구 순금 조각 수량을 입력하세요',
+                            pleaseSelectResearchTimeSlots: '최소 5개의 연구 시간대를 선택하세요',
+                            pleaseEnterTroopsSpeedups: '병사 속도 향상 시간을 입력하세요',
+                            pleaseSelectTroopsTimeSlots: '최소 5개의 병사 시간대를 선택하세요',
+                            formNotFound: '양식을 찾을 수 없습니다. 링크를 확인하세요.',
+                            failedToLoadConfig: '양식 구성을 로드하지 못했습니다. 나중에 다시 시도하세요.',
+                            failedToSubmitForm: '양식을 제출하는 중 오류가 발생했습니다. 다시 시도하세요.',
+                            truegold: '순금',
+                            truegoldDust: '순금 조각',
+                            universalAcceleration: '공용 가속',
+                            constructionAcceleration: '건설 가속',
+                            researchAcceleration: '연구 가속',
+                            troopsTrainingAcceleration: '병사 훈련 가속',
+                            introText: '이 양식은 수상(CM)과 고문(NA) 임명을 신청하기 위해 작성하세요.\n\n일정:\n- 건설의 날 (월요일) [CM]\n- 연구의 날 (화요일) [CM]\n- 병사 훈련의 날 (목요일) [NA]\n\n요구사항:\n\n- SvS 준비 주간 동안 임명을 고려받으려면 양식을 작성해야 합니다.\n- 양식은 매칭의 일요일까지 작성되어야 합니다.\n- 마감일 이후 작성된 양식은 "늦은" 제출 대기 목록에 추가됩니다.\n- 집결 지휘관 및 집결 지휘관 대체자는 우선순위를 받을 수 있습니다 (필요한 경우).\n- 아이템, 속도 향상 및 자원에 대한 검증을 요청할 수 있습니다 (예: 점수가 매우 가까운 상황에서 우리 주가 이기도록 임명이 점수를 최대화할 수 있는 플레이어에게 가도록 합니다).\n\n\n추가 정보:\n- 양식 작성 또는 양식 제출 변경에 대한 질문이 있으시면 양식 지원: #140 [COB]Vor 및/또는 현재 법무장관에게 문의하세요!'
+                        },
+                        zh: {
+                            submitAppointmentForm: '提交任命表',
+                            fillOutFormDescription: '填寫表格以提交您的任命偏好',
+                            statistics: '統計',
+                            submitForm: '提交表格',
+                            loadingFormConfiguration: '正在加載表格配置...',
+                            error: '錯誤',
+                            basicInformation: '基本信息',
+                            allianceQuestion: '您屬於哪個聯盟?',
+                            nonOfAbove: '以上皆非',
+                            customAllianceLabel: '如果選擇"以上皆非"，請在此輸入',
+                            customAlliancePlaceholder: '輸入您的聯盟名稱',
+                            characterNameQuestion: '您的角色名稱是什麼?',
+                            characterNameNote: '注意：請從您的個人資料中複製名稱並貼上到下面的答案中。',
+                            characterNameProTip: '提示：填寫此表格後，在SvS準備週的星期五之前，請不要更改您的角色名稱。',
+                            characterNamePlaceholder: '輸入您的角色名稱',
+                            playerIdQuestion: '您的玩家ID是什麼?',
+                            playerIdNote: '注意：您的ID必須是數字',
+                            playerIdPlaceholder: '輸入您的玩家ID',
+                            submissionType: '此表格是...',
+                            newSubmission: '新提交',
+                            updateSubmission: '重新提交',
+                            constructionDay: '建造日',
+                            wantsConstruction: '您想要建造日任命嗎?',
+                            constructionSpeedupsLabel: '您計劃在建造日使用多少小時的加速?',
+                            constructionSpeedupsNote: '注意：您的回答必須以小時為單位。請將您計劃在這一天使用的一般加速小時數和建造加速小時數相加。',
+                            constructionSpeedupsPlaceholder: '輸入小時數',
+                            constructionTruegoldLabel: '您計劃花費多少黃金微粒?',
+                            constructionTruegoldPlaceholder: '輸入數量',
+                            constructionTimeSlotsLabel: '您何時有空參加建造日任命? (UTC時間)',
+                            constructionTimeSlotsNote: '注意：請至少選擇5個時間。',
+                            constructionTimeSlotsError: '請至少選擇5個時間段（當前已選擇：{count}）',
+                            researchDay: '研究日',
+                            wantsResearch: '您想要研究日任命嗎?',
+                            researchSpeedupsLabel: '您計劃在研究日使用多少小時的加速?',
+                            researchSpeedupsNote: '注意：您的回答必須以小時為單位。請將您計劃在這一天使用的一般加速小時數和研究加速小時數相加。',
+                            researchSpeedupsPlaceholder: '輸入小時數',
+                            researchTruegoldDustLabel: '您計劃花費多少黃金微粒?',
+                            researchTruegoldDustPlaceholder: '輸入數量',
+                            researchTimeSlotsLabel: '您何時有空參加研究日任命? (UTC時間)',
+                            researchTimeSlotsNote: '注意：請至少選擇5個時間。',
+                            researchTimeSlotsError: '請至少選擇5個時間段（當前已選擇：{count}）',
+                            troopsTrainingDay: '士兵訓練日',
+                            wantsTroops: '您想要士兵訓練日任命嗎?',
+                            troopsSpeedupsLabel: '您計劃在士兵訓練日使用多少小時的加速?',
+                            troopsSpeedupsNote: '注意：您的回答必須以小時為單位。請將您計劃在這一天使用的一般加速小時數和士兵訓練加速小時數相加。',
+                            troopsSpeedupsPlaceholder: '輸入小時數',
+                            troopsTimeSlotsLabel: '您何時有空參加士兵訓練日任命? (UTC時間)',
+                            troopsTimeSlotsNote: '注意：請至少選擇5個時間。',
+                            troopsTimeSlotsError: '請至少選擇5個時間段（當前已選擇：{count}）',
+                            additionalNotesLabel: '請分享有關您在此表格上的回答的任何其他說明、澄清或評論。',
+                            additionalNotesPlaceholder: '輸入任何其他說明（可選）',
+                            suggestionsLabel: '您對改善我們州的建議是什麼？我們重視您的反饋！',
+                            suggestionsPlaceholder: '輸入您的建議（可選）',
+                            submitButton: '提交表格',
+                            submitting: '提交中...',
+                            formSubmittedSuccessfully: '表格已成功提交！',
+                            formSubmittedMessage: '您的任命表格已提交。感謝您的提交！',
+                            submitAnotherForm: '提交另一個表格',
+                            pleaseSelectAlliance: '請選擇聯盟',
+                            pleaseEnterCustomAlliance: '請輸入您的自定義聯盟名稱',
+                            pleaseEnterCharacterName: '請輸入您的角色名稱',
+                            playerIdMustBeNumber: '玩家ID必須是數字',
+                            pleaseSelectAtLeastOneDay: '請至少選擇一種日期類型（建造、研究或士兵）',
+                            pleaseEnterConstructionSpeedups: '請輸入建造加速小時數',
+                            pleaseEnterConstructionTruegold: '請輸入建造黃金微粒數量',
+                            pleaseSelectConstructionTimeSlots: '請至少選擇5個建造時間段',
+                            pleaseEnterResearchSpeedups: '請輸入研究加速小時數',
+                            pleaseEnterResearchTruegoldDust: '請輸入研究黃金微粒數量',
+                            pleaseSelectResearchTimeSlots: '請至少選擇5個研究時間段',
+                            pleaseEnterTroopsSpeedups: '請輸入士兵加速小時數',
+                            pleaseSelectTroopsTimeSlots: '請至少選擇5個士兵時間段',
+                            formNotFound: '找不到表格。請檢查鏈接。',
+                            failedToLoadConfig: '無法加載表格配置。請稍後再試。',
+                            failedToSubmitForm: '提交表格時發生錯誤。請再試一次。',
+                            truegold: '黃金微粒',
+                            truegoldDust: '黃金微粒',
+                            universalAcceleration: '一般加速',
+                            constructionAcceleration: '建造加速',
+                            researchAcceleration: '研究加速',
+                            troopsTrainingAcceleration: '兵士訓練加速',
+                            introText: '請填寫此表格以申請總理(CM)和貴族顧問(NA)的任命。\n\n時間表：\n- 建造日（星期一）[CM]\n- 研究日（星期二）[CM]\n- 士兵訓練日（星期四）[NA]\n\n要求：\n\n- 必須填寫表格才能在SvS準備週期間被考慮任命。\n- 表格必須在配對的星期日之前填寫。\n- 截止日期後填寫的表格將被添加到"遲交"提交等待列表中。\n- 集結領袖和集結領袖替代者可能會獲得優先權（如必要）。\n- 可能會要求驗證物品、加速和資源（例如，在分數非常接近的情況下，以確保我們州獲勝，確保任命分配給能夠最大化分數的玩家）。\n\n\n更多信息：\n- 如果您對填寫此表格或更改您的表格提交有任何問題，請聯繫表格支持：#140 [COB]Vor 和/或現任司法部長！'
+                        },
+                        ja: {
+                            submitAppointmentForm: '任命フォームを送信',
+                            fillOutFormDescription: '任命の希望を送信するにはフォームに記入してください',
+                            statistics: '統計',
+                            submitForm: 'フォームを送信',
+                            loadingFormConfiguration: 'フォーム設定を読み込み中...',
+                            error: 'エラー',
+                            basicInformation: '基本情報',
+                            allianceQuestion: 'どの同盟に所属していますか？',
+                            nonOfAbove: '上記のいずれでもない',
+                            customAllianceLabel: '「上記のいずれでもない」を選択した場合は、ここに入力してください',
+                            customAlliancePlaceholder: '同盟名を入力してください',
+                            characterNameQuestion: 'キャラクター名は何ですか？',
+                            characterNameNote: '注：プロフィールから名前をコピーして、下の回答に貼り付けてください。',
+                            characterNameProTip: 'ヒント：このフォームに記入した後、SvS準備週の金曜日までキャラクター名を変更しないでください。',
+                            characterNamePlaceholder: 'キャラクター名を入力してください',
+                            playerIdQuestion: 'プレイヤーIDは何ですか？',
+                            playerIdNote: '注：IDは数字である必要があります',
+                            playerIdPlaceholder: 'プレイヤーIDを入力してください',
+                            submissionType: 'このフォームは...',
+                            newSubmission: '新規提出',
+                            updateSubmission: '再提出',
+                            constructionDay: '建設の日',
+                            wantsConstruction: '建設の日の任命を希望しますか？',
+                            constructionSpeedupsLabel: '建設の日に使用する加速の時間（時間）は何時間ですか？',
+                            constructionSpeedupsNote: '注：回答は時間単位でなければなりません。この日に使用する一般加速時間と建設加速時間を合計してください。',
+                            constructionSpeedupsPlaceholder: '時間を入力してください',
+                            constructionTruegoldLabel: 'いくらの黄金微粒子を使用する予定ですか？',
+                            constructionTruegoldPlaceholder: '数量を入力してください',
+                            constructionTimeSlotsLabel: '建設の日の任命に利用可能な時間はいつですか？（UTC時間）',
+                            constructionTimeSlotsNote: '注：最低5つの時間を選択してください。',
+                            constructionTimeSlotsError: '最低5つの時間帯を選択してください（現在選択中：{count}）',
+                            researchDay: '研究の日',
+                            wantsResearch: '研究の日の任命を希望しますか？',
+                            researchSpeedupsLabel: '研究の日に使用する加速の時間（時間）は何時間ですか？',
+                            researchSpeedupsNote: '注：回答は時間単位でなければなりません。この日に使用する一般加速時間と研究加速時間を合計してください。',
+                            researchSpeedupsPlaceholder: '時間を入力してください',
+                            researchTruegoldDustLabel: 'いくらの黄金微粒子を使用する予定ですか？',
+                            researchTruegoldDustPlaceholder: '数量を入力してください',
+                            researchTimeSlotsLabel: '研究の日の任命に利用可能な時間はいつですか？（UTC時間）',
+                            researchTimeSlotsNote: '注：最低5つの時間を選択してください。',
+                            researchTimeSlotsError: '最低5つの時間帯を選択してください（現在選択中：{count}）',
+                            troopsTrainingDay: '兵士訓練の日',
+                            wantsTroops: '兵士訓練の日の任命を希望しますか？',
+                            troopsSpeedupsLabel: '兵士訓練の日に使用する加速の時間（時間）は何時間ですか？',
+                            troopsSpeedupsNote: '注：回答は時間単位でなければなりません。この日に使用する一般加速時間と兵士訓練加速時間を合計してください。',
+                            troopsSpeedupsPlaceholder: '時間を入力してください',
+                            troopsTimeSlotsLabel: '兵士訓練の日の任命に利用可能な時間はいつですか？（UTC時間）',
+                            troopsTimeSlotsNote: '注：最低5つの時間を選択してください。',
+                            troopsTimeSlotsError: '最低5つの時間帯を選択してください（現在選択中：{count}）',
+                            additionalNotesLabel: 'このフォームへの回答について、追加のメモ、説明、またはコメントを共有してください。',
+                            additionalNotesPlaceholder: '追加のメモを入力してください（任意）',
+                            suggestionsLabel: '州を改善するための提案はありますか？フィードバックをお待ちしています！',
+                            suggestionsPlaceholder: '提案を入力してください（任意）',
+                            submitButton: 'フォームを送信',
+                            submitting: '送信中...',
+                            formSubmittedSuccessfully: 'フォームが正常に送信されました！',
+                            formSubmittedMessage: '任命フォームが送信されました。送信ありがとうございます！',
+                            submitAnotherForm: '別のフォームを送信',
+                            pleaseSelectAlliance: '同盟を選択してください',
+                            pleaseEnterCustomAlliance: 'カスタム同盟名を入力してください',
+                            pleaseEnterCharacterName: 'キャラクター名を入力してください',
+                            playerIdMustBeNumber: 'プレイヤーIDは数字である必要があります',
+                            pleaseSelectAtLeastOneDay: '少なくとも1つの日タイプ（建設、研究、または兵士）を選択してください',
+                            pleaseEnterConstructionSpeedups: '建設加速時間を入力してください',
+                            pleaseEnterConstructionTruegold: '建設黄金微粒子の数量を入力してください',
+                            pleaseSelectConstructionTimeSlots: '少なくとも5つの建設時間帯を選択してください',
+                            pleaseEnterResearchSpeedups: '研究加速時間を入力してください',
+                            pleaseEnterResearchTruegoldDust: '研究黄金微粒子の数量を入力してください',
+                            pleaseSelectResearchTimeSlots: '少なくとも5つの研究時間帯を選択してください',
+                            pleaseEnterTroopsSpeedups: '兵士加速時間を入力してください',
+                            pleaseSelectTroopsTimeSlots: '少なくとも5つの兵士時間帯を選択してください',
+                            formNotFound: 'フォームが見つかりません。リンクを確認してください。',
+                            failedToLoadConfig: 'フォーム設定を読み込めませんでした。後でもう一度お試しください。',
+                            failedToSubmitForm: 'フォームの送信中にエラーが発生しました。もう一度お試しください。',
+                            truegold: '黄金微粒子',
+                            truegoldDust: '黄金微粒子',
+                            universalAcceleration: '一般加速',
+                            constructionAcceleration: '建造加速',
+                            researchAcceleration: '研究加速',
+                            troopsTrainingAcceleration: '兵士訓練加速',
+                            introText: '総理大臣(CM)と貴族顧問(NA)の任命を申請するには、このフォームに記入してください。\n\nスケジュール：\n- 建設の日（月曜日）[CM]\n- 研究の日（火曜日）[CM]\n- 兵士訓練の日（木曜日）[NA]\n\n要件：\n\n- SvS準備週中に任命を検討されるには、フォームを記入する必要があります。\n- フォームはマッチメイキングの日曜日までに記入する必要があります。\n- 締切日後に記入されたフォームは「遅延」提出待機リストに追加されます。\n- ラリーリーダーとラリーリーダーの代替者は優先される場合があります（必要に応じて）。\n- アイテム、加速、リソースの検証が要求される場合があります（例：スコアが非常に近い状況で、州が勝利するように、任命がスコアを最大化できるプレイヤーに割り当てられるようにするため）。\n\n\n詳細情報：\n- このフォームの記入やフォーム提出の変更について質問がある場合は、フォームサポート：#140 [COB]Vorおよび/または現在の司法大臣にお問い合わせください！'
+                        }
+                    },
+                    config: {
+                        alliances: [],
+                        construction_times: { start_time: '00:00', end_time: null },
+                        research_times: { start_time: '00:00', end_time: null },
+                        troops_times: { start_time: '00:00', end_time: null }
+                    },
+                    constructionTimeSlots: [],
+                    researchTimeSlots: [],
+                    troopsTimeSlots: [],
+                    isSubmitting: false,
+                    submitted: false,
+                    errorMessage: '',
+                    loading: true,
+                    form: {
+                        alliance: '',
+                        custom_alliance: '',
+                        character_name: '',
+                        player_id: '',
+                        submission_type: 'New submission',
+                        wants_construction: false,
+                        construction_speedups: null,
+                        construction_truegold: null,
+                        construction_time_slots: [],
+                        wants_research: false,
+                        research_speedups: null,
+                        research_truegold_dust: null,
+                        research_time_slots: [],
+                        wants_troops: false,
+                        troops_speedups: null,
+                        troops_time_slots: [],
+                        additional_notes: '',
+                        suggestions: ''
+                    }
+                };
+            },
+            async mounted() {
+                await this.loadConfig();
+            },
+            methods: {
+                t(key, params = {}) {
+                    const translation = this.translations[this.currentLanguage]?.[key] || this.translations.en[key] || key;
+                    // Replace placeholders like {count}
+                    return translation.replace(/{(\w+)}/g, (match, paramKey) => {
+                        return params[paramKey] !== undefined ? params[paramKey] : match;
+                    });
+                },
+                changeLanguage() {
+                    localStorage.setItem('form_language', this.currentLanguage);
+                },
+                parseTimeToMinutes(timeStr) {
+                    const parts = timeStr.split(':');
+                    if (parts.length !== 2) return 0;
+                    const hours = parseInt(parts[0], 10) || 0;
+                    const minutes = parseInt(parts[1], 10) || 0;
+                    return hours * 60 + minutes;
+                },
+                minutesToTimeString(minutes) {
+                    const totalMinutes = minutes % (24 * 60);
+                    const hours = Math.floor(totalMinutes / 60);
+                    const mins = totalMinutes % 60;
+                    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+                },
+                calculateTimeSlots(startTime, endTime) {
+                    const startMinutes = this.parseTimeToMinutes(startTime);
+                    let endMinutes = endTime ? this.parseTimeToMinutes(endTime) : startMinutes + 24 * 60;
+                    
+                    // Handle wrap-around: if end is before start, it means next day
+                    if (endMinutes < startMinutes) {
+                        endMinutes += 24 * 60;
+                    }
+                    
+                    const slots = [];
+                    let currentMinutes = startMinutes;
+                    let slotNum = 1;
+                    
+                    // Slot 1 = start time
+                    slots.push({ value: slotNum, label: this.minutesToTimeString(currentMinutes) });
+                    slotNum++;
+                    
+                    // Slot 2 = start + 15 minutes
+                    currentMinutes += 15;
+                    if (currentMinutes < endMinutes || (endMinutes > 24 * 60 && currentMinutes < endMinutes)) {
+                        slots.push({ value: slotNum, label: this.minutesToTimeString(currentMinutes % (24 * 60)) });
+                        slotNum++;
+                        
+                        // Slot 3+ = previous + 30 minutes
+                        while (slotNum <= 200) {
+                            currentMinutes += 30;
+                            const displayMinutes = currentMinutes % (24 * 60);
+                            
+                            // Check if we've reached the end
+                            if (endMinutes <= 24 * 60) {
+                                // Normal case: end is same day
+                                if (currentMinutes >= endMinutes) {
+                                    break;
+                                }
+                            } else {
+                                // End is next day
+                                if (currentMinutes >= endMinutes) {
+                                    break;
+                                }
+                            }
+                            
+                            slots.push({ value: slotNum, label: this.minutesToTimeString(displayMinutes) });
+                            slotNum++;
+                        }
+                    }
+                    
+                    return slots;
+                },
+                async loadConfig() {
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/config`);
+                        if (response.ok) {
+                            this.config = await response.json();
+                            // Ensure "Non of the above" is in alliances
+                            if (!this.config.alliances.includes('Non of the above')) {
+                                this.config.alliances.push('Non of the above');
+                            }
+                            
+                            // Calculate time slots for each day type
+                            this.constructionTimeSlots = this.calculateTimeSlots(
+                                this.config.construction_times.start_time,
+                                this.config.construction_times.end_time
+                            );
+                            this.researchTimeSlots = this.calculateTimeSlots(
+                                this.config.research_times.start_time,
+                                this.config.research_times.end_time
+                            );
+                            this.troopsTimeSlots = this.calculateTimeSlots(
+                                this.config.troops_times.start_time,
+                                this.config.troops_times.end_time
+                            );
+                        } else {
+                            // Form not found
+                            this.errorMessage = this.t('formNotFound');
+                            this.loading = false;
+                            return;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load config:', error);
+                        this.errorMessage = this.t('failedToLoadConfig');
+                        // Use defaults
+                        this.constructionTimeSlots = this.calculateTimeSlots('00:00', null);
+                        this.researchTimeSlots = this.calculateTimeSlots('00:00', null);
+                        this.troopsTimeSlots = this.calculateTimeSlots('00:00', null);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                handleAllianceChange() {
+                    if (this.form.alliance !== 'Non of the above') {
+                        this.form.custom_alliance = '';
+                    }
+                },
+                async handleSubmit() {
+                    this.errorMessage = '';
+                    
+                    // Validation
+                    if (!this.form.alliance) {
+                        this.errorMessage = this.t('pleaseSelectAlliance');
+                        return;
+                    }
+                    if (this.form.alliance === 'Non of the above' && !this.form.custom_alliance.trim()) {
+                        this.errorMessage = this.t('pleaseEnterCustomAlliance');
+                        return;
+                    }
+                    if (!this.form.character_name.trim()) {
+                        this.errorMessage = this.t('pleaseEnterCharacterName');
+                        return;
+                    }
+                    if (!this.form.player_id.match(/^[0-9]+$/)) {
+                        this.errorMessage = this.t('playerIdMustBeNumber');
+                        return;
+                    }
+                    if (!this.form.wants_construction && !this.form.wants_research && !this.form.wants_troops) {
+                        this.errorMessage = this.t('pleaseSelectAtLeastOneDay');
+                        return;
+                    }
+                    if (this.form.wants_construction) {
+                        if (!this.form.construction_speedups && this.form.construction_speedups !== 0) {
+                            this.errorMessage = this.t('pleaseEnterConstructionSpeedups');
+                            return;
+                        }
+                        if (!this.form.construction_truegold && this.form.construction_truegold !== 0) {
+                            this.errorMessage = this.t('pleaseEnterConstructionTruegold');
+                            return;
+                        }
+                        if (this.form.construction_time_slots.length < 5) {
+                            this.errorMessage = this.t('pleaseSelectConstructionTimeSlots');
+                            return;
+                        }
+                    }
+                    if (this.form.wants_research) {
+                        if (!this.form.research_speedups && this.form.research_speedups !== 0) {
+                            this.errorMessage = this.t('pleaseEnterResearchSpeedups');
+                            return;
+                        }
+                        if (!this.form.research_truegold_dust && this.form.research_truegold_dust !== 0) {
+                            this.errorMessage = this.t('pleaseEnterResearchTruegoldDust');
+                            return;
+                        }
+                        if (this.form.research_time_slots.length < 5) {
+                            this.errorMessage = this.t('pleaseSelectResearchTimeSlots');
+                            return;
+                        }
+                    }
+                    if (this.form.wants_troops) {
+                        if (!this.form.troops_speedups && this.form.troops_speedups !== 0) {
+                            this.errorMessage = this.t('pleaseEnterTroopsSpeedups');
+                            return;
+                        }
+                        if (this.form.troops_time_slots.length < 5) {
+                            this.errorMessage = this.t('pleaseSelectTroopsTimeSlots');
+                            return;
+                        }
+                    }
+                    
+                    this.isSubmitting = true;
+                    
+                    try {
+                        // Prepare submission data
+                        const submissionData = {
+                            alliance: this.form.alliance,
+                            custom_alliance: this.form.custom_alliance || null,
+                            character_name: this.form.character_name.trim(),
+                            player_id: this.form.player_id.trim(),
+                            submission_type: this.form.submission_type,
+                            wants_construction: this.form.wants_construction,
+                            construction_speedups: this.form.wants_construction ? this.form.construction_speedups : null,
+                            construction_truegold: this.form.wants_construction ? this.form.construction_truegold : null,
+                            construction_time_slots: this.form.wants_construction ? this.form.construction_time_slots.map(Number) : [],
+                            wants_research: this.form.wants_research,
+                            research_speedups: this.form.wants_research ? this.form.research_speedups : null,
+                            research_truegold_dust: this.form.wants_research ? this.form.research_truegold_dust : null,
+                            research_time_slots: this.form.wants_research ? this.form.research_time_slots.map(Number) : [],
+                            wants_troops: this.form.wants_troops,
+                            troops_speedups: this.form.wants_troops ? this.form.troops_speedups : null,
+                            troops_time_slots: this.form.wants_troops ? this.form.troops_time_slots.map(Number) : [],
+                            additional_notes: this.form.additional_notes.trim() || null,
+                            suggestions: this.form.suggestions.trim() || null
+                        };
+                        
+                        const response = await fetch(`${this.baseUrl}/api/submit`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(submissionData)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (!response.ok) {
+                            throw new Error(result.error || this.t('failedToSubmitForm'));
+                        }
+                        
+                        this.submitted = true;
+                    } catch (error) {
+                        this.errorMessage = error.message || this.t('failedToSubmitForm');
+                        console.error('Submission error:', error);
+                    } finally {
+                        this.isSubmitting = false;
+                    }
+                },
+                resetForm() {
+                    this.submitted = false;
+                    this.errorMessage = '';
+                    this.form = {
+                        alliance: '',
+                        custom_alliance: '',
+                        character_name: '',
+                        player_id: '',
+                        submission_type: 'New submission',
+                        wants_construction: false,
+                        construction_speedups: null,
+                        construction_truegold: null,
+                        construction_time_slots: [],
+                        wants_research: false,
+                        research_speedups: null,
+                        research_truegold_dust: null,
+                        research_time_slots: [],
+                        wants_troops: false,
+                        troops_speedups: null,
+                        troops_time_slots: [],
+                        additional_notes: '',
+                        suggestions: ''
+                    };
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

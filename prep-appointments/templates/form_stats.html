@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Statistics - Schedule Maker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+        }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s, transform 0.3s; }
+        .fade-enter-from { opacity: 0; transform: translateY(-10px); }
+        .fade-leave-to { opacity: 0; transform: translateY(-10px); }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-900 text-white">
+    <div id="app">
+        <div class="container mx-auto px-4 py-8 max-w-4xl">
+            <header class="text-center mb-12">
+                <h1 class="text-4xl font-bold text-blue-400 mb-4">
+                    <i class="fas fa-chart-bar mr-3"></i>Form Statistics
+                </h1>
+                <p class="text-gray-400">View appointment statistics and time slot popularity</p>
+            </header>
+            
+            <nav class="flex justify-center gap-4 mb-12 flex-wrap">
+                <a :href="baseUrl + '/stats'" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all border border-blue-500">
+                    <i class="fas fa-chart-bar mr-2"></i>Statistics
+                </a>
+                <a :href="baseUrl" class="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all border border-gray-700">
+                    <i class="fas fa-edit mr-2"></i>Submit Form
+                </a>
+            </nav>
+            
+            <main>
+                <transition name="fade" mode="out-in">
+                    <div v-if="loading" key="loading" class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                        <i class="fas fa-spinner fa-spin text-4xl text-blue-400 mb-4"></i>
+                        <p class="text-xl text-gray-400">Loading statistics...</p>
+                    </div>
+                    
+                    <div v-else-if="error" key="error" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-red-700">
+                        <div class="text-center">
+                            <i class="fas fa-exclamation-triangle text-4xl text-red-400 mb-4"></i>
+                            <h2 class="text-2xl font-bold text-red-400 mb-2">Error</h2>
+                            <p class="text-gray-300">{{ error }}</p>
+                        </div>
+                    </div>
+                    
+                    <div v-else-if="stats" key="stats" class="space-y-8">
+                        <!-- Construction Day Statistics -->
+                        <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                            <h2 class="text-2xl font-bold text-orange-400 mb-6">
+                                <i class="fas fa-hammer mr-2"></i>Construction Day Time Slot Popularity
+                            </h2>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                                <div 
+                                    v-for="(timeData, time) in sortedConstructionTimeSlots" 
+                                    :key="'construction-' + time"
+                                    class="bg-gray-700/50 rounded-lg p-3 border border-gray-600 hover:border-orange-500 hover:shadow-md transition-all text-center">
+                                    <div class="font-bold text-orange-400 text-sm mb-1">{{ time }}</div>
+                                    <div class="text-xl font-bold text-white">
+                                        {{ timeData.requests }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Research Day Statistics -->
+                        <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                            <h2 class="text-2xl font-bold text-purple-400 mb-6">
+                                <i class="fas fa-flask mr-2"></i>Research Day Time Slot Popularity
+                            </h2>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                                <div 
+                                    v-for="(timeData, time) in sortedResearchTimeSlots" 
+                                    :key="'research-' + time"
+                                    class="bg-gray-700/50 rounded-lg p-3 border border-gray-600 hover:border-purple-500 hover:shadow-md transition-all text-center">
+                                    <div class="font-bold text-purple-400 text-sm mb-1">{{ time }}</div>
+                                    <div class="text-xl font-bold text-white">
+                                        {{ timeData.requests }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Troops Day Statistics -->
+                        <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                            <h2 class="text-2xl font-bold text-green-400 mb-6">
+                                <i class="fas fa-users mr-2"></i>Troops Training Day Time Slot Popularity
+                            </h2>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                                <div 
+                                    v-for="(timeData, time) in sortedTroopsTimeSlots" 
+                                    :key="'troops-' + time"
+                                    class="bg-gray-700/50 rounded-lg p-3 border border-gray-600 hover:border-green-500 hover:shadow-md transition-all text-center">
+                                    <div class="font-bold text-green-400 text-sm mb-1">{{ time }}</div>
+                                    <div class="text-xl font-bold text-white">
+                                        {{ timeData.requests }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
+            </main>
+        </div>
+    </div>
+    
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                // Extract form code from URL path (/form/{code}/stats)
+                const pathParts = window.location.pathname.split('/').filter(p => p);
+                const formCode = pathParts[1] || ''; // pathParts[0] is 'form', pathParts[1] is the code
+                
+                return {
+                    baseUrl: `/form/${formCode}`,
+                    loading: true,
+                    error: null,
+                    stats: null
+                }
+            },
+            computed: {
+                sortedConstructionTimeSlots() {
+                    if (!this.stats || !this.stats.construction_time_slot_popularity) return {};
+                    return this.sortTimeSlots(this.stats.construction_time_slot_popularity, this.stats.construction_start_time || "00:00");
+                },
+                sortedResearchTimeSlots() {
+                    if (!this.stats || !this.stats.research_time_slot_popularity) return {};
+                    return this.sortTimeSlots(this.stats.research_time_slot_popularity, this.stats.research_start_time || "00:00");
+                },
+                sortedTroopsTimeSlots() {
+                    if (!this.stats || !this.stats.troops_time_slot_popularity) return {};
+                    return this.sortTimeSlots(this.stats.troops_time_slot_popularity, this.stats.troops_start_time || "00:00");
+                }
+            },
+            mounted() {
+                this.loadStats();
+            },
+            methods: {
+                parseTimeToMinutes(timeStr) {
+                    const parts = timeStr.split(':');
+                    if (parts.length !== 2) return 0;
+                    const hours = parseInt(parts[0], 10) || 0;
+                    const minutes = parseInt(parts[1], 10) || 0;
+                    return hours * 60 + minutes;
+                },
+                sortTimeSlots(timeSlotMap, startTime) {
+                    const entries = Object.entries(timeSlotMap);
+                    const startMinutes = this.parseTimeToMinutes(startTime);
+                    
+                    // Sort: times >= startTime come first, times < startTime come after (wrapped to next day)
+                    entries.sort((a, b) => {
+                        const timeA = a[0];
+                        const timeB = b[0];
+                        const minutesA = this.parseTimeToMinutes(timeA);
+                        const minutesB = this.parseTimeToMinutes(timeB);
+                        
+                        // Adjust times that are before start time (wrap to next day)
+                        const adjustedA = minutesA < startMinutes ? minutesA + 24 * 60 : minutesA;
+                        const adjustedB = minutesB < startMinutes ? minutesB + 24 * 60 : minutesB;
+                        
+                        return adjustedA - adjustedB;
+                    });
+                    
+                    return Object.fromEntries(entries);
+                },
+                async loadStats() {
+                    this.loading = true;
+                    this.error = null;
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/stats`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.stats = data;
+                        } else {
+                            this.error = data.error || 'Failed to load statistics';
+                        }
+                    } catch (err) {
+                        this.error = 'Error: ' + err.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

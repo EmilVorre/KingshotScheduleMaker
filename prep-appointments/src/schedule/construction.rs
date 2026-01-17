@@ -5,7 +5,7 @@ use super::slot_utils::calculate_slot_rankings;
 use super::move_chain::{find_move_chain, apply_move_chain};
 
 /// Schedules appointments for Construction day with smart slot ranking and stealing
-/// Prioritizes slot 49 for people who want research and have slot 1 available
+/// Prioritizes the last slot for people who want research and have slot 1 available
 pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
     // Filter candidates who want construction
     let candidates: Vec<&AppointmentEntry> = entries
@@ -13,15 +13,22 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
         .filter(|e| e.wants_construction && !e.construction_available_slots.is_empty())
         .collect();
     
+    // Find the maximum slot number (last slot) from all construction available slots
+    let last_slot = candidates.iter()
+        .flat_map(|e| &e.construction_available_slots)
+        .max()
+        .copied()
+        .unwrap_or(49); // Fallback to 49 if no slots found (shouldn't happen)
+    
     // Separate candidates into two groups:
-    // 1. Those who want research and have slot 1 available (priority for slot 49)
+    // 1. Those who want research and have slot 1 available (priority for last slot)
     // 2. Everyone else
-    let mut slot49_priority: Vec<&AppointmentEntry> = candidates
+    let mut last_slot_priority: Vec<&AppointmentEntry> = candidates
         .iter()
         .filter(|e| {
             e.wants_research && 
             e.research_available_slots.contains(&1) && 
-            e.construction_available_slots.contains(&49)
+            e.construction_available_slots.contains(&last_slot)
         })
         .copied()
         .collect();
@@ -31,13 +38,13 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
         .filter(|e| {
             !(e.wants_research && 
               e.research_available_slots.contains(&1) && 
-              e.construction_available_slots.contains(&49))
+              e.construction_available_slots.contains(&last_slot))
         })
         .copied()
         .collect();
     
     // Sort priority candidates by construction score (highest first)
-    slot49_priority.sort_by(|a, b| {
+    last_slot_priority.sort_by(|a, b| {
         b.construction_score.cmp(&a.construction_score)
     });
     
@@ -63,31 +70,31 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
         .map(|e| (e.player_id.clone(), *e))
         .collect();
     
-    // First, try to assign slot 49 to priority candidates
-    let mut slot49_assigned = false;
-    for entry in &slot49_priority {
-        if entry.construction_available_slots.contains(&49) && !used_slots.contains(&49) {
-            schedule.insert(49, ScheduledAppointment {
+    // First, try to assign last slot to priority candidates
+    let mut last_slot_assigned = false;
+    for entry in &last_slot_priority {
+        if entry.construction_available_slots.contains(&last_slot) && !used_slots.contains(&last_slot) {
+            schedule.insert(last_slot, ScheduledAppointment {
                 player_id: entry.player_id.clone(),
                 name: entry.name.clone(),
                 alliance: entry.alliance.clone(),
-                slot: 49,
+                slot: last_slot,
                 priority_score: entry.construction_score,
             });
-            used_slots.insert(49);
-            slot49_assigned = true;
+            used_slots.insert(last_slot);
+            last_slot_assigned = true;
             break;
         }
     }
     
-    // Combine remaining candidates (priority candidates that didn't get slot 49 + other candidates)
-    let mut remaining_candidates: Vec<&AppointmentEntry> = if slot49_assigned {
-        // Remove the one who got slot 49 from priority list
-        slot49_priority.into_iter()
-            .filter(|e| !used_slots.contains(&49) || schedule.get(&49).map(|a| a.player_id != e.player_id).unwrap_or(true))
+    // Combine remaining candidates (priority candidates that didn't get last slot + other candidates)
+    let mut remaining_candidates: Vec<&AppointmentEntry> = if last_slot_assigned {
+        // Remove the one who got last slot from priority list
+        last_slot_priority.into_iter()
+            .filter(|e| !used_slots.contains(&last_slot) || schedule.get(&last_slot).map(|a| a.player_id != e.player_id).unwrap_or(true))
             .collect()
     } else {
-        slot49_priority
+        last_slot_priority
     };
     remaining_candidates.extend(other_candidates);
     
@@ -128,14 +135,14 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
         // If no free slot, try slot stealing
         if !assigned {
             // Find players in the requested slots, collect their data first
-            // For slot 49, we need to consider both construction and research scores
+            // For last slot, we need to consider both construction and research scores
             let mut blocking_players: Vec<(u8, String, u32, u32)> = ranked_slots
                 .iter()
                 .filter_map(|(slot, _)| {
                     if let Some(appt) = schedule.get(slot) {
                         if let Some(blocking_entry) = entry_map.get(&appt.player_id) {
-                            // For slot 49, calculate combined score (construction + research if applicable)
-                            let combined_score = if *slot == 49 {
+                            // For last slot, calculate combined score (construction + research if applicable)
+                            let combined_score = if *slot == last_slot {
                                 let base_score = blocking_entry.construction_score;
                                 // Add research score if they want research and have slot 1
                                 if blocking_entry.wants_research && blocking_entry.research_available_slots.contains(&1) {
@@ -156,11 +163,11 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
                 })
                 .collect();
             
-            // For slot 49, sort by combined score (lowest first)
+            // For last slot, sort by combined score (lowest first)
             // For other slots, sort by priority score (lowest first)
             blocking_players.sort_by(|a, b| {
-                if a.0 == 49 || b.0 == 49 {
-                    // If either is slot 49, use combined score
+                if a.0 == last_slot || b.0 == last_slot {
+                    // If either is last slot, use combined score
                     a.3.cmp(&b.3)
                 } else {
                     // Otherwise use priority score
@@ -170,8 +177,8 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
             
             // Try to steal a slot with depth-limited search (up to 5 levels)
             for (requested_slot, _blocking_player_id, _blocking_score, _combined_score) in &blocking_players {
-                // Special handling for slot 49: check if requester has better combined score
-                if *requested_slot == 49 {
+                // Special handling for last slot: check if requester has better combined score
+                if *requested_slot == last_slot {
                     if let Some(blocking_appt) = schedule.get(requested_slot) {
                         if let Some(blocking_entry) = entry_map.get(&blocking_appt.player_id) {
                             // Calculate requester's combined score

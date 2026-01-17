@@ -2,7 +2,9 @@ use csv::Reader;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-#[derive(Debug, Clone)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppointmentEntry {
     pub alliance: String,
     pub name: String,
@@ -67,14 +69,40 @@ fn time_to_slot(time_str: &str) -> Option<u8> {
     None
 }
 
+/// Maps a time string to a slot number using custom time slot mapping
+/// Returns None if the time string doesn't match any slot in the mapping
+fn time_string_to_slot_number(
+    time_str: &str,
+    time_slots: &[(u8, String)]
+) -> Option<u8> {
+    // Remove any notes or extra text in parentheses
+    let clean_time = time_str.split('(').next().unwrap_or(time_str).trim();
+    
+    time_slots.iter()
+        .find(|(_, time)| time.trim() == clean_time)
+        .map(|(slot, _)| *slot)
+}
+
 /// Parses a comma-separated list of time strings and converts them to slot numbers
-fn parse_time_slots(time_string: &str) -> Vec<u8> {
+/// If custom_time_slots is provided, uses that mapping; otherwise falls back to fixed mapping
+fn parse_time_slots(
+    time_string: &str,
+    custom_time_slots: Option<&[(u8, String)]>
+) -> Vec<u8> {
     let mut slots = HashSet::new();
     
     // Split by comma and process each time
     for time_part in time_string.split(',') {
         let trimmed = time_part.trim();
-        if let Some(slot) = time_to_slot(trimmed) {
+        let slot = if let Some(custom_slots) = custom_time_slots {
+            // Use custom mapping
+            time_string_to_slot_number(trimmed, custom_slots)
+        } else {
+            // Fallback to fixed mapping (backward compatibility)
+            time_to_slot(trimmed)
+        };
+        
+        if let Some(slot) = slot {
             slots.insert(slot);
         }
     }
@@ -95,7 +123,21 @@ fn parse_number(value: &str) -> u32 {
     value.trim().parse().unwrap_or(0)
 }
 
-pub fn load_appointments<P: AsRef<Path>>(csv_path: P) -> Result<Vec<AppointmentEntry>, Box<dyn std::error::Error>> {
+/// Loads appointments from a CSV file
+/// 
+/// # Arguments
+/// * `csv_path` - Path to the CSV file
+/// * `construction_time_slots` - Optional mapping of (slot_number, time_string) for construction day
+/// * `research_time_slots` - Optional mapping of (slot_number, time_string) for research day
+/// * `troops_time_slots` - Optional mapping of (slot_number, time_string) for troops day
+/// 
+/// If time slot mappings are not provided, falls back to the fixed time mapping (backward compatibility)
+pub fn load_appointments<P: AsRef<Path>>(
+    csv_path: P,
+    construction_time_slots: Option<&[(u8, String)]>,
+    research_time_slots: Option<&[(u8, String)]>,
+    troops_time_slots: Option<&[(u8, String)]>,
+) -> Result<Vec<AppointmentEntry>, Box<dyn std::error::Error>> {
     let mut reader = Reader::from_path(csv_path)?;
     // Use HashMap to track entries by player_id for handling resubmissions
     let mut entries_map: HashMap<String, AppointmentEntry> = HashMap::new();
@@ -170,9 +212,9 @@ pub fn load_appointments<P: AsRef<Path>>(csv_path: P) -> Result<Vec<AppointmentE
         let research_times = record.get(research_times_col).unwrap_or("");
         let troops_times = record.get(troops_times_col).unwrap_or("");
         
-        let construction_available_slots = parse_time_slots(construction_times);
-        let research_available_slots = parse_time_slots(research_times);
-        let troops_available_slots = parse_time_slots(troops_times);
+        let construction_available_slots = parse_time_slots(construction_times, construction_time_slots);
+        let research_available_slots = parse_time_slots(research_times, research_time_slots);
+        let troops_available_slots = parse_time_slots(troops_times, troops_time_slots);
         
         if is_resubmission {
             // Update existing entry if it exists

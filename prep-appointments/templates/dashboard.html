@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Schedule Maker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+        }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s, transform 0.3s; }
+        .fade-enter-from { opacity: 0; transform: translateY(-10px); }
+        .fade-leave-to { opacity: 0; transform: translateY(-10px); }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-900 text-white">
+    <div id="app">
+        <div class="container mx-auto px-4 py-8 max-w-7xl">
+            <header class="text-center mb-12">
+                <h1 class="text-4xl font-bold text-blue-400 mb-4">
+                    <i class="fas fa-tachometer-alt mr-3"></i>Dashboard
+                </h1>
+                <p class="text-gray-400">Manage your schedules, statistics, and forms</p>
+            </header>
+            
+            <nav class="flex justify-center gap-4 mb-8">
+                <a href="/" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-all">
+                    <i class="fas fa-home mr-2"></i>Home
+                </a>
+            </nav>
+            
+            <main>
+                <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                    <!-- Logout button -->
+                    <div class="mb-6 flex justify-end">
+                        <button @click="handleLogout" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all text-sm">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                        </button>
+                    </div>
+                    
+                    <div key="dashboard">
+                            <!-- Tab Navigation -->
+                            <div class="flex justify-center gap-4 mb-8 border-b border-gray-700">
+                                <button 
+                                    @click="activeTab = 'schedule'"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'schedule' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-calendar-check mr-2"></i>Schedule
+                                </button>
+                                <button 
+                                    @click="activeTab = 'stats'"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'stats' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-chart-bar mr-2"></i>Statistics
+                                </button>
+                                <button 
+                                    @click="activeTab = 'create-form'"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'create-form' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-plus-circle mr-2"></i>Create Form
+                                </button>
+                                <button 
+                                    @click="activeTab = 'current-form'"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'current-form' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-file-alt mr-2"></i>Current Form
+                                </button>
+                                <button 
+                                    @click="activeTab = 'csv-operations'"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'csv-operations' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-file-csv mr-2"></i>CSV Operations
+                                </button>
+                                <button 
+                                    @click="switchToGenerateScheduleTab()"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'generate-schedule' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-calendar-alt mr-2"></i>Generate Schedule
+                                </button>
+                            </div>
+                            
+                            <!-- Schedule Tab -->
+                            <div v-if="activeTab === 'schedule'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-orange-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-calendar-check text-orange-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">Schedule</h2>
+                                    <p class="text-gray-400">View appointment schedules for each day</p>
+                                </div>
+                                
+                                <div class="bg-gray-800 rounded-lg shadow-xl p-8 mb-6 border border-gray-700">
+                                    <div class="flex justify-center gap-4 flex-wrap">
+                                        <button 
+                                            v-for="(day, key) in scheduleDays" 
+                                            :key="key"
+                                            @click="selectScheduleDay(key)"
+                                            :class="[
+                                                'px-6 py-3 rounded-lg font-semibold transition-all shadow-lg',
+                                                day.buttonClass,
+                                                currentScheduleDay === key ? day.ringClass : ''
+                                            ]">
+                                            <i :class="day.icon + ' mr-2'"></i>{{ day.name }}
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <transition name="fade">
+                                    <div v-if="scheduleLoading" class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                                        <i class="fas fa-spinner fa-spin text-4xl text-blue-400 mb-4"></i>
+                                        <p class="text-xl text-gray-400">Loading schedule...</p>
+                                    </div>
+                                    
+                                    <div v-else-if="scheduleError" class="bg-red-900/50 border-l-4 border-red-500 text-red-200 p-4 rounded-lg">
+                                        <i class="fas fa-exclamation-circle mr-2"></i>{{ scheduleError }}
+                                    </div>
+                                    
+                                    <div v-else-if="currentSchedule" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                        <h2 class="text-3xl font-bold text-white mb-6 text-center">{{ currentSchedule.day_name }}</h2>
+                                        <div class="border-2 border-gray-700 rounded-lg overflow-hidden">
+                                            <div 
+                                                v-for="slot in currentSchedule.appointments" 
+                                                :key="slot.time"
+                                                :class="[
+                                                    'flex items-center p-3 border-b border-gray-700 hover:bg-gray-700/50 transition-colors',
+                                                    slot.is_empty ? 'opacity-60' : ''
+                                                ]">
+                                                <span :class="slot.is_empty ? 'w-24 font-bold text-gray-500' : 'w-24 font-bold text-blue-400'">
+                                                    {{ slot.time }}
+                                                </span>
+                                                <span v-if="slot.is_empty" class="text-gray-500 italic">[EMPTY]</span>
+                                                <span v-else class="text-gray-200 font-medium">{{ slot.player }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div v-else class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                                        <i class="fas fa-calendar-times text-4xl text-gray-500 mb-4"></i>
+                                        <p class="text-xl text-gray-400">No schedule data available. Generate a schedule first.</p>
+                                    </div>
+                                </transition>
+                            </div>
+                            
+                            <!-- Statistics Tab -->
+                            <div v-if="activeTab === 'stats'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-blue-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-chart-bar text-blue-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">Statistics</h2>
+                                    <p class="text-gray-400">View alliance and time slot statistics</p>
+                                </div>
+                                
+                                <transition name="fade">
+                                    <div v-if="statsLoading" class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                                        <i class="fas fa-spinner fa-spin text-4xl text-blue-400 mb-4"></i>
+                                        <p class="text-xl text-gray-400">Loading statistics...</p>
+                                    </div>
+                                    
+                                    <div v-else-if="statsError" class="bg-red-900/50 border-l-4 border-red-500 text-red-200 p-4 rounded-lg">
+                                        <i class="fas fa-exclamation-circle mr-2"></i>{{ statsError }}
+                                    </div>
+                                    
+                                    <div v-else-if="stats" class="space-y-8">
+                                        <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <h2 class="text-3xl font-bold text-white mb-6 flex items-center">
+                                                <i class="fas fa-users text-blue-400 mr-3"></i>Alliance Request Counts
+                                            </h2>
+                                            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                <div 
+                                                    v-for="(allianceData, alliance) in sortedAlliances" 
+                                                    :key="alliance"
+                                                    class="bg-gray-700/50 rounded-xl p-5 border-2 border-gray-600 hover:border-blue-500 hover:shadow-lg transition-all">
+                                                    <h3 class="text-xl font-bold text-white mb-4">
+                                                        {{ alliance || '(No Alliance)' }}
+                                                    </h3>
+                                                    <div class="space-y-2">
+                                                        <div class="flex justify-between items-center">
+                                                            <span class="text-gray-300 flex items-center">
+                                                                <i class="fas fa-hammer text-orange-400 mr-2"></i>Construction:
+                                                            </span>
+                                                            <strong class="text-orange-400 text-lg">{{ allianceData.construction_requests }}</strong>
+                                                        </div>
+                                                        <div class="flex justify-between items-center">
+                                                            <span class="text-gray-300 flex items-center">
+                                                                <i class="fas fa-flask text-blue-400 mr-2"></i>Research:
+                                                            </span>
+                                                            <strong class="text-blue-400 text-lg">{{ allianceData.research_requests }}</strong>
+                                                        </div>
+                                                        <div class="flex justify-between items-center">
+                                                            <span class="text-gray-300 flex items-center">
+                                                                <i class="fas fa-users text-green-400 mr-2"></i>Troops:
+                                                            </span>
+                                                            <strong class="text-green-400 text-lg">{{ allianceData.troops_requests }}</strong>
+                                                        </div>
+                                                        <div class="flex justify-between items-center pt-3 border-t-2 border-gray-600 mt-3">
+                                                            <span class="font-bold text-gray-200">Total:</span>
+                                                            <strong class="text-blue-400 text-xl">{{ getTotal(allianceData) }}</strong>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Construction Day Statistics -->
+                                        <div v-if="stats.construction_time_slot_popularity" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <h2 class="text-3xl font-bold text-white mb-6 flex items-center">
+                                                <i class="fas fa-hammer text-orange-400 mr-3"></i>Construction Day Time Slot Popularity
+                                            </h2>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-2">
+                                                <div 
+                                                    v-for="(timeData, time) in sortedConstructionTimeSlots" 
+                                                    :key="'construction-' + time"
+                                                    class="bg-gray-700/50 rounded-lg p-2 border border-gray-600 hover:border-orange-500 hover:shadow-md transition-all text-center">
+                                                    <div class="font-bold text-orange-400 text-sm mb-1">{{ time }}</div>
+                                                    <div class="text-xl font-bold text-white">
+                                                        {{ timeData.requests }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Research Day Statistics -->
+                                        <div v-if="stats.research_time_slot_popularity" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <h2 class="text-3xl font-bold text-white mb-6 flex items-center">
+                                                <i class="fas fa-flask text-blue-400 mr-3"></i>Research Day Time Slot Popularity
+                                            </h2>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-2">
+                                                <div 
+                                                    v-for="(timeData, time) in sortedResearchTimeSlots" 
+                                                    :key="'research-' + time"
+                                                    class="bg-gray-700/50 rounded-lg p-2 border border-gray-600 hover:border-blue-500 hover:shadow-md transition-all text-center">
+                                                    <div class="font-bold text-blue-400 text-sm mb-1">{{ time }}</div>
+                                                    <div class="text-xl font-bold text-white">
+                                                        {{ timeData.requests }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Troops Day Statistics -->
+                                        <div v-if="stats.troops_time_slot_popularity" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <h2 class="text-3xl font-bold text-white mb-6 flex items-center">
+                                                <i class="fas fa-users text-green-400 mr-3"></i>Troops Training Day Time Slot Popularity
+                                            </h2>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-2">
+                                                <div 
+                                                    v-for="(timeData, time) in sortedTroopsTimeSlots" 
+                                                    :key="'troops-' + time"
+                                                    class="bg-gray-700/50 rounded-lg p-2 border border-gray-600 hover:border-green-500 hover:shadow-md transition-all text-center">
+                                                    <div class="font-bold text-green-400 text-sm mb-1">{{ time }}</div>
+                                                    <div class="text-xl font-bold text-white">
+                                                        {{ timeData.requests }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Fallback: Combined time slot view (for backward compatibility) -->
+                                        <div v-if="!stats.construction_time_slot_popularity && stats.time_slot_popularity" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <h2 class="text-3xl font-bold text-white mb-6 flex items-center">
+                                                <i class="fas fa-clock text-blue-400 mr-3"></i>Time Slot Popularity
+                                            </h2>
+                                            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-2">
+                                                <div 
+                                                    v-for="(timeData, time) in sortedTimeSlots" 
+                                                    :key="time"
+                                                    class="bg-gray-700/50 rounded-lg p-2 border border-gray-600 hover:border-blue-500 hover:shadow-md transition-all text-center">
+                                                    <div class="font-bold text-blue-400 text-sm mb-1">{{ time }}</div>
+                                                    <div class="space-y-1 text-xs">
+                                                        <div class="flex justify-between">
+                                                            <span class="text-orange-400"><i class="fas fa-hammer"></i></span>
+                                                            <strong class="text-gray-200">{{ timeData.construction_requests }}</strong>
+                                                        </div>
+                                                        <div class="flex justify-between">
+                                                            <span class="text-blue-400"><i class="fas fa-flask"></i></span>
+                                                            <strong class="text-gray-200">{{ timeData.research_requests }}</strong>
+                                                        </div>
+                                                        <div class="flex justify-between">
+                                                            <span class="text-green-400"><i class="fas fa-users"></i></span>
+                                                            <strong class="text-gray-200">{{ timeData.troops_requests }}</strong>
+                                                        </div>
+                                                    </div>
+                                                    <div class="mt-1 pt-1 border-t border-gray-600 font-bold text-blue-400 text-xs">
+                                                        {{ getTotal(timeData) }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div v-else class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                                        <i class="fas fa-chart-bar text-4xl text-gray-500 mb-4"></i>
+                                        <p class="text-xl text-gray-400">No statistics available. Generate a schedule first.</p>
+                                    </div>
+                                </transition>
+                            </div>
+                            
+                            <!-- CSV Operations Tab -->
+                            <div v-if="activeTab === 'csv-operations'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-green-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-file-csv text-green-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">CSV Operations</h2>
+                                    <p class="text-gray-400">Upload or download CSV files</p>
+                                </div>
+                                
+                                <!-- Download Current CSV Section -->
+                                <div class="bg-gray-800 rounded-lg shadow-xl p-6 mb-6 border border-gray-700">
+                                    <h3 class="text-xl font-bold text-white mb-4">
+                                        <i class="fas fa-download mr-2"></i>Download Current Form CSV
+                                    </h3>
+                                    <p class="text-gray-400 mb-4">Download the CSV file containing all form submissions</p>
+                                    <button 
+                                        @click="handleDownloadCSV"
+                                        :disabled="downloadingCSV"
+                                        class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i v-if="!downloadingCSV" class="fas fa-download mr-2"></i>
+                                        <i v-else class="fas fa-spinner fa-spin mr-2"></i>
+                                        {{ downloadingCSV ? 'Downloading...' : 'Download Current Form CSV' }}
+                                    </button>
+                                </div>
+                                
+                            <form @submit.prevent="handleUpload" class="space-y-6">
+                                <div>
+                                    <label for="csv-file" class="block text-sm font-semibold text-gray-300 mb-2">
+                                        <i class="fas fa-file-csv mr-2"></i>Select CSV File
+                                    </label>
+                                    <div class="relative">
+                                        <input 
+                                            type="file" 
+                                            id="csv-file" 
+                                            @change="handleFileSelect"
+                                            accept=".csv" 
+                                            required
+                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer">
+                                    </div>
+                                    <p v-if="selectedFile" class="mt-2 text-sm text-gray-400">
+                                        <i class="fas fa-file mr-2"></i>Selected: {{ selectedFile.name }}
+                                    </p>
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    :disabled="uploading || !selectedFile"
+                                    class="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <i v-if="!uploading" class="fas fa-cloud-upload-alt mr-2"></i>
+                                    <i v-else class="fas fa-spinner fa-spin mr-2"></i>
+                                    {{ uploading ? 'Uploading and processing...' : 'Upload & Generate Schedule' }}
+                                </button>
+                            </form>
+                            <transition name="fade">
+                                <div v-if="uploadStatus" 
+                                     :class="[
+                                         'mt-4 p-4 rounded-lg',
+                                         uploadStatus.type === 'success' ? 'bg-green-900/50 border-l-4 border-green-500 text-green-200' : 'bg-red-900/50 border-l-4 border-red-500 text-red-200'
+                                     ]">
+                                    <i :class="uploadStatus.type === 'success' ? 'fas fa-check-circle' : 'fas fa-times-circle' + ' mr-2'"></i>
+                                    {{ uploadStatus.message }}
+                                </div>
+                            </transition>
+                            </div>
+                            
+                            <!-- Create Form Tab -->
+                            <div v-if="activeTab === 'create-form'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-purple-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-cog text-purple-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">Create Form</h2>
+                                    <p class="text-gray-400">Configure alliances and schedule times, then create a form to get a shareable link</p>
+                                </div>
+                                
+                                <!-- Form Link Display (if form was created) -->
+                                <transition name="fade">
+                                    <div v-if="createdFormUrl" class="mb-8 p-6 bg-green-900/50 border-l-4 border-green-500 rounded-lg">
+                                        <h3 class="text-xl font-bold text-green-200 mb-3">
+                                            <i class="fas fa-check-circle mr-2"></i>Form Created Successfully!
+                                        </h3>
+                                        <p class="text-gray-300 mb-3">Share this link with your players to fill out the form:</p>
+                                        <div class="flex items-center gap-2 bg-gray-800 p-3 rounded-lg border border-gray-700 mb-3">
+                                            <input 
+                                                type="text" 
+                                                :value="createdFormUrl" 
+                                                readonly
+                                                id="formUrlInput"
+                                                class="flex-1 bg-transparent text-white font-mono text-sm outline-none">
+                                            <button 
+                                                @click="copyFormUrl"
+                                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all">
+                                                <i class="fas fa-copy mr-2"></i>Copy
+                                            </button>
+                                        </div>
+                                        <div class="flex gap-2 flex-wrap">
+                                            <a 
+                                                :href="createdFormUrl" 
+                                                target="_blank"
+                                                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all text-sm">
+                                                <i class="fas fa-external-link-alt mr-2"></i>Open Form
+                                            </a>
+                                            <a 
+                                                :href="createdFormUrl + '/stats'" 
+                                                target="_blank"
+                                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-sm">
+                                                <i class="fas fa-chart-bar mr-2"></i>View Statistics
+                                            </a>
+                                        </div>
+                                        <p class="text-sm text-gray-400 mt-3">Form Code: <span class="font-mono text-green-300">{{ createdFormCode }}</span></p>
+                                    </div>
+                                </transition>
+                                
+                                <div class="space-y-8">
+                                    <!-- Form Name -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-white mb-4">
+                                            <i class="fas fa-tag mr-2"></i>Form Name
+                                        </h3>
+                                        <p class="text-sm text-gray-400 mb-4">Give this form a name (e.g., "Week 1", "January 2025"). Optional - defaults to account and server if left empty.</p>
+                                        <input 
+                                            v-model="config.form_name"
+                                            type="text"
+                                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
+                                            placeholder="Enter form name (optional)">
+                                    </div>
+                                    
+                                    <!-- Introduction Text -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-white mb-4">
+                                            <i class="fas fa-info-circle mr-2"></i>Introduction Text
+                                        </h3>
+                                        <p class="text-sm text-gray-400 mb-4">Standard introduction text that will be displayed at the top of the form. This text is fixed and cannot be changed.</p>
+                                        <textarea 
+                                            :value="standardIntroText"
+                                            rows="15"
+                                            readonly
+                                            disabled
+                                            class="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed font-mono text-sm"
+                                            placeholder="Standard introduction text"></textarea>
+                                    </div>
+                                    
+                                    <!-- Alliances Configuration -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-white mb-4">
+                                            <i class="fas fa-users mr-2"></i>Alliances
+                                        </h3>
+                                        <p class="text-sm text-gray-400 mb-4">Add or remove alliance names. "Non of the above" will be automatically added.</p>
+                                        <div class="space-y-3">
+                                            <div v-for="(alliance, index) in config.alliances" :key="index" class="flex items-center gap-2">
+                                                <input 
+                                                    v-if="alliance !== 'Non of the above'"
+                                                    v-model="config.alliances[index]"
+                                                    type="text"
+                                                    class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
+                                                    placeholder="Alliance name">
+                                                <input 
+                                                    v-else
+                                                    v-model="config.alliances[index]"
+                                                    type="text"
+                                                    disabled
+                                                    class="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-500 cursor-not-allowed"
+                                                    placeholder="Non of the above">
+                                                <button 
+                                                    v-if="alliance !== 'Non of the above'"
+                                                    @click.prevent="config.alliances.splice(index, 1)"
+                                                    type="button"
+                                                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                            <button 
+                                                @click.prevent="config.alliances.push('')"
+                                                type="button"
+                                                class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all">
+                                                <i class="fas fa-plus mr-2"></i>Add Alliance
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Construction Day Times -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-orange-400 mb-4">
+                                            <i class="fas fa-hammer mr-2"></i>Construction Day Times
+                                        </h3>
+                                        <div class="grid md:grid-cols-2 gap-4">
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Start Time <span class="text-red-400">*</span>
+                                                </label>
+                                                <input 
+                                                    v-model="config.construction_times.start_time"
+                                                    type="time"
+                                                    required
+                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    End Time (optional, defaults to start + 24h)
+                                                </label>
+                                                <div class="flex flex-col">
+                                                    <input 
+                                                        v-model="config.construction_times.end_time"
+                                                        type="time"
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                    <button 
+                                                        @click.prevent="config.construction_times.end_time = null"
+                                                        type="button"
+                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
+                                                        Reset to default (24h)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Research Day Times -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-purple-400 mb-4">
+                                            <i class="fas fa-flask mr-2"></i>Research Day Times
+                                        </h3>
+                                        <div class="grid md:grid-cols-2 gap-4">
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Start Time <span class="text-red-400">*</span>
+                                                </label>
+                                                <input 
+                                                    v-model="config.research_times.start_time"
+                                                    type="time"
+                                                    required
+                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    End Time (optional, defaults to start + 24h)
+                                                </label>
+                                                <div class="flex flex-col">
+                                                    <input 
+                                                        v-model="config.research_times.end_time"
+                                                        type="time"
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                    <button 
+                                                        @click.prevent="config.research_times.end_time = null"
+                                                        type="button"
+                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
+                                                        Reset to default (24h)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Troops Day Times -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-green-400 mb-4">
+                                            <i class="fas fa-users mr-2"></i>Troops Training Day Times
+                                        </h3>
+                                        <div class="grid md:grid-cols-2 gap-4">
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Start Time <span class="text-red-400">*</span>
+                                                </label>
+                                                <input 
+                                                    v-model="config.troops_times.start_time"
+                                                    type="time"
+                                                    required
+                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    End Time (optional, defaults to start + 24h)
+                                                </label>
+                                                <div class="flex flex-col">
+                                                    <input 
+                                                        v-model="config.troops_times.end_time"
+                                                        type="time"
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                    <button 
+                                                        @click.prevent="config.troops_times.end_time = null"
+                                                        type="button"
+                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
+                                                        Reset to default (24h)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <button 
+                                        type="button"
+                                        @click="handleCreateForm"
+                                        :disabled="creatingForm"
+                                        class="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i v-if="!creatingForm" class="fas fa-plus-circle mr-2"></i>
+                                        <i v-else class="fas fa-spinner fa-spin mr-2"></i>
+                                        {{ creatingForm ? 'Creating Form...' : 'Create Form' }}
+                                    </button>
+                                    
+                                    <transition name="fade">
+                                        <div v-if="configStatus" 
+                                             :class="[
+                                                 'p-4 rounded-lg',
+                                                 configStatus.type === 'success' ? 'bg-green-900/50 border-l-4 border-green-500 text-green-200' : 'bg-red-900/50 border-l-4 border-red-500 text-red-200'
+                                             ]">
+                                            <i :class="configStatus.type === 'success' ? 'fas fa-check-circle' : 'fas fa-times-circle' + ' mr-2'"></i>
+                                            {{ configStatus.message }}
+                                        </div>
+                                    </transition>
+                                </div>
+                            </div>
+                            
+                            <!-- Generate Schedule Tab -->
+                            <div v-if="activeTab === 'generate-schedule'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-green-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-calendar-alt text-green-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">Generate Schedule</h2>
+                                    <p class="text-gray-400">Generate schedules from form submissions</p>
+                                </div>
+                                
+                                <!-- Reload form data when this tab is shown -->
+                                <div v-if="activeTab === 'generate-schedule' && !loadingCurrentForm && !currentForm" class="bg-yellow-900/50 border-l-4 border-yellow-500 text-yellow-200 p-4 rounded-lg mb-6">
+                                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                                    No current form found. Please create a form first.
+                                </div>
+                                
+                                <!-- Predetermined Slots Configuration -->
+                                <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600 mb-6">
+                                    <h3 class="text-xl font-bold text-white mb-4">
+                                        <i class="fas fa-lock mr-2"></i>Predetermined Slots
+                                    </h3>
+                                    <p class="text-sm text-gray-400 mb-4">Pre-assign specific time slots to players. These slots will be locked when generating the schedule. Loaded from current form configuration.</p>
+                                    <div v-if="!currentForm" class="text-gray-400 text-center py-4">
+                                        No current form found. Please create a form first.
+                                    </div>
+                                    <div v-else class="space-y-3">
+                                        <div v-for="(slot, index) in predeterminedSlots" :key="index" class="bg-gray-800 rounded-lg p-4 border border-gray-600">
+                                            <div class="grid md:grid-cols-2 gap-3 mb-3">
+                                                <div class="flex flex-col">
+                                                    <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                        Day <span class="text-red-400">*</span>
+                                                    </label>
+                                                    <select 
+                                                        v-model="slot.day"
+                                                        required
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                        <option value="construction">Construction Day</option>
+                                                        <option value="research">Research Day</option>
+                                                        <option value="troops">Troops Training Day</option>
+                                                    </select>
+                                                </div>
+                                                <div class="flex flex-col">
+                                                    <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                        Time (HH:MM) <span class="text-red-400">*</span>
+                                                    </label>
+                                                    <input 
+                                                        v-model="slot.time"
+                                                        type="time"
+                                                        required
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                </div>
+                                                <div class="flex flex-col">
+                                                    <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                        Player ID <span class="text-red-400">*</span>
+                                                    </label>
+                                                    <input 
+                                                        v-model="slot.player_id"
+                                                        @blur="lookupPlayer(index)"
+                                                        type="text"
+                                                        required
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
+                                                        placeholder="Enter player ID (e.g., 123456)">
+                                                    <div v-if="slot.lookingUp" class="text-xs text-gray-400 mt-1">
+                                                        <i class="fas fa-spinner fa-spin mr-1"></i>Looking up...
+                                                    </div>
+                                                    <div v-if="slot.lookupError" class="text-xs text-red-400 mt-1">
+                                                        <i class="fas fa-exclamation-triangle mr-1"></i>{{ slot.lookupError }}
+                                                    </div>
+                                                </div>
+                                                <div class="flex flex-col">
+                                                    <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                        Alliance
+                                                    </label>
+                                                    <input 
+                                                        v-model="slot.alliance"
+                                                        type="text"
+                                                        readonly
+                                                        disabled
+                                                        class="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
+                                                        placeholder="Auto-filled from player ID">
+                                                </div>
+                                                <div class="flex flex-col md:col-span-2">
+                                                    <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                        Player Name
+                                                    </label>
+                                                    <input 
+                                                        v-model="slot.name"
+                                                        type="text"
+                                                        readonly
+                                                        disabled
+                                                        class="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
+                                                        placeholder="Auto-filled from player ID">
+                                                </div>
+                                            </div>
+                                            <button 
+                                                @click.prevent="predeterminedSlots.splice(index, 1)"
+                                                type="button"
+                                                class="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all">
+                                                <i class="fas fa-trash mr-2"></i>Remove Slot
+                                            </button>
+                                        </div>
+                                        <button 
+                                            @click.prevent="predeterminedSlots.push({ day: 'construction', time: '00:00', player_id: '', alliance: '', name: '', lookingUp: false, lookupError: null })"
+                                            type="button"
+                                            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all">
+                                            <i class="fas fa-plus mr-2"></i>Add Predetermined Slot
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                    <button 
+                                        @click="handleGenerateSchedule"
+                                        :disabled="generatingSchedule"
+                                        class="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i v-if="!generatingSchedule" class="fas fa-magic mr-2"></i>
+                                        <i v-else class="fas fa-spinner fa-spin mr-2"></i>
+                                        {{ generatingSchedule ? 'Generating Schedule...' : 'Generate Schedule from Form Submissions' }}
+                                    </button>
+                                    
+                                    <transition name="fade">
+                                        <div v-if="scheduleGenStatus" 
+                                             :class="[
+                                                 'mt-4 p-4 rounded-lg',
+                                                 scheduleGenStatus.type === 'success' ? 'bg-green-900/50 border-l-4 border-green-500 text-green-200' : 'bg-red-900/50 border-l-4 border-red-500 text-red-200'
+                                             ]">
+                                            <i :class="scheduleGenStatus.type === 'success' ? 'fas fa-check-circle' : 'fas fa-times-circle' + ' mr-2'"></i>
+                                            {{ scheduleGenStatus.message }}
+                                        </div>
+                                    </transition>
+                                </div>
+                            </div>
+                            
+                            <!-- Current Form Tab -->
+                            <div v-if="activeTab === 'current-form'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-purple-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-file-alt text-purple-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">Current Form</h2>
+                                    <p class="text-gray-400">View and manage your current form</p>
+                                </div>
+                                
+                                <transition name="fade">
+                                    <div v-if="loadingCurrentForm" class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                                        <i class="fas fa-spinner fa-spin text-4xl text-blue-400 mb-4"></i>
+                                        <p class="text-xl text-gray-400">Loading form information...</p>
+                                    </div>
+                                    
+                                    <div v-else-if="currentForm" class="space-y-6">
+                                        <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <div class="space-y-4">
+                                                <div>
+                                                    <p class="text-sm text-gray-300 mb-1">Form Name:</p>
+                                                    <p class="text-2xl font-bold text-white">{{ currentForm.name }}</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-sm text-gray-300 mb-1">Form Code:</p>
+                                                    <p class="text-lg font-mono text-purple-300">{{ currentForm.code }}</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-sm text-gray-300 mb-1">Created:</p>
+                                                    <p class="text-gray-200">{{ formatDate(currentForm.created_at) }}</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-sm text-gray-300 mb-1">Responses:</p>
+                                                    <p class="text-3xl font-bold text-green-400">{{ currentForm.submissions_count || 0 }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <h3 class="text-xl font-bold text-white mb-4">Form Link</h3>
+                                            <div class="flex items-center gap-2 bg-gray-700 p-3 rounded-lg border border-gray-600 mb-4">
+                                                <input 
+                                                    type="text" 
+                                                    :value="currentForm.url" 
+                                                    readonly
+                                                    id="currentFormUrlInput"
+                                                    class="flex-1 bg-transparent text-white font-mono text-sm outline-none">
+                                                <button 
+                                                    @click="copyCurrentFormUrl"
+                                                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all">
+                                                    <i class="fas fa-copy mr-2"></i>Copy Link
+                                                </button>
+                                            </div>
+                                            <div class="flex gap-2 flex-wrap">
+                                                <a 
+                                                    :href="currentForm.url" 
+                                                    target="_blank"
+                                                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all">
+                                                    <i class="fas fa-external-link-alt mr-2"></i>Open Form
+                                                </a>
+                                                <a 
+                                                    :href="currentForm.url + '/stats'" 
+                                                    target="_blank"
+                                                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all">
+                                                    <i class="fas fa-chart-bar mr-2"></i>View Statistics
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div v-else class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                                        <i class="fas fa-file-alt text-4xl text-gray-500 mb-4"></i>
+                                        <p class="text-xl text-gray-400 mb-4">No current form found.</p>
+                                        <p class="text-gray-500">Create a new form using the "Create Form" tab.</p>
+                                    </div>
+                                </transition>
+                            </div>
+                        </div>
+                    </transition>
+                </div>
+            </main>
+            
+            <footer class="text-center mt-12 text-gray-500">
+                <p>&copy; 2025 Schedule Maker</p>
+            </footer>
+        </div>
+    </div>
+    
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    baseUrl: '',
+                    accountName: '',
+                    serverNumber: '',
+                    selectedFile: null,
+                    uploading: false,
+                    uploadStatus: null,
+                    downloadingCSV: false,
+                    activeTab: 'schedule', // Default to Schedule tab
+                    // Schedule tab data
+                    currentScheduleDay: 'construction',
+                    scheduleLoading: false,
+                    scheduleError: null,
+                    currentSchedule: null,
+                    // Current form data
+                    currentForm: null,
+                    loadingCurrentForm: false,
+                    scheduleDays: {
+                        construction: {
+                            name: 'Construction Day',
+                            icon: 'fas fa-hammer',
+                            buttonClass: 'bg-orange-600 hover:bg-orange-700 text-white',
+                            ringClass: 'ring-4 ring-orange-400'
+                        },
+                        research: {
+                            name: 'Research Day',
+                            icon: 'fas fa-flask',
+                            buttonClass: 'bg-blue-600 hover:bg-blue-700 text-white',
+                            ringClass: 'ring-4 ring-blue-400'
+                        },
+                        troops: {
+                            name: 'Troops Training Day',
+                            icon: 'fas fa-users',
+                            buttonClass: 'bg-green-600 hover:bg-green-700 text-white',
+                            ringClass: 'ring-4 ring-green-400'
+                        }
+                    },
+                    // Stats tab data
+                    statsLoading: false,
+                    statsError: null,
+                    stats: null,
+                    // Schedule generation
+                    generatingSchedule: false,
+                    scheduleGenStatus: null,
+                    // Standard intro text (fixed, cannot be changed)
+                    standardIntroText: 'Fill out this form to apply for Chief Minister (CM) and Noble Advisor (NA) appointments.\n\nSchedule:\n- Construction Day (Monday) [CM]\n- Research Day (Tuesday) [CM]\n- Troops Training Day (Thursday) [NA]\n\nRequirements:\n\n- Form must be filled out in order to be considered for an appointment during SvS preparation week. \n- Form must be filled out by THE SUNDAY OF MATCHMAKING.\n- Form filled out after the deadline will be added to the "Late" submission wait list.\n- Rally leaders and rally leader substitutes may be given priority (if necessary).\n- Verification of items, speedups, and resources may be requested (eg. during situations where the score is very close in points and to make sure our state wins by ensuring appointments go to players who can maximize points).\n\n\nFor more information:\n- Contact form support: #140 [COB]Vor and /or the current Minister of Justice if you have questions on filling out this form or changes to your form submission!',
+                    config: {
+                        form_name: '',
+                        alliances: [],
+                        construction_times: { start_time: '00:00', end_time: null },
+                        research_times: { start_time: '00:00', end_time: null },
+                        troops_times: { start_time: '00:00', end_time: null },
+                        intro_text: ''
+                    },
+                    predeterminedSlots: [],
+                    creatingForm: false,
+                    configStatus: null,
+                    createdFormUrl: null,
+                    createdFormCode: null
+                }
+            },
+            async mounted() {
+                // Extract account name from URL path (/dashboard/{account_name})
+                const path = window.location.pathname;
+                const parts = path.split('/').filter(p => p);
+                if (parts.length >= 2 && parts[0] === 'dashboard') {
+                    this.accountName = parts[1];
+                    
+                    // Get account info from session (backend verifies authentication)
+                    try {
+                        const response = await fetch('/api/session');
+                        const data = await response.json();
+                        
+                        if (response.ok && data.success) {
+                            // Verify the account name matches
+                            if (data.account_name === this.accountName) {
+                                this.serverNumber = data.server_number.toString();
+                                this.baseUrl = `/${this.accountName}/${this.serverNumber}`;
+                                
+                                // Load schedule and stats on mount (stats should always be loaded)
+                                this.loadStats();
+                                this.loadSchedule('construction');
+                                
+                                // Always initialize with standard intro text
+                                this.config.intro_text = this.standardIntroText;
+                                
+                                // Load current configuration
+                                await this.loadConfig();
+                                
+                                // Ensure intro text is always set to standard (override any loaded value)
+                                this.config.intro_text = this.standardIntroText;
+                                
+                                // Load current form info
+                                await this.loadCurrentForm();
+                            } else {
+                                console.error('Account name mismatch');
+                                // Redirect to home if account doesn't match
+                                window.location.href = '/';
+                            }
+                        } else {
+                            // Not authenticated - redirect to home
+                            console.error('Not authenticated');
+                            window.location.href = '/';
+                        }
+                    } catch (err) {
+                        console.error('Error initializing dashboard:', err);
+                        window.location.href = '/';
+                    }
+                }
+            },
+            computed: {
+                sortedAlliances() {
+                    if (!this.stats || !this.stats.alliance_counts) return {};
+                    const entries = Object.entries(this.stats.alliance_counts);
+                    entries.sort((a, b) => {
+                        const totalA = this.getTotal(a[1]);
+                        const totalB = this.getTotal(b[1]);
+                        return totalB - totalA;
+                    });
+                    return Object.fromEntries(entries);
+                },
+                sortedTimeSlots() {
+                    if (!this.stats || !this.stats.time_slot_popularity) return {};
+                    const entries = Object.entries(this.stats.time_slot_popularity);
+                    entries.sort((a, b) => a[0].localeCompare(b[0]));
+                    return Object.fromEntries(entries);
+                },
+                sortedConstructionTimeSlots() {
+                    if (!this.stats || !this.stats.construction_time_slot_popularity) return {};
+                    return this.sortTimeSlots(this.stats.construction_time_slot_popularity, this.stats.construction_start_time || "00:00");
+                },
+                sortedResearchTimeSlots() {
+                    if (!this.stats || !this.stats.research_time_slot_popularity) return {};
+                    return this.sortTimeSlots(this.stats.research_time_slot_popularity, this.stats.research_start_time || "00:00");
+                },
+                sortedTroopsTimeSlots() {
+                    if (!this.stats || !this.stats.troops_time_slot_popularity) return {};
+                    return this.sortTimeSlots(this.stats.troops_time_slot_popularity, this.stats.troops_start_time || "00:00");
+                }
+            },
+            methods: {
+                selectScheduleDay(day) {
+                    this.currentScheduleDay = day;
+                    this.loadSchedule(day);
+                },
+                async loadSchedule(day) {
+                    this.scheduleLoading = true;
+                    this.scheduleError = null;
+                    this.currentSchedule = null;
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/schedule/${day}`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.currentSchedule = data;
+                        } else {
+                            this.scheduleError = data.error || 'Failed to load schedule';
+                        }
+                    } catch (err) {
+                        this.scheduleError = 'Error: ' + err.message;
+                    } finally {
+                        this.scheduleLoading = false;
+                    }
+                },
+                async loadStats() {
+                    this.statsLoading = true;
+                    this.statsError = null;
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/stats`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.stats = data;
+                        } else {
+                            this.statsError = data.error || 'Failed to load statistics';
+                        }
+                    } catch (err) {
+                        this.statsError = 'Error: ' + err.message;
+                    } finally {
+                        this.statsLoading = false;
+                    }
+                },
+                getTotal(data) {
+                    return data.construction_requests + data.research_requests + data.troops_requests;
+                },
+                parseTimeToMinutes(timeStr) {
+                    const parts = timeStr.split(':');
+                    if (parts.length !== 2) return 0;
+                    const hours = parseInt(parts[0], 10) || 0;
+                    const minutes = parseInt(parts[1], 10) || 0;
+                    return hours * 60 + minutes;
+                },
+                sortTimeSlots(timeSlotMap, startTime) {
+                    const entries = Object.entries(timeSlotMap);
+                    const startMinutes = this.parseTimeToMinutes(startTime);
+                    
+                    // Sort: times >= startTime come first, times < startTime come after (wrapped to next day)
+                    entries.sort((a, b) => {
+                        const timeA = a[0];
+                        const timeB = b[0];
+                        const minutesA = this.parseTimeToMinutes(timeA);
+                        const minutesB = this.parseTimeToMinutes(timeB);
+                        
+                        // Adjust times that are before start time (wrap to next day)
+                        const adjustedA = minutesA < startMinutes ? minutesA + 24 * 60 : minutesA;
+                        const adjustedB = minutesB < startMinutes ? minutesB + 24 * 60 : minutesB;
+                        
+                        return adjustedA - adjustedB;
+                    });
+                    
+                    return Object.fromEntries(entries);
+                },
+                async handleLogout() {
+                    try {
+                        const response = await fetch('/api/logout', {
+                            method: 'POST'
+                        });
+                        
+                        if (response.ok) {
+                            window.location.href = '/';
+                        } else {
+                            // Still redirect even if logout fails
+                            window.location.href = '/';
+                        }
+                    } catch (error) {
+                        console.error('Logout error:', error);
+                        // Still redirect to home even if logout fails
+                        window.location.href = '/';
+                    }
+                },
+                handleFileSelect(event) {
+                    this.selectedFile = event.target.files[0];
+                    this.uploadStatus = null;
+                },
+                async handleUpload() {
+                    if (!this.selectedFile) {
+                        this.uploadStatus = { type: 'error', message: 'Please select a file' };
+                        return;
+                    }
+                    
+                    this.uploading = true;
+                    this.uploadStatus = null;
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/upload`, {
+                            method: 'POST',
+                            body: this.selectedFile
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            this.uploadStatus = {
+                                type: 'success',
+                                message: data.message || 'Schedule generated successfully!'
+                            };
+                            this.selectedFile = null;
+                            document.getElementById('csv-file').value = '';
+                        } else {
+                            this.uploadStatus = {
+                                type: 'error',
+                                message: 'Error: ' + (data.error || 'Upload failed')
+                            };
+                        }
+                    } catch (error) {
+                        this.uploadStatus = {
+                            type: 'error',
+                            message: 'Error: ' + error.message
+                        };
+                    } finally {
+                        this.uploading = false;
+                    }
+                },
+                async loadConfig() {
+                    try {
+                        // Load previous form config if exists (uses session authentication)
+                        const response = await fetch(`${this.baseUrl}/api/form/previous`, {
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.config) {
+                                // Load previous config (preserve form_name)
+                                this.config.construction_times = data.config.construction_times || { start_time: '00:00', end_time: null };
+                                this.config.research_times = data.config.research_times || { start_time: '00:00', end_time: null };
+                                this.config.troops_times = data.config.troops_times || { start_time: '00:00', end_time: null };
+                                // Remove "Non of the above" from display (it will be added automatically)
+                                this.config.alliances = (data.config.alliances || []).filter(a => a !== 'Non of the above');
+                                // Always use standard intro text (not editable)
+                                this.config.intro_text = this.standardIntroText;
+                                // Note: form_name is not preserved from previous config (user should set a new name)
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load previous config:', error);
+                        // Use defaults if no previous config
+                    }
+                },
+                async handleCreateForm(event) {
+                    // Prevent any default behavior if called from an event
+                    if (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    
+                    this.creatingForm = true;
+                    this.configStatus = null;
+                    this.createdFormUrl = null;
+                    this.createdFormCode = null;
+                    
+                    // Filter out empty alliances
+                    const alliances = this.config.alliances.filter(a => a.trim() !== '');
+                    
+                    // Validate that at least one alliance is provided
+                    if (alliances.length === 0) {
+                        this.configStatus = {
+                            type: 'error',
+                            message: 'Error: At least one alliance must be specified'
+                        };
+                        this.creatingForm = false;
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/create`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                name: (this.config.form_name && this.config.form_name.trim()) || null,
+                                alliances: alliances,
+                                construction_times: {
+                                    start_time: this.config.construction_times.start_time,
+                                    end_time: this.config.construction_times.end_time || null
+                                },
+                                research_times: {
+                                    start_time: this.config.research_times.start_time,
+                                    end_time: this.config.research_times.end_time || null
+                                },
+                                troops_times: {
+                                    start_time: this.config.troops_times.start_time,
+                                    end_time: this.config.troops_times.end_time || null
+                                },
+                                intro_text: this.standardIntroText
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.success) {
+                            this.createdFormUrl = data.url;
+                            this.createdFormCode = data.code;
+                            this.configStatus = {
+                                type: 'success',
+                                message: data.message || 'Form created successfully!'
+                            };
+                            // Reload current form to show the newly created form
+                            await this.loadCurrentForm();
+                            // Switch to current form tab to show the new form
+                            this.activeTab = 'current-form';
+                            // Scroll to top to show the link
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                            this.configStatus = {
+                                type: 'error',
+                                message: 'Error: ' + (data.error || 'Failed to create form')
+                            };
+                        }
+                    } catch (error) {
+                        this.configStatus = {
+                            type: 'error',
+                            message: 'Error: ' + error.message
+                        };
+                    } finally {
+                        this.creatingForm = false;
+                    }
+                },
+                async handleGenerateSchedule() {
+                    this.generatingSchedule = true;
+                    this.scheduleGenStatus = null;
+                    
+                    try {
+                        const response = await fetch('/api/generate-schedule', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        let data;
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            data = await response.json();
+                        } else {
+                            const text = await response.text();
+                            console.error('Non-JSON response:', text);
+                            this.scheduleGenStatus = {
+                                type: 'error',
+                                message: 'Server returned invalid response. Please try again.'
+                            };
+                            return;
+                        }
+                        
+                        if (response.ok && data.success) {
+                            this.scheduleGenStatus = {
+                                type: 'success',
+                                message: data.message || 'Schedule generated successfully!'
+                            };
+                            // Always reload schedule and stats after generation
+                            this.loadSchedule(this.currentScheduleDay);
+                            this.loadStats();
+                        } else {
+                            this.scheduleGenStatus = {
+                                type: 'error',
+                                message: data.error || 'Failed to generate schedule'
+                            };
+                        }
+                    } catch (error) {
+                        console.error('Error generating schedule:', error);
+                        this.scheduleGenStatus = {
+                            type: 'error',
+                            message: 'Error: ' + (error.message || 'Failed to generate schedule')
+                        };
+                    } finally {
+                        this.generatingSchedule = false;
+                    }
+                },
+                copyFormUrl() {
+                    const input = document.getElementById('formUrlInput');
+                    input.select();
+                    input.setSelectionRange(0, 99999); // For mobile devices
+                    document.execCommand('copy');
+                    // Show brief feedback
+                    const btn = event.target.closest('button');
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                    }, 2000);
+                },
+                async loadCurrentForm() {
+                    this.loadingCurrentForm = true;
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/current`, {
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.form) {
+                                this.currentForm = data.form;
+                                // Load predetermined slots from form config if available
+                                if (data.form.config && data.form.config.predetermined_slots) {
+                                    // Map existing slots to include player_id and lookup state
+                                    this.predeterminedSlots = data.form.config.predetermined_slots.map(slot => ({
+                                        ...slot,
+                                        player_id: '', // Will need to be reverse-looked up if we want to preserve ID
+                                        lookingUp: false,
+                                        lookupError: null
+                                    }));
+                                } else {
+                                    this.predeterminedSlots = [];
+                                }
+                            } else {
+                                this.currentForm = null;
+                                this.predeterminedSlots = [];
+                            }
+                        } else {
+                            this.currentForm = null;
+                            this.predeterminedSlots = [];
+                        }
+                    } catch (error) {
+                        console.error('Failed to load current form:', error);
+                        this.currentForm = null;
+                        this.predeterminedSlots = [];
+                    } finally {
+                        this.loadingCurrentForm = false;
+                    }
+                },
+                async switchToGenerateScheduleTab() {
+                    this.activeTab = 'generate-schedule';
+                    // Reload current form to get latest predetermined slots
+                    if (!this.currentForm || this.loadingCurrentForm === false) {
+                        await this.loadCurrentForm();
+                    }
+                },
+                async lookupPlayer(index) {
+                    const slot = this.predeterminedSlots[index];
+                    if (!slot.player_id || !slot.player_id.trim()) {
+                        slot.alliance = '';
+                        slot.name = '';
+                        slot.lookupError = null;
+                        return;
+                    }
+                    
+                    slot.lookingUp = true;
+                    slot.lookupError = null;
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/player/${encodeURIComponent(slot.player_id.trim())}`, {
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.player) {
+                                slot.alliance = data.player.alliance || '';
+                                slot.name = data.player.name || '';
+                                slot.lookupError = null;
+                            } else {
+                                slot.alliance = '';
+                                slot.name = '';
+                                slot.lookupError = data.error || 'Player not found';
+                            }
+                        } else {
+                            const data = await response.json().catch(() => ({ error: 'Failed to lookup player' }));
+                            slot.alliance = '';
+                            slot.name = '';
+                            slot.lookupError = data.error || 'Failed to lookup player';
+                        }
+                    } catch (error) {
+                        console.error('Error looking up player:', error);
+                        slot.alliance = '';
+                        slot.name = '';
+                        slot.lookupError = 'Error looking up player: ' + (error.message || 'Unknown error');
+                    } finally {
+                        slot.lookingUp = false;
+                    }
+                },
+                copyCurrentFormUrl(event) {
+                    const input = document.getElementById('currentFormUrlInput');
+                    if (input) {
+                        input.select();
+                        input.setSelectionRange(0, 99999); // For mobile devices
+                        try {
+                            document.execCommand('copy');
+                            // Show brief feedback
+                            const btn = event.target.closest('button');
+                            if (btn) {
+                                const originalText = btn.innerHTML;
+                                btn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                                btn.classList.add('bg-green-600');
+                                setTimeout(() => {
+                                    btn.innerHTML = originalText;
+                                    btn.classList.remove('bg-green-600');
+                                }, 2000);
+                            }
+                        } catch (err) {
+                            // Fallback: use modern Clipboard API
+                            navigator.clipboard.writeText(input.value).then(() => {
+                                const btn = event.target.closest('button');
+                                if (btn) {
+                                    const originalText = btn.innerHTML;
+                                    btn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                                    btn.classList.add('bg-green-600');
+                                    setTimeout(() => {
+                                        btn.innerHTML = originalText;
+                                        btn.classList.remove('bg-green-600');
+                                    }, 2000);
+                                }
+                            }).catch(err => {
+                                console.error('Failed to copy:', err);
+                                alert('Failed to copy link. Please copy manually.');
+                            });
+                        }
+                    }
+                },
+                formatDate(dateString) {
+                    if (!dateString) return 'Unknown';
+                    try {
+                        const date = new Date(dateString);
+                        return date.toLocaleString();
+                    } catch (e) {
+                        return dateString;
+                    }
+                },
+                async handleDownloadCSV() {
+                    this.downloadingCSV = true;
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/download-csv`, {
+                            method: 'GET'
+                        });
+                        
+                        if (response.ok && response.headers.get('content-type')?.includes('text/csv')) {
+                            // Get filename from Content-Disposition header or use default
+                            const contentDisposition = response.headers.get('content-disposition');
+                            let filename = 'submissions.csv';
+                            if (contentDisposition) {
+                                const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                                if (filenameMatch) {
+                                    filename = filenameMatch[1];
+                                }
+                            }
+                            
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                            
+                            this.uploadStatus = {
+                                type: 'success',
+                                message: 'CSV downloaded successfully!'
+                            };
+                        } else {
+                            const data = await response.json().catch(() => ({ error: 'Failed to download CSV' }));
+                            this.uploadStatus = {
+                                type: 'error',
+                                message: 'Error: ' + (data.error || 'Failed to download CSV')
+                            };
+                        }
+                    } catch (error) {
+                        this.uploadStatus = {
+                            type: 'error',
+                            message: 'Error: ' + error.message
+                        };
+                    } finally {
+                        this.downloadingCSV = false;
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+    
+</body>
+</html>

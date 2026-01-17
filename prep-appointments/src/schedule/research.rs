@@ -5,7 +5,7 @@ use super::DaySchedule;
 use super::generic::schedule_day_generic_with_locked_slots;
 
 /// Schedules appointments for Research day with smart slot ranking and stealing
-/// The person in slot 49 of construction day must be in slot 1 of research day
+/// The person in the last slot of construction day must be in slot 1 of research day
 pub fn schedule_research_day(entries: &[AppointmentEntry], construction_schedule: &DaySchedule) -> DaySchedule {
     use std::collections::HashMap;
     
@@ -13,24 +13,29 @@ pub fn schedule_research_day(entries: &[AppointmentEntry], construction_schedule
     let mut used_slots = HashSet::new();
     let mut locked_player_id: Option<String> = None;
     
-    // Check if construction day has someone in slot 49
-    if let Some(construction_appt) = construction_schedule.appointments.get(&49) {
-        let player_id = &construction_appt.player_id;
-        
-        // Find the entry for this player
-        if let Some(entry) = entries.iter().find(|e| e.player_id == *player_id) {
-            // Check if they want research and have slot 1 available
-            if entry.wants_research && entry.research_available_slots.contains(&1) {
-                // Assign them to slot 1 on research day - this is locked and cannot be changed
-                schedule.insert(1, ScheduledAppointment {
-                    player_id: entry.player_id.clone(),
-                    name: entry.name.clone(),
-                    alliance: entry.alliance.clone(),
-                    slot: 1,
-                    priority_score: entry.research_score,
-                });
-                used_slots.insert(1);
-                locked_player_id = Some(entry.player_id.clone());
+    // Find the last slot from construction schedule (the highest slot number)
+    let last_construction_slot = construction_schedule.appointments.keys().max().copied();
+    
+    // Check if construction day has someone in the last slot
+    if let Some(last_slot) = last_construction_slot {
+        if let Some(construction_appt) = construction_schedule.appointments.get(&last_slot) {
+            let player_id = &construction_appt.player_id;
+            
+            // Find the entry for this player
+            if let Some(entry) = entries.iter().find(|e| e.player_id == *player_id) {
+                // Check if they want research and have slot 1 available
+                if entry.wants_research && entry.research_available_slots.contains(&1) {
+                    // Assign them to slot 1 on research day - this is locked and cannot be changed
+                    schedule.insert(1, ScheduledAppointment {
+                        player_id: entry.player_id.clone(),
+                        name: entry.name.clone(),
+                        alliance: entry.alliance.clone(),
+                        slot: 1,
+                        priority_score: entry.research_score,
+                    });
+                    used_slots.insert(1);
+                    locked_player_id = Some(entry.player_id.clone());
+                }
             }
         }
     }

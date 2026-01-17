@@ -3,59 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel - Appointment Scheduler</title>
+    <title>Upload CSV - Schedule Maker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .glass-effect { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+        body { 
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+        }
         .fade-enter-active, .fade-leave-active { transition: opacity 0.3s, transform 0.3s; }
         .fade-enter-from { opacity: 0; transform: translateY(-10px); }
         .fade-leave-to { opacity: 0; transform: translateY(-10px); }
     </style>
 </head>
-<body class="gradient-bg min-h-screen">
+<body class="min-h-screen bg-gray-900 text-white">
     <div id="app">
-        <div class="container mx-auto px-4 py-8">
+        <div class="container mx-auto px-4 py-8 max-w-2xl">
             <header class="text-center mb-12">
-                <h1 class="text-5xl font-bold text-white mb-4 drop-shadow-lg">
-                    <i class="fas fa-shield-alt mr-3"></i>Admin Panel
+                <h1 class="text-4xl font-bold text-blue-400 mb-4">
+                    <i class="fas fa-upload mr-3"></i>Upload CSV
                 </h1>
-                <p class="text-xl text-white/90 font-light">Upload CSV and Generate Schedules</p>
+                <p class="text-gray-400">Upload CSV file to generate schedules</p>
             </header>
             
             <nav class="flex justify-center gap-4 mb-12 flex-wrap">
-                <a href="/" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all">
-                    <i class="fas fa-home mr-2"></i>Home
-                </a>
-                <a href="/schedules" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all">
+                <a :href="baseUrl" class="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all border border-gray-700">
                     <i class="fas fa-calendar-check mr-2"></i>Schedules
                 </a>
-                <a href="/stats" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all">
+                <a :href="baseUrl + '/stats'" class="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-all border border-gray-700">
                     <i class="fas fa-chart-bar mr-2"></i>Statistics
                 </a>
-                <a href="/admin" class="px-6 py-3 glass-effect text-white rounded-lg font-medium hover:bg-white/20 transition-all bg-white/20">
-                    <i class="fas fa-shield-alt mr-2"></i>Admin
+                <a :href="baseUrl + '/admin'" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all border border-blue-500">
+                    <i class="fas fa-upload mr-2"></i>Upload CSV
                 </a>
             </nav>
             
-            <main class="max-w-2xl mx-auto">
-                <div class="bg-white rounded-2xl shadow-2xl p-8">
+            <main>
+                <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
                     <transition name="fade" mode="out-in">
                         <div v-if="!isAuthenticated" key="login">
                             <div class="text-center mb-8">
-                                <div class="inline-block bg-red-100 rounded-full p-4 mb-4">
-                                    <i class="fas fa-lock text-red-600 text-3xl"></i>
+                                <div class="inline-block bg-blue-900/50 rounded-full p-4 mb-4">
+                                    <i class="fas fa-lock text-blue-400 text-3xl"></i>
                                 </div>
-                                <h2 class="text-3xl font-bold text-gray-800 mb-2">Login Required</h2>
-                                <p class="text-gray-600">Enter your admin password to access the upload panel</p>
+                                <h2 class="text-3xl font-bold text-white mb-2">Login Required</h2>
+                                <p class="text-gray-400">Enter your password to upload CSV files</p>
                             </div>
                             <form @submit.prevent="handleLogin" class="space-y-6">
                                 <div>
-                                    <label for="password" class="block text-sm font-semibold text-gray-700 mb-2">
+                                    <label for="password" class="block text-sm font-semibold text-gray-300 mb-2">
                                         <i class="fas fa-key mr-2"></i>Password
                                     </label>
                                     <input 
@@ -63,36 +61,108 @@
                                         id="password" 
                                         v-model="password"
                                         required
-                                        class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
+                                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
                                         :class="{'border-red-500': loginError}">
                                 </div>
                                 <button 
                                     type="submit" 
                                     :disabled="loggingIn"
-                                    class="w-full bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                    class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i v-if="!loggingIn" class="fas fa-sign-in-alt mr-2"></i>
                                     <i v-else class="fas fa-spinner fa-spin mr-2"></i>
                                     {{ loggingIn ? 'Logging in...' : 'Login' }}
                                 </button>
                             </form>
                             <transition name="fade">
-                                <div v-if="loginError" class="mt-4 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded">
+                                <div v-if="loginError" class="mt-4 p-4 bg-red-900/50 border-l-4 border-red-500 text-red-200 rounded">
                                     <i class="fas fa-exclamation-circle mr-2"></i>{{ loginError }}
                                 </div>
                             </transition>
                         </div>
                         
                         <div v-else key="admin">
-                            <div class="text-center mb-8">
-                                <div class="inline-block bg-green-100 rounded-full p-4 mb-4">
-                                    <i class="fas fa-upload text-green-600 text-3xl"></i>
+                            <!-- Current Form Display -->
+                            <transition name="fade">
+                                <div v-if="currentForm" class="mb-8 p-6 bg-purple-900/50 border-l-4 border-purple-500 rounded-lg">
+                                    <h3 class="text-xl font-bold text-purple-200 mb-3 flex items-center">
+                                        <i class="fas fa-file-alt mr-2"></i>Current Form
+                                    </h3>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <p class="text-sm text-gray-300 mb-1">Form Name:</p>
+                                            <p class="text-lg font-semibold text-white">{{ currentForm.name }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-sm text-gray-300 mb-1">Form Code:</p>
+                                            <p class="text-sm font-mono text-purple-300">{{ currentForm.code }}</p>
+                                        </div>
+                                        <div class="flex items-center gap-2 bg-gray-800 p-3 rounded-lg border border-gray-700">
+                                            <input 
+                                                type="text" 
+                                                :value="currentForm.url" 
+                                                readonly
+                                                id="currentFormUrlInput"
+                                                class="flex-1 bg-transparent text-white font-mono text-sm outline-none">
+                                            <button 
+                                                @click="copyCurrentFormUrl"
+                                                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all">
+                                                <i class="fas fa-copy mr-2"></i>Copy Link
+                                            </button>
+                                        </div>
+                                        <div class="flex gap-2 flex-wrap">
+                                            <a 
+                                                :href="currentForm.url" 
+                                                target="_blank"
+                                                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all text-sm">
+                                                <i class="fas fa-external-link-alt mr-2"></i>Open Form
+                                            </a>
+                                            <a 
+                                                :href="currentForm.url + '/stats'" 
+                                                target="_blank"
+                                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-sm">
+                                                <i class="fas fa-chart-bar mr-2"></i>View Statistics
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
-                                <h2 class="text-3xl font-bold text-gray-800 mb-2">Upload CSV File</h2>
-                                <p class="text-gray-600">Select a CSV file to process and generate schedules</p>
+                            </transition>
+                            
+                            <!-- Tab Navigation -->
+                            <div class="flex justify-center gap-4 mb-8 border-b border-gray-700">
+                                <button 
+                                    @click="activeTab = 'upload'"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'upload' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-upload mr-2"></i>Upload CSV
+                                </button>
+                                <button 
+                                    @click="activeTab = 'config'"
+                                    :class="[
+                                        'px-6 py-3 font-semibold transition-all border-b-2',
+                                        activeTab === 'config' 
+                                            ? 'text-blue-400 border-blue-400' 
+                                            : 'text-gray-400 border-transparent hover:text-gray-300'
+                                    ]">
+                                    <i class="fas fa-cog mr-2"></i>Form Configuration
+                                </button>
                             </div>
+                            
+                            <!-- Upload CSV Tab -->
+                            <div v-if="activeTab === 'upload'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-green-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-upload text-green-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">Upload CSV File</h2>
+                                    <p class="text-gray-400">Select a CSV file to process and generate schedules</p>
+                                </div>
                             <form @submit.prevent="handleUpload" class="space-y-6">
                                 <div>
-                                    <label for="csv-file" class="block text-sm font-semibold text-gray-700 mb-2">
+                                    <label for="csv-file" class="block text-sm font-semibold text-gray-300 mb-2">
                                         <i class="fas fa-file-csv mr-2"></i>Select CSV File
                                     </label>
                                     <div class="relative">
@@ -102,16 +172,16 @@
                                             @change="handleFileSelect"
                                             accept=".csv" 
                                             required
-                                            class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
+                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer">
                                     </div>
-                                    <p v-if="selectedFile" class="mt-2 text-sm text-gray-600">
+                                    <p v-if="selectedFile" class="mt-2 text-sm text-gray-400">
                                         <i class="fas fa-file mr-2"></i>Selected: {{ selectedFile.name }}
                                     </p>
                                 </div>
                                 <button 
                                     type="submit" 
                                     :disabled="uploading || !selectedFile"
-                                    class="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                    class="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i v-if="!uploading" class="fas fa-cloud-upload-alt mr-2"></i>
                                     <i v-else class="fas fa-spinner fa-spin mr-2"></i>
                                     {{ uploading ? 'Uploading and processing...' : 'Upload & Generate Schedule' }}
@@ -121,19 +191,237 @@
                                 <div v-if="uploadStatus" 
                                      :class="[
                                          'mt-4 p-4 rounded-lg',
-                                         uploadStatus.type === 'success' ? 'bg-green-50 border-l-4 border-green-500 text-green-700' : 'bg-red-50 border-l-4 border-red-500 text-red-700'
+                                         uploadStatus.type === 'success' ? 'bg-green-900/50 border-l-4 border-green-500 text-green-200' : 'bg-red-900/50 border-l-4 border-red-500 text-red-200'
                                      ]">
                                     <i :class="uploadStatus.type === 'success' ? 'fas fa-check-circle' : 'fas fa-times-circle' + ' mr-2'"></i>
                                     {{ uploadStatus.message }}
                                 </div>
                             </transition>
+                            </div>
+                            
+                            <!-- Form Configuration Tab -->
+                            <div v-if="activeTab === 'config'">
+                                <div class="text-center mb-8">
+                                    <div class="inline-block bg-purple-900/50 rounded-full p-4 mb-4">
+                                        <i class="fas fa-cog text-purple-400 text-3xl"></i>
+                                    </div>
+                                    <h2 class="text-3xl font-bold text-white mb-2">Create Form</h2>
+                                    <p class="text-gray-400">Configure alliances and schedule times, then create a form to get a shareable link</p>
+                                </div>
+                                
+                                <!-- Form Link Display (if form was created) -->
+                                <transition name="fade">
+                                    <div v-if="createdFormUrl" class="mb-8 p-6 bg-green-900/50 border-l-4 border-green-500 rounded-lg">
+                                        <h3 class="text-xl font-bold text-green-200 mb-3">
+                                            <i class="fas fa-check-circle mr-2"></i>Form Created Successfully!
+                                        </h3>
+                                        <p class="text-gray-300 mb-3">Share this link with your players to fill out the form:</p>
+                                        <div class="flex items-center gap-2 bg-gray-800 p-3 rounded-lg border border-gray-700 mb-3">
+                                            <input 
+                                                type="text" 
+                                                :value="createdFormUrl" 
+                                                readonly
+                                                id="formUrlInput"
+                                                class="flex-1 bg-transparent text-white font-mono text-sm outline-none">
+                                            <button 
+                                                @click="copyFormUrl"
+                                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all">
+                                                <i class="fas fa-copy mr-2"></i>Copy
+                                            </button>
+                                        </div>
+                                        <div class="flex gap-2 flex-wrap">
+                                            <a 
+                                                :href="createdFormUrl" 
+                                                target="_blank"
+                                                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all text-sm">
+                                                <i class="fas fa-external-link-alt mr-2"></i>Open Form
+                                            </a>
+                                            <a 
+                                                :href="createdFormUrl + '/stats'" 
+                                                target="_blank"
+                                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-sm">
+                                                <i class="fas fa-chart-bar mr-2"></i>View Statistics
+                                            </a>
+                                        </div>
+                                        <p class="text-sm text-gray-400 mt-3">Form Code: <span class="font-mono text-green-300">{{ createdFormCode }}</span></p>
+                                    </div>
+                                </transition>
+                                
+                                <form @submit.prevent="handleCreateForm" class="space-y-8">
+                                    <!-- Alliances Configuration -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-white mb-4">
+                                            <i class="fas fa-users mr-2"></i>Alliances
+                                        </h3>
+                                        <p class="text-sm text-gray-400 mb-4">Add or remove alliance names. "Non of the above" will be automatically added.</p>
+                                        <div class="space-y-3">
+                                            <div v-for="(alliance, index) in config.alliances" :key="index" class="flex items-center gap-2">
+                                                <input 
+                                                    v-if="alliance !== 'Non of the above'"
+                                                    v-model="config.alliances[index]"
+                                                    type="text"
+                                                    class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
+                                                    placeholder="Alliance name">
+                                                <input 
+                                                    v-else
+                                                    v-model="config.alliances[index]"
+                                                    type="text"
+                                                    disabled
+                                                    class="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-500 cursor-not-allowed"
+                                                    placeholder="Non of the above">
+                                                <button 
+                                                    v-if="alliance !== 'Non of the above'"
+                                                    @click.prevent="config.alliances.splice(index, 1)"
+                                                    type="button"
+                                                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                            <button 
+                                                @click.prevent="config.alliances.push('')"
+                                                type="button"
+                                                class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all">
+                                                <i class="fas fa-plus mr-2"></i>Add Alliance
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Construction Day Times -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-orange-400 mb-4">
+                                            <i class="fas fa-hammer mr-2"></i>Construction Day Times
+                                        </h3>
+                                        <div class="grid md:grid-cols-2 gap-4">
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Start Time <span class="text-red-400">*</span>
+                                                </label>
+                                                <input 
+                                                    v-model="config.construction_times.start_time"
+                                                    type="time"
+                                                    required
+                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    End Time (optional, defaults to start + 24h)
+                                                </label>
+                                                <div class="flex flex-col">
+                                                    <input 
+                                                        v-model="config.construction_times.end_time"
+                                                        type="time"
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                    <button 
+                                                        @click.prevent="config.construction_times.end_time = null"
+                                                        type="button"
+                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
+                                                        Reset to default (24h)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Research Day Times -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-purple-400 mb-4">
+                                            <i class="fas fa-flask mr-2"></i>Research Day Times
+                                        </h3>
+                                        <div class="grid md:grid-cols-2 gap-4">
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Start Time <span class="text-red-400">*</span>
+                                                </label>
+                                                <input 
+                                                    v-model="config.research_times.start_time"
+                                                    type="time"
+                                                    required
+                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    End Time (optional, defaults to start + 24h)
+                                                </label>
+                                                <div class="flex flex-col">
+                                                    <input 
+                                                        v-model="config.research_times.end_time"
+                                                        type="time"
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                    <button 
+                                                        @click.prevent="config.research_times.end_time = null"
+                                                        type="button"
+                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
+                                                        Reset to default (24h)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Troops Day Times -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-green-400 mb-4">
+                                            <i class="fas fa-users mr-2"></i>Troops Training Day Times
+                                        </h3>
+                                        <div class="grid md:grid-cols-2 gap-4">
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    Start Time <span class="text-red-400">*</span>
+                                                </label>
+                                                <input 
+                                                    v-model="config.troops_times.start_time"
+                                                    type="time"
+                                                    required
+                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                                    End Time (optional, defaults to start + 24h)
+                                                </label>
+                                                <div class="flex flex-col">
+                                                    <input 
+                                                        v-model="config.troops_times.end_time"
+                                                        type="time"
+                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
+                                                    <button 
+                                                        @click.prevent="config.troops_times.end_time = null"
+                                                        type="button"
+                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
+                                                        Reset to default (24h)
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <button 
+                                        type="submit"
+                                        :disabled="creatingForm"
+                                        class="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i v-if="!creatingForm" class="fas fa-plus-circle mr-2"></i>
+                                        <i v-else class="fas fa-spinner fa-spin mr-2"></i>
+                                        {{ creatingForm ? 'Creating Form...' : 'Create Form' }}
+                                    </button>
+                                    
+                                    <transition name="fade">
+                                        <div v-if="configStatus" 
+                                             :class="[
+                                                 'p-4 rounded-lg',
+                                                 configStatus.type === 'success' ? 'bg-green-900/50 border-l-4 border-green-500 text-green-200' : 'bg-red-900/50 border-l-4 border-red-500 text-red-200'
+                                             ]">
+                                            <i :class="configStatus.type === 'success' ? 'fas fa-check-circle' : 'fas fa-times-circle' + ' mr-2'"></i>
+                                            {{ configStatus.message }}
+                                        </div>
+                                    </transition>
+                                </form>
+                            </div>
                         </div>
                     </transition>
                 </div>
             </main>
             
-            <footer class="text-center mt-12 text-white/80">
-                <p>&copy; 2025 SvS Preparation Week Scheduler</p>
+            <footer class="text-center mt-12 text-gray-500">
+                <p>&copy; 2025 Schedule Maker</p>
             </footer>
         </div>
     </div>
@@ -144,6 +432,9 @@
         createApp({
             data() {
                 return {
+                    baseUrl: '',
+                    accountName: '',
+                    serverNumber: '',
                     isAuthenticated: false,
                     password: '',
                     adminPassword: '',
@@ -151,8 +442,34 @@
                     loginError: null,
                     selectedFile: null,
                     uploading: false,
-                    uploadStatus: null
+                    uploadStatus: null,
+                    activeTab: 'upload',
+                    config: {
+                        alliances: [],
+                        construction_times: { start_time: '00:00', end_time: null },
+                        research_times: { start_time: '00:00', end_time: null },
+                        troops_times: { start_time: '00:00', end_time: null }
+                    },
+                    creatingForm: false,
+                    configStatus: null,
+                    createdFormUrl: null,
+                    createdFormCode: null,
+                    currentForm: null,
+                    loadingCurrentForm: false
                 }
+            },
+            async mounted() {
+                // Extract account name and server from URL path
+                const path = window.location.pathname;
+                const parts = path.split('/').filter(p => p);
+                if (parts.length >= 2) {
+                    this.accountName = parts[0];
+                    this.serverNumber = parts[1];
+                    this.baseUrl = `/${this.accountName}/${this.serverNumber}`;
+                }
+                
+                // Load current configuration
+                await this.loadConfig();
             },
             methods: {
                 async handleLogin() {
@@ -160,7 +477,7 @@
                     this.loginError = null;
                     
                     try {
-                        const response = await fetch('/api/login', {
+                        const response = await fetch(`${this.baseUrl}/api/login`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ password: this.password })
@@ -172,6 +489,8 @@
                             this.adminPassword = this.password;
                             this.isAuthenticated = true;
                             this.password = '';
+                            // Load current form info after successful login
+                            await this.loadCurrentForm();
                         } else {
                             this.loginError = data.error || 'Invalid password';
                         }
@@ -195,9 +514,9 @@
                     this.uploadStatus = null;
                     
                     try {
-                        const response = await fetch('/api/upload', {
+                        const response = await fetch(`${this.baseUrl}/api/upload`, {
                             method: 'POST',
-                            headers: { 'X-Admin-Password': this.adminPassword },
+                            headers: { 'X-Password': this.adminPassword },
                             body: this.selectedFile
                         });
                         
@@ -223,6 +542,181 @@
                         };
                     } finally {
                         this.uploading = false;
+                    }
+                },
+                async loadConfig() {
+                    try {
+                        // Load previous form config if exists
+                        const response = await fetch(`${this.baseUrl}/api/form/previous`, {
+                            headers: {
+                                'X-Password': this.adminPassword
+                            }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.config) {
+                                // Load previous config
+                                this.config = data.config;
+                                // Remove "Non of the above" from display (it will be added automatically)
+                                this.config.alliances = this.config.alliances.filter(a => a !== 'Non of the above');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load previous config:', error);
+                        // Use defaults if no previous config
+                    }
+                },
+                async handleCreateForm() {
+                    this.creatingForm = true;
+                    this.configStatus = null;
+                    this.createdFormUrl = null;
+                    this.createdFormCode = null;
+                    
+                    // Filter out empty alliances
+                    const alliances = this.config.alliances.filter(a => a.trim() !== '');
+                    
+                    // Validate that at least one alliance is provided
+                    if (alliances.length === 0) {
+                        this.configStatus = {
+                            type: 'error',
+                            message: 'Error: At least one alliance must be specified'
+                        };
+                        this.creatingForm = false;
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/create`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Password': this.adminPassword
+                            },
+                            body: JSON.stringify({
+                                alliances: alliances,
+                                construction_times: {
+                                    start_time: this.config.construction_times.start_time,
+                                    end_time: this.config.construction_times.end_time || null
+                                },
+                                research_times: {
+                                    start_time: this.config.research_times.start_time,
+                                    end_time: this.config.research_times.end_time || null
+                                },
+                                troops_times: {
+                                    start_time: this.config.troops_times.start_time,
+                                    end_time: this.config.troops_times.end_time || null
+                                }
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.success) {
+                            this.createdFormUrl = data.url;
+                            this.createdFormCode = data.code;
+                            this.configStatus = {
+                                type: 'success',
+                                message: data.message || 'Form created successfully!'
+                            };
+                            // Reload current form info to show the new form
+                            await this.loadCurrentForm();
+                            // Scroll to top to show the link
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                            this.configStatus = {
+                                type: 'error',
+                                message: 'Error: ' + (data.error || 'Failed to create form')
+                            };
+                        }
+                    } catch (error) {
+                        this.configStatus = {
+                            type: 'error',
+                            message: 'Error: ' + error.message
+                        };
+                    } finally {
+                        this.creatingForm = false;
+                    }
+                },
+                copyFormUrl() {
+                    const input = document.getElementById('formUrlInput');
+                    input.select();
+                    input.setSelectionRange(0, 99999); // For mobile devices
+                    document.execCommand('copy');
+                    // Show brief feedback
+                    const btn = event.target.closest('button');
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                    }, 2000);
+                },
+                async loadCurrentForm() {
+                    // Only load if authenticated and have password
+                    if (!this.isAuthenticated || !this.adminPassword) {
+                        return;
+                    }
+                    
+                    this.loadingCurrentForm = true;
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/current`, {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Password': this.adminPassword
+                            }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success && data.form) {
+                                this.currentForm = data.form;
+                            } else {
+                                this.currentForm = null;
+                            }
+                        } else {
+                            this.currentForm = null;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load current form:', error);
+                        this.currentForm = null;
+                    } finally {
+                        this.loadingCurrentForm = false;
+                    }
+                },
+                copyCurrentFormUrl(event) {
+                    const input = document.getElementById('currentFormUrlInput');
+                    if (input) {
+                        input.select();
+                        input.setSelectionRange(0, 99999); // For mobile devices
+                        try {
+                            document.execCommand('copy');
+                            // Show brief feedback
+                            const btn = event.target.closest('button');
+                            if (btn) {
+                                const originalText = btn.innerHTML;
+                                btn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                                btn.classList.add('bg-green-600');
+                                setTimeout(() => {
+                                    btn.innerHTML = originalText;
+                                    btn.classList.remove('bg-green-600');
+                                }, 2000);
+                            }
+                        } catch (err) {
+                            // Fallback: use modern Clipboard API
+                            navigator.clipboard.writeText(input.value).then(() => {
+                                const btn = event.target.closest('button');
+                                if (btn) {
+                                    const originalText = btn.innerHTML;
+                                    btn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                                    btn.classList.add('bg-green-600');
+                                    setTimeout(() => {
+                                        btn.innerHTML = originalText;
+                                        btn.classList.remove('bg-green-600');
+                                    }, 2000);
+                                }
+                            }).catch(err => {
+                                console.error('Failed to copy:', err);
+                                alert('Failed to copy link. Please copy manually.');
+                            });
+                        }
                     }
                 }
             }
