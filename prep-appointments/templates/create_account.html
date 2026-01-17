@@ -119,8 +119,8 @@
                             <a :href="scheduleUrl" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl">
                                 <i class="fas fa-calendar-check mr-2"></i>View Schedule
                             </a>
-                            <a :href="adminUrl" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold transition-all">
-                                <i class="fas fa-upload mr-2"></i>Upload CSV
+                            <a :href="dashboardUrl" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl">
+                                <i class="fas fa-sign-in-alt mr-2"></i>Login
                             </a>
                         </div>
                     </div>
@@ -154,7 +154,7 @@
                     error: null,
                     accountCreated: false,
                     scheduleUrl: '',
-                    adminUrl: '',
+                    dashboardUrl: '',
                     form: {
                         account_name: '',
                         server_number: null,
@@ -179,7 +179,7 @@
                         
                         if (data.success) {
                             this.scheduleUrl = data.schedule_url || `/${this.form.account_name}/${this.form.server_number}`;
-                            this.adminUrl = `${this.scheduleUrl}/admin`;
+                            this.dashboardUrl = `/dashboard/${this.form.account_name}`;
                             this.accountCreated = true;
                         } else {
                             this.error = data.message || 'Failed to create account';
