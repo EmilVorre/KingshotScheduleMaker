@@ -77,7 +77,7 @@
                                     <i class="fas fa-plus-circle mr-2"></i>Create Form
                                 </button>
                                 <button 
-                                    @click="activeTab = 'current-form'"
+                                    @click="switchToCurrentFormTab()"
                                     :class="[
                                         'px-6 py-3 font-semibold transition-all border-b-2',
                                         activeTab === 'current-form' 
@@ -146,19 +146,44 @@
                                     
                                     <div v-else-if="currentSchedule" class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
                                         <h2 class="text-3xl font-bold text-white mb-6 text-center">{{ currentSchedule.day_name }}</h2>
+                                        <p class="text-sm text-gray-400 mb-4 text-center">Click on any slot to edit the player name</p>
                                         <div class="border-2 border-gray-700 rounded-lg overflow-hidden">
                                             <div 
                                                 v-for="slot in currentSchedule.appointments" 
                                                 :key="slot.time"
                                                 :class="[
-                                                    'flex items-center p-3 border-b border-gray-700 hover:bg-gray-700/50 transition-colors',
-                                                    slot.is_empty ? 'opacity-60' : ''
-                                                ]">
+                                                    'flex items-center p-3 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer',
+                                                    slot.is_empty ? 'opacity-60' : '',
+                                                    editingSlot && editingSlot.time === slot.time ? 'bg-blue-900/30' : ''
+                                                ]"
+                                                @click="startEditSlot(slot)">
                                                 <span :class="slot.is_empty ? 'w-24 font-bold text-gray-500' : 'w-24 font-bold text-blue-400'">
                                                     {{ slot.time }}
                                                 </span>
-                                                <span v-if="slot.is_empty" class="text-gray-500 italic">[EMPTY]</span>
-                                                <span v-else class="text-gray-200 font-medium">{{ slot.player }}</span>
+                                                <div v-if="editingSlot && editingSlot.time === slot.time" class="flex-1 flex items-center gap-2">
+                                                    <input 
+                                                        type="text"
+                                                        v-model="editingSlot.player"
+                                                        @keyup.enter="saveSlot(slot)"
+                                                        @keyup.esc="cancelEdit"
+                                                        class="flex-1 px-3 py-1 bg-gray-700 border border-blue-500 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        placeholder="[alliance] name or empty to clear"
+                                                        ref="slotInput">
+                                                    <button 
+                                                        @click.stop="saveSlot(slot)"
+                                                        class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded transition-colors">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                    <button 
+                                                        @click.stop="cancelEdit"
+                                                        class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                <div v-else class="flex-1">
+                                                    <span v-if="slot.is_empty" class="text-gray-500 italic">[EMPTY]</span>
+                                                    <span v-else class="text-gray-200 font-medium">{{ slot.player }}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -837,6 +862,54 @@
                                                 </a>
                                             </div>
                                         </div>
+                                        
+                                        <!-- Submissions Data Table -->
+                                        <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                            <div class="flex justify-between items-center mb-4">
+                                                <h3 class="text-xl font-bold text-white">
+                                                    <i class="fas fa-table mr-2"></i>All Form Submissions
+                                                </h3>
+                                                <button 
+                                                    @click="loadSubmissions"
+                                                    :disabled="loadingSubmissions"
+                                                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    <i v-if="!loadingSubmissions" class="fas fa-sync-alt mr-2"></i>
+                                                    <i v-else class="fas fa-spinner fa-spin mr-2"></i>
+                                                    {{ loadingSubmissions ? 'Reloading...' : 'Reload' }}
+                                                </button>
+                                            </div>
+                                            <div v-if="loadingSubmissions" class="text-center py-8">
+                                                <i class="fas fa-spinner fa-spin text-2xl text-blue-400 mb-2"></i>
+                                                <p class="text-gray-400">Loading submissions...</p>
+                                            </div>
+                                            <div v-else-if="submissionsError" class="bg-red-900/50 border-l-4 border-red-500 text-red-200 p-4 rounded-lg">
+                                                <i class="fas fa-exclamation-circle mr-2"></i>{{ submissionsError }}
+                                            </div>
+                                            <div v-else-if="submissions && submissions.length > 0" class="overflow-x-auto">
+                                                <table class="min-w-full text-left border-collapse" style="min-width: 1600px;">
+                                                    <thead>
+                                                        <tr class="border-b border-gray-700">
+                                                            <th v-for="header in submissionHeaders" :key="header" 
+                                                                :class="['px-4 py-3 text-gray-300 font-semibold bg-gray-700/50 whitespace-nowrap', (header === 'Troop times' || header === 'Construction times' || header === 'Research times') ? 'min-w-[300px]' : '']">
+                                                                {{ header }}
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr v-for="(submission, index) in submissions" :key="index" class="border-b border-gray-700 hover:bg-gray-700/30 transition-colors">
+                                                            <td v-for="header in submissionHeaders" :key="header" 
+                                                                :class="['px-4 py-3 text-gray-200', (header === 'Troop times' || header === 'Construction times' || header === 'Research times') ? 'min-w-[300px]' : '']">
+                                                                {{ getSubmissionValue(submission, header) }}
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div v-else class="text-center py-8 text-gray-400">
+                                                <i class="fas fa-inbox text-4xl mb-2"></i>
+                                                <p>No submissions yet</p>
+                                            </div>
+                                        </div>
                                     </div>
                                     
                                     <div v-else class="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
@@ -876,9 +949,14 @@
                     scheduleLoading: false,
                     scheduleError: null,
                     currentSchedule: null,
+                    editingSlot: null,
+                    savingSlot: false,
                     // Current form data
                     currentForm: null,
                     loadingCurrentForm: false,
+                    submissions: null,
+                    loadingSubmissions: false,
+                    submissionsError: null,
                     scheduleDays: {
                         construction: {
                             name: 'Construction Day',
@@ -997,9 +1075,67 @@
                     if (!this.stats || !this.stats.research_time_slot_popularity) return {};
                     return this.sortTimeSlots(this.stats.research_time_slot_popularity, this.stats.research_start_time || "00:00");
                 },
-                sortedTroopsTimeSlots() {
+                                sortedTroopsTimeSlots() {
                     if (!this.stats || !this.stats.troops_time_slot_popularity) return {};
                     return this.sortTimeSlots(this.stats.troops_time_slot_popularity, this.stats.troops_start_time || "00:00");
+                },
+                submissionHeaders() {
+                    // Return headers in the specified order
+                    return [
+                        'Timestamp',
+                        'Name',
+                        'Alliance',
+                        'Construction speedups',
+                        'Truegold',
+                        'want Construction?',
+                        'Construction times',
+                        'Research Speedups',
+                        'Truegold Dust',
+                        'want Research?',
+                        'Research times',
+                        'Troop Speedups',
+                        'Want troops?',
+                        'Troop times'
+                    ];
+                },
+                submissionColumnMap() {
+                    // Map display headers to CSV column keys
+                    // This will try to find matching columns by looking for key phrases
+                    const firstSub = this.submissions && this.submissions.length > 0 ? this.submissions[0] : {};
+                    const keys = Object.keys(firstSub);
+                    
+                    const findKey = (patterns) => {
+                        for (const pattern of patterns) {
+                            // Normalize both the pattern and keys for comparison (remove newlines, extra spaces)
+                            const normalizedPattern = pattern.toLowerCase().replace(/\s+/g, ' ').trim();
+                            const found = keys.find(k => {
+                                const normalizedKey = k.toLowerCase().replace(/\s+/g, ' ').replace(/\n/g, ' ').trim();
+                                return normalizedKey.includes(normalizedPattern);
+                            });
+                            if (found) return found;
+                        }
+                        return null;
+                    };
+                    
+                    // Build the mapping - order matters, most specific patterns first
+                    const map = {
+                        'Timestamp': 'timestamp',
+                        'Name': findKey(['character name']),
+                        'Alliance': findKey(['alliance do you belong']),
+                        'Construction speedups': findKey(['speedups do you plan to use on construction day', 'construction day', 'speedups', 'construction']),
+                        'Truegold': findKey(['how much truegold do you plan', 'truegold', 'plan to', 'spend']),
+                        'want Construction?': findKey(['do you want a construction day appointment']),
+                        'Construction times': findKey(['times are you available for your construction day appointment', 'construction day appointment', 'utc time', 'construction']),
+                        'Research Speedups': findKey(['speedups do you plan to use on research day', 'research day', 'speedups', 'research']),
+                        'Truegold Dust': findKey(['how much truegold dust do you plan', 'truegold dust']),
+                        'want Research?': findKey(['do you want a research day appointment']),
+                        'Research times': findKey(['times are you available for your research day appointment', 'research day appointment', 'utc time', 'research']),
+                        'Troop Speedups': findKey(['speedups do you plan to use on troops training day', 'troops training day', 'speedups', 'troops']),
+                        'Want troops?': findKey(['do you want a troops training day appointment']),
+                        'Troop times': findKey(['times are you available for your troops training day appointment', 'troops training day appointment', 'utc time', 'troops'])
+                    };
+                    
+                    return map;
                 }
             },
             methods: {
@@ -1011,6 +1147,7 @@
                     this.scheduleLoading = true;
                     this.scheduleError = null;
                     this.currentSchedule = null;
+                    this.editingSlot = null; // Cancel any ongoing edits
                     
                     try {
                         const response = await fetch(`${this.baseUrl}/api/schedule/${day}`);
@@ -1025,6 +1162,57 @@
                         this.scheduleError = 'Error: ' + err.message;
                     } finally {
                         this.scheduleLoading = false;
+                    }
+                },
+                startEditSlot(slot) {
+                    this.editingSlot = {
+                        time: slot.time,
+                        player: slot.player || ''
+                    };
+                    // Focus input on next tick
+                    this.$nextTick(() => {
+                        const input = this.$refs.slotInput;
+                        if (input && Array.isArray(input) && input[0]) {
+                            input[0].focus();
+                        } else if (input) {
+                            input.focus();
+                        }
+                    });
+                },
+                cancelEdit() {
+                    this.editingSlot = null;
+                },
+                async saveSlot(slot) {
+                    if (this.savingSlot) return;
+                    
+                    this.savingSlot = true;
+                    const playerValue = this.editingSlot.player ? this.editingSlot.player.trim() : null;
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/schedule/${this.currentScheduleDay}/slot`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                time: slot.time,
+                                player: playerValue
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.success) {
+                            this.editingSlot = null;
+                            // Reload schedule to reflect changes
+                            await this.loadSchedule(this.currentScheduleDay);
+                        } else {
+                            alert('Error: ' + (data.error || 'Failed to update slot'));
+                        }
+                    } catch (err) {
+                        alert('Error: ' + err.message);
+                    } finally {
+                        this.savingSlot = false;
                     }
                 },
                 async loadStats() {
@@ -1331,27 +1519,88 @@
                                 } else {
                                     this.predeterminedSlots = [];
                                 }
+                                // Load submissions when form is loaded
+                                await this.loadSubmissions();
                             } else {
                                 this.currentForm = null;
                                 this.predeterminedSlots = [];
+                                this.submissions = null;
                             }
                         } else {
                             this.currentForm = null;
                             this.predeterminedSlots = [];
+                            this.submissions = null;
                         }
                     } catch (error) {
                         console.error('Failed to load current form:', error);
                         this.currentForm = null;
                         this.predeterminedSlots = [];
+                        this.submissions = null;
                     } finally {
                         this.loadingCurrentForm = false;
                     }
+                },
+                async loadSubmissions() {
+                    if (!this.currentForm) {
+                        this.submissions = null;
+                        return;
+                    }
+                    
+                    this.loadingSubmissions = true;
+                    this.submissionsError = null;
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/submissions`, {
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.success) {
+                                this.submissions = data.submissions || [];
+                            } else {
+                                this.submissionsError = data.error || 'Failed to load submissions';
+                                this.submissions = [];
+                            }
+                        } else {
+                            const data = await response.json();
+                            this.submissionsError = data.error || 'Failed to load submissions';
+                            this.submissions = [];
+                        }
+                    } catch (error) {
+                        console.error('Failed to load submissions:', error);
+                        this.submissionsError = 'Error: ' + error.message;
+                        this.submissions = [];
+                    } finally {
+                        this.loadingSubmissions = false;
+                    }
+                },
+                getSubmissionValue(submission, header) {
+                    if (!submission || typeof submission !== 'object') return '';
+                    // Map display header to CSV column key
+                    const columnKey = this.submissionColumnMap[header];
+                    if (columnKey && submission[columnKey] !== undefined) {
+                        return submission[columnKey];
+                    }
+                    // Fallback: try direct key match
+                    return submission[header] || '';
                 },
                 async switchToGenerateScheduleTab() {
                     this.activeTab = 'generate-schedule';
                     // Reload current form to get latest predetermined slots
                     if (!this.currentForm || this.loadingCurrentForm === false) {
                         await this.loadCurrentForm();
+                    }
+                },
+                async switchToCurrentFormTab() {
+                    this.activeTab = 'current-form';
+                    // Load current form and submissions if not already loaded
+                    if (!this.currentForm && !this.loadingCurrentForm) {
+                        await this.loadCurrentForm();
+                    } else if (this.currentForm && !this.submissions && !this.loadingSubmissions) {
+                        await this.loadSubmissions();
                     }
                 },
                 async lookupPlayer(index) {

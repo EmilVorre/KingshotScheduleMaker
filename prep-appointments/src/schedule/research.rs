@@ -20,7 +20,7 @@ pub fn schedule_research_day(entries: &[AppointmentEntry], construction_schedule
     if let Some(last_slot) = last_construction_slot {
         if let Some(construction_appt) = construction_schedule.appointments.get(&last_slot) {
             let player_id = &construction_appt.player_id;
-            
+        
             // Find the entry for this player
             if let Some(entry) = entries.iter().find(|e| e.player_id == *player_id) {
                 // Check if they want research and have slot 1 available

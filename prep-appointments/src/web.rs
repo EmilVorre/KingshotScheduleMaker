@@ -593,9 +593,9 @@ async fn get_stats(
         return Ok(HttpResponse::Ok().json(cached_stats));
     }
     
-    let mut alliance_counts: HashMap<String, AllianceStats> = HashMap::new();
-    let mut time_slot_popularity: HashMap<String, TimeSlotStats> = HashMap::new();
-    
+        let mut alliance_counts: HashMap<String, AllianceStats> = HashMap::new();
+        let mut time_slot_popularity: HashMap<String, TimeSlotStats> = HashMap::new();
+
     // Separate time slot popularity maps for each day
     let mut construction_time_slot_popularity: Option<HashMap<String, FormTimeSlotStats>> = None;
     let mut research_time_slot_popularity: Option<HashMap<String, FormTimeSlotStats>> = None;
@@ -781,54 +781,54 @@ async fn get_stats(
         let schedules = state.schedules.lock().unwrap();
         if let Some(schedule_data) = schedules.get(&key) {
             if let Some(ref entries) = schedule_data.entries {
-                for entry in entries {
-                    // Count by alliance
-                    let stats = alliance_counts.entry(entry.alliance.clone()).or_insert_with(|| AllianceStats {
-                        construction_requests: 0,
-                        research_requests: 0,
-                        troops_requests: 0,
-                    });
-                    
-                    if entry.wants_construction {
-                        stats.construction_requests += 1;
-                    }
-                    if entry.wants_research {
-                        stats.research_requests += 1;
-                    }
-                    if entry.wants_troops {
-                        stats.troops_requests += 1;
-                    }
+        for entry in entries {
+            // Count by alliance
+            let stats = alliance_counts.entry(entry.alliance.clone()).or_insert_with(|| AllianceStats {
+                construction_requests: 0,
+                research_requests: 0,
+                troops_requests: 0,
+            });
+            
+            if entry.wants_construction {
+                stats.construction_requests += 1;
+            }
+            if entry.wants_research {
+                stats.research_requests += 1;
+            }
+            if entry.wants_troops {
+                stats.troops_requests += 1;
+            }
 
-                    // Count time slot popularity
-                    for slot in &entry.construction_available_slots {
-                        let time = slot_to_time(*slot);
-                        let slot_stats = time_slot_popularity.entry(time.clone()).or_insert_with(|| TimeSlotStats {
-                            construction_requests: 0,
-                            research_requests: 0,
-                            troops_requests: 0,
-                        });
-                        slot_stats.construction_requests += 1;
-                    }
+            // Count time slot popularity
+            for slot in &entry.construction_available_slots {
+                let time = slot_to_time(*slot);
+                let slot_stats = time_slot_popularity.entry(time.clone()).or_insert_with(|| TimeSlotStats {
+                    construction_requests: 0,
+                    research_requests: 0,
+                    troops_requests: 0,
+                });
+                slot_stats.construction_requests += 1;
+            }
 
-                    for slot in &entry.research_available_slots {
-                        let time = slot_to_time(*slot);
-                        let slot_stats = time_slot_popularity.entry(time).or_insert_with(|| TimeSlotStats {
-                            construction_requests: 0,
-                            research_requests: 0,
-                            troops_requests: 0,
-                        });
-                        slot_stats.research_requests += 1;
-                    }
+            for slot in &entry.research_available_slots {
+                let time = slot_to_time(*slot);
+                let slot_stats = time_slot_popularity.entry(time).or_insert_with(|| TimeSlotStats {
+                    construction_requests: 0,
+                    research_requests: 0,
+                    troops_requests: 0,
+                });
+                slot_stats.research_requests += 1;
+            }
 
-                    for slot in &entry.troops_available_slots {
-                        let time = slot_to_time(*slot);
-                        let slot_stats = time_slot_popularity.entry(time).or_insert_with(|| TimeSlotStats {
-                            construction_requests: 0,
-                            research_requests: 0,
-                            troops_requests: 0,
-                        });
-                        slot_stats.troops_requests += 1;
-                    }
+            for slot in &entry.troops_available_slots {
+                let time = slot_to_time(*slot);
+                let slot_stats = time_slot_popularity.entry(time).or_insert_with(|| TimeSlotStats {
+                    construction_requests: 0,
+                    research_requests: 0,
+                    troops_requests: 0,
+                });
+                slot_stats.troops_requests += 1;
+            }
                 }
             }
         }
@@ -2447,6 +2447,283 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
     })))
 }
 
+// Update schedule slot endpoint
+#[derive(Deserialize)]
+struct UpdateSlotRequest {
+    time: String,
+    player: Option<String>, // Format: "[alliance] name" or null to clear
+}
+
+async fn update_schedule_slot(
+    path: web::Path<(String, u32, String)>,
+    req: web::Json<UpdateSlotRequest>,
+    session: Session,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse> {
+    let (account_name, server_number, day_str) = path.into_inner();
+    let account_name = account_name.to_lowercase();
+    
+    // Check authentication
+    if let (Some(session_account), Some(session_server)) = (
+        session.get::<String>("account_name")?,
+        session.get::<u32>("server_number")?
+    ) {
+        if session_account != account_name || session_server != server_number {
+            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+                "success": false,
+                "error": "Not authorized"
+            })));
+        }
+    } else {
+        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+            "success": false,
+            "error": "Not authenticated"
+        })));
+    }
+    
+    // Load schedule
+    let key = schedule_key(&account_name, server_number);
+    let mut schedule_data = {
+        let schedules = state.schedules.lock().unwrap();
+        schedules.get(&key).cloned()
+            .or_else(|| load_schedule(&state.data_dir, &account_name, server_number))
+    };
+    
+    if schedule_data.is_none() {
+        schedule_data = Some(ScheduleData {
+            construction_schedule: Some(DaySchedule {
+                appointments: HashMap::new(),
+                unassigned: Vec::new(),
+            }),
+            research_schedule: Some(DaySchedule {
+                appointments: HashMap::new(),
+                unassigned: Vec::new(),
+            }),
+            troops_schedule: Some(DaySchedule {
+                appointments: HashMap::new(),
+                unassigned: Vec::new(),
+            }),
+            entries: None,
+        });
+    }
+    
+    let mut schedule_data = schedule_data.unwrap();
+    
+    // Get form config for time slot mapping
+    let form_config = {
+        let forms = state.forms.lock().unwrap();
+        let current_forms = state.current_forms.lock().unwrap();
+        get_current_form(&forms, &current_forms, &account_name, server_number)
+            .map(|f| f.config.clone())
+    };
+    
+    // Convert time to slot number
+    let time_slots: Vec<(u8, String)> = match (day_str.as_str(), form_config.as_ref()) {
+        ("construction", Some(config)) => {
+            calculate_time_slots(&config.construction_times.start_time, config.construction_times.end_time.as_deref())
+        },
+        ("research", Some(config)) => {
+            calculate_time_slots(&config.research_times.start_time, config.research_times.end_time.as_deref())
+        },
+        ("troops", Some(config)) => {
+            calculate_time_slots(&config.troops_times.start_time, config.troops_times.end_time.as_deref())
+        },
+        _ => {
+            (1..=49).map(|slot| (slot, slot_to_time(slot))).collect()
+        }
+    };
+    
+    let slot_num = time_slots.iter()
+        .find(|(_, time)| time == &req.time)
+        .map(|(slot, _)| *slot);
+    
+    if slot_num.is_none() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": "Invalid time slot"
+        })));
+    }
+    
+    let slot = slot_num.unwrap();
+    
+    // Get or create the appropriate day schedule
+    let day_schedule = match day_str.as_str() {
+        "construction" => {
+            if schedule_data.construction_schedule.is_none() {
+                schedule_data.construction_schedule = Some(DaySchedule {
+                    appointments: HashMap::new(),
+                    unassigned: Vec::new(),
+                });
+            }
+            schedule_data.construction_schedule.as_mut().unwrap()
+        },
+        "research" => {
+            if schedule_data.research_schedule.is_none() {
+                schedule_data.research_schedule = Some(DaySchedule {
+                    appointments: HashMap::new(),
+                    unassigned: Vec::new(),
+                });
+            }
+            schedule_data.research_schedule.as_mut().unwrap()
+        },
+        "troops" => {
+            if schedule_data.troops_schedule.is_none() {
+                schedule_data.troops_schedule = Some(DaySchedule {
+                    appointments: HashMap::new(),
+                    unassigned: Vec::new(),
+                });
+            }
+            schedule_data.troops_schedule.as_mut().unwrap()
+        },
+        _ => return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": "Invalid day"
+        }))),
+    };
+    
+    // Parse player name (format: "[alliance] name")
+    if let Some(ref player_str) = req.player {
+        let player_str = player_str.trim();
+        if !player_str.is_empty() {
+            // Parse "[alliance] name" format
+            let (alliance, name) = if let Some(start) = player_str.find('[') {
+                if let Some(end) = player_str.find(']') {
+                    let alliance = player_str[start+1..end].to_string();
+                    let name = player_str[end+1..].trim().to_string();
+                    (alliance, name)
+                } else {
+                    // No closing bracket, treat whole thing as name
+                    ("".to_string(), player_str.to_string())
+                }
+            } else {
+                // No bracket, treat whole thing as name
+                ("".to_string(), player_str.to_string())
+            };
+            
+            let appointment = ScheduledAppointment {
+                player_id: format!("MANUAL-{}-{}", alliance, name),
+                name,
+                alliance,
+                slot,
+                priority_score: 0,
+            };
+            
+            day_schedule.appointments.insert(slot, appointment);
+        } else {
+            // Empty string, remove the slot
+            day_schedule.appointments.remove(&slot);
+        }
+    } else {
+        // None, remove the slot
+        day_schedule.appointments.remove(&slot);
+    }
+    
+    // Update the schedule in state
+    {
+        let mut schedules = state.schedules.lock().unwrap();
+        schedules.insert(key.clone(), schedule_data.clone());
+    }
+    
+    // Save to disk
+    if let Err(e) = save_schedule(&state.data_dir, &account_name, server_number, &schedule_data) {
+        eprintln!("Warning: Failed to save schedule to disk: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "error": "Failed to save schedule"
+        })));
+    }
+    
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": "Slot updated successfully"
+    })))
+}
+
+// Get form submissions endpoint
+async fn get_form_submissions(
+    path: web::Path<(String, u32)>,
+    session: Session,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse> {
+    let (account_name, server_number) = path.into_inner();
+    let account_name = account_name.to_lowercase();
+    
+    // Check authentication
+    if let (Some(session_account), Some(session_server)) = (
+        session.get::<String>("account_name")?,
+        session.get::<u32>("server_number")?
+    ) {
+        if session_account != account_name || session_server != server_number {
+            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+                "success": false,
+                "error": "Not authorized"
+            })));
+        }
+    } else {
+        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+            "success": false,
+            "error": "Not authenticated"
+        })));
+    }
+    
+    // Get current form
+    let current_form = {
+        let forms = state.forms.lock().unwrap();
+        let current_forms = state.current_forms.lock().unwrap();
+        get_current_form(&forms, &current_forms, &account_name, server_number)
+    };
+    
+    if current_form.is_none() {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "success": false,
+            "error": "No current form found"
+        })));
+    }
+    
+    let current_form = current_form.unwrap();
+    let form_csv_path = format!("{}/current_forms/{}_submissions.csv", state.data_dir, current_form.code);
+    
+    if !Path::new(&form_csv_path).exists() {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "submissions": []
+        })));
+    }
+    
+    // Read CSV file
+    let mut reader = csv::Reader::from_path(&form_csv_path)
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to read CSV: {}", e)))?;
+    
+    let headers = reader.headers()
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to read CSV headers: {}", e)))?
+        .clone();
+    
+    let mut submissions = Vec::new();
+    for result in reader.records() {
+        let record = result.map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to parse CSV record: {}", e)))?;
+        
+        // Skip header rows (check if first field is a timestamp pattern DD/MM/YYYY)
+        let first_field = record.get(0).unwrap_or("");
+        if !first_field.contains('/') || first_field.len() < 8 {
+            continue; // Skip header rows
+        }
+        
+        let mut submission = serde_json::Map::new();
+        for (i, field) in record.iter().enumerate() {
+            let header = headers.get(i)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("field_{}", i));
+            submission.insert(header, serde_json::Value::String(field.to_string()));
+        }
+        submissions.push(serde_json::Value::Object(submission));
+    }
+    
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "submissions": submissions
+    })))
+}
+
 // Login endpoint (new - uses account name + password only, sets session cookie)
 async fn login_api(req: web::Json<LoginRequest>, session: Session, state: web::Data<AppState>) -> Result<HttpResponse> {
     let account_name = req.account_name.as_ref()
@@ -2542,6 +2819,8 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
             .service(web::resource("/{account_name}/{server}/api/upload").to(account_upload))
             .service(web::resource("/{account_name}/{server}/api/stats").route(web::get().to(get_stats)))
             .service(web::resource("/{account_name}/{server}/api/schedule/{day}").route(web::get().to(get_schedule)))
+            .service(web::resource("/{account_name}/{server}/api/schedule/{day}/slot").route(web::put().to(update_schedule_slot)))
+            .service(web::resource("/{account_name}/{server}/api/form/submissions").route(web::get().to(get_form_submissions)))
     })
     .bind(("0.0.0.0", port))?
     .run()
