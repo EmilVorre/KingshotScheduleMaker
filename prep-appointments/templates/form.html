@@ -38,6 +38,9 @@
                     <option value="ko">한국어</option>
                     <option value="zh">中文</option>
                     <option value="ja">日本語</option>
+                    <option value="es">Español</option>
+                    <option value="de">Deutsch</option>
+                    <option value="fr">Français</option>
                 </select>
             </div>
             
@@ -174,7 +177,7 @@
                                     <div v-if="form.wants_construction" class="space-y-4 pl-8 border-l-2 border-orange-500/30">
                                         <div>
                                             <label for="construction_speedups" class="block text-sm font-semibold text-gray-300 mb-2">
-                                                {{ t('constructionSpeedupsLabel') }} <span class="text-red-400">*</span>
+                                                {{ t('constructionSpeedupsLabel') }} <img src="/static/icons/Speedups.png" alt="Speedups" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
                                             </label>
                                             <p class="text-xs text-gray-500 mb-2">{{ t('constructionSpeedupsNote') }}</p>
                                             <input 
@@ -189,7 +192,7 @@
                                         
                                         <div>
                                             <label for="construction_truegold" class="block text-sm font-semibold text-gray-300 mb-2">
-                                                {{ t('constructionTruegoldLabel') }} <span class="text-red-400">*</span>
+                                                {{ t('constructionTruegoldLabel') }} <img src="/static/icons/Truegold.png" alt="Truegold" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
                                             </label>
                                             <input 
                                                 type="number" 
@@ -245,7 +248,7 @@
                                     <div v-if="form.wants_research" class="space-y-4 pl-8 border-l-2 border-purple-500/30">
                                         <div>
                                             <label for="research_speedups" class="block text-sm font-semibold text-gray-300 mb-2">
-                                                {{ t('researchSpeedupsLabel') }} <span class="text-red-400">*</span>
+                                                {{ t('researchSpeedupsLabel') }} <img src="/static/icons/Speedups.png" alt="Speedups" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
                                             </label>
                                             <p class="text-xs text-gray-500 mb-2">{{ t('researchSpeedupsNote') }}</p>
                                             <input 
@@ -260,7 +263,7 @@
                                         
                                         <div>
                                             <label for="research_truegold_dust" class="block text-sm font-semibold text-gray-300 mb-2">
-                                                {{ t('researchTruegoldDustLabel') }} <span class="text-red-400">*</span>
+                                                {{ t('researchTruegoldDustLabel') }} <img src="/static/icons/TruegoldDust.png" alt="Truegold Dust" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
                                             </label>
                                             <input 
                                                 type="number" 
@@ -316,7 +319,7 @@
                                     <div v-if="form.wants_troops" class="space-y-4 pl-8 border-l-2 border-green-500/30">
                                         <div>
                                             <label for="troops_speedups" class="block text-sm font-semibold text-gray-300 mb-2">
-                                                {{ t('troopsSpeedupsLabel') }} <span class="text-red-400">*</span>
+                                                {{ t('troopsSpeedupsLabel') }} <img src="/static/icons/Speedups.png" alt="Speedups" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
                                             </label>
                                             <p class="text-xs text-gray-500 mb-2">{{ t('troopsSpeedupsNote') }}</p>
                                             <input 
@@ -445,7 +448,7 @@
                             customAlliancePlaceholder: 'Enter your alliance name',
                             characterNameQuestion: 'What is your character name?',
                             characterNameNote: 'Note: Copy your name from your profile and paste it in the answer below.',
-                            characterNameProTip: 'Pro Tip: Please do not change your character name after filling this form and before Friday of SvS preparation week.',
+                            characterNameProTip: 'Pro Tip: Please do not change your character name after filling this form and before Friday of KvK preparation week.',
                             characterNamePlaceholder: 'Enter your character name',
                             playerIdQuestion: 'What is your player ID?',
                             playerIdNote: 'Note: Your ID must be a number',
@@ -483,7 +486,7 @@
                             troopsTimeSlotsError: 'Please select at least 5 time slots (currently selected: {count})',
                             additionalNotesLabel: 'Please share any additional notes, clarifications, or comments about your responses on this form.',
                             additionalNotesPlaceholder: 'Enter any additional notes (optional)',
-                            suggestionsLabel: 'What suggestions do you have for improving our state? We value your feedback!',
+                            suggestionsLabel: 'What suggestions do you have for improving our kingdom? We value your feedback!',
                             suggestionsPlaceholder: 'Enter your suggestions (optional)',
                             submitButton: 'Submit Form',
                             submitting: 'Submitting...',
@@ -514,7 +517,7 @@
                             constructionAcceleration: 'Construction Acceleration',
                             researchAcceleration: 'Research Acceleration',
                             troopsTrainingAcceleration: 'Troops Training Acceleration',
-                            introText: 'Fill out this form to apply for Chief Minister (CM) and Noble Advisor (NA) appointments.\n\nSchedule:\n- Construction Day (Monday) [CM]\n- Research Day (Tuesday) [CM]\n- Troops Training Day (Thursday) [NA]\n\nRequirements:\n\n- Form must be filled out in order to be considered for an appointment during SvS preparation week. \n- Form must be filled out by THE SUNDAY OF MATCHMAKING.\n- Form filled out after the deadline will be added to the "Late" submission wait list.\n- Rally leaders and rally leader substitutes may be given priority (if necessary).\n- Verification of items, speedups, and resources may be requested (eg. during situations where the score is very close in points and to make sure our state wins by ensuring appointments go to players who can maximize points).\n\n\nFor more information:\n- Contact form support: #140 [COB]Vor and /or the current Minister of Justice if you have questions on filling out this form or changes to your form submission!'
+                            introText: 'Fill out this form to apply for Chief Minister (CM) and Noble Advisor (NA) appointments.\n\nSchedule:\n- Construction Day (Monday) [CM]\n- Research Day (Tuesday) [CM]\n- Troops Training Day (Thursday) [NA]\n\nRequirements:\n\n- Form must be filled out in order to be considered for an appointment during KvK preparation week. \n- Form must be filled out by THE SUNDAY OF MATCHMAKING.\n- Form filled out after the deadline will be added to the "Late" submission wait list.\n- Rally leaders and rally leader substitutes may be given priority (if necessary).\n- Verification of items, speedups, and resources may be requested (an example could be during situations where the score is very close in points and to make sure our kingdom wins by ensuring appointments go to players who can maximize points).\n\n\nFor more information:\n- Contact form support: #140 [COB]Vor and /or the current Minister of Justice if you have questions on filling out this form or changes to your form submission!'
                         },
                         ko: {
                             submitAppointmentForm: '임명서 제출',
@@ -530,7 +533,7 @@
                             customAlliancePlaceholder: '동맹 이름을 입력하세요',
                             characterNameQuestion: '캐릭터 이름은 무엇인가요?',
                             characterNameNote: '참고: 프로필에서 이름을 복사하여 아래 답변에 붙여넣으세요.',
-                            characterNameProTip: '팁: 이 양식을 작성한 후 SvS 준비 주간 금요일 전까지 캐릭터 이름을 변경하지 마세요.',
+                            characterNameProTip: '팁: 이 양식을 작성한 후 KvK 준비 주간 금요일 전까지 캐릭터 이름을 변경하지 마세요.',
                             characterNamePlaceholder: '캐릭터 이름을 입력하세요',
                             playerIdQuestion: '플레이어 ID는 무엇인가요?',
                             playerIdNote: '참고: ID는 숫자여야 합니다',
@@ -568,7 +571,7 @@
                             troopsTimeSlotsError: '최소 5개의 시간대를 선택하세요 (현재 선택됨: {count})',
                             additionalNotesLabel: '이 양식에 대한 응답에 대한 추가 메모, 명확화 또는 의견을 공유해 주세요.',
                             additionalNotesPlaceholder: '추가 메모를 입력하세요 (선택 사항)',
-                            suggestionsLabel: '우리 주를 개선하기 위한 제안이 있나요? 귀하의 의견을 소중히 여깁니다!',
+                            suggestionsLabel: '우리 왕국을 개선하기 위한 제안이 있나요? 귀하의 의견을 소중히 여깁니다!',
                             suggestionsPlaceholder: '제안을 입력하세요 (선택 사항)',
                             submitButton: '양식 제출',
                             submitting: '제출 중...',
@@ -597,7 +600,7 @@
                             constructionAcceleration: '건설 가속',
                             researchAcceleration: '연구 가속',
                             troopsTrainingAcceleration: '병사 훈련 가속',
-                            introText: '이 양식은 수상(CM)과 고문(NA) 임명을 신청하기 위해 작성하세요.\n\n일정:\n- 건설의 날 (월요일) [CM]\n- 연구의 날 (화요일) [CM]\n- 병사 훈련의 날 (목요일) [NA]\n\n요구사항:\n\n- SvS 준비 주간 동안 임명을 고려받으려면 양식을 작성해야 합니다.\n- 양식은 매칭의 일요일까지 작성되어야 합니다.\n- 마감일 이후 작성된 양식은 "늦은" 제출 대기 목록에 추가됩니다.\n- 집결 지휘관 및 집결 지휘관 대체자는 우선순위를 받을 수 있습니다 (필요한 경우).\n- 아이템, 속도 향상 및 자원에 대한 검증을 요청할 수 있습니다 (예: 점수가 매우 가까운 상황에서 우리 주가 이기도록 임명이 점수를 최대화할 수 있는 플레이어에게 가도록 합니다).\n\n\n추가 정보:\n- 양식 작성 또는 양식 제출 변경에 대한 질문이 있으시면 양식 지원: #140 [COB]Vor 및/또는 현재 법무장관에게 문의하세요!'
+                            introText: '이 양식은 총리대신(CM)과 참모장(NA) 임명을 신청하기 위해 작성하세요.\n\n일정:\n- 건설의 날 (월요일) [CM]\n- 연구의 날 (화요일) [CM]\n- 병사 훈련의 날 (목요일) [NA]\n\n요구사항:\n\n- KvK 준비 주간 동안 임명을 고려받으려면 양식을 작성해야 합니다.\n- 양식은 매칭의 일요일까지 작성되어야 합니다.\n- 마감일 이후 작성된 양식은 "늦은" 제출 대기 목록에 추가됩니다.\n- 집결 지휘관 및 집결 지휘관 대체자는 우선순위를 받을 수 있습니다 (필요한 경우).\n- 아이템, 속도 향상 및 자원에 대한 검증을 요청할 수 있습니다 (예를 들어 점수가 매우 가까운 상황에서 우리 왕국이 이기도록 임명이 점수를 최대화할 수 있는 플레이어에게 가도록 합니다).\n\n\n추가 정보:\n- 양식 작성 또는 양식 제출 변경에 대한 질문이 있으시면 양식 지원: #140 [COB]Vor 및/또는 현재 사법대신에게 문의하세요!'
                         },
                         zh: {
                             submitAppointmentForm: '提交任命表',
@@ -680,7 +683,7 @@
                             constructionAcceleration: '建造加速',
                             researchAcceleration: '研究加速',
                             troopsTrainingAcceleration: '兵士訓練加速',
-                            introText: '請填寫此表格以申請總理(CM)和貴族顧問(NA)的任命。\n\n時間表：\n- 建造日（星期一）[CM]\n- 研究日（星期二）[CM]\n- 士兵訓練日（星期四）[NA]\n\n要求：\n\n- 必須填寫表格才能在SvS準備週期間被考慮任命。\n- 表格必須在配對的星期日之前填寫。\n- 截止日期後填寫的表格將被添加到"遲交"提交等待列表中。\n- 集結領袖和集結領袖替代者可能會獲得優先權（如必要）。\n- 可能會要求驗證物品、加速和資源（例如，在分數非常接近的情況下，以確保我們州獲勝，確保任命分配給能夠最大化分數的玩家）。\n\n\n更多信息：\n- 如果您對填寫此表格或更改您的表格提交有任何問題，請聯繫表格支持：#140 [COB]Vor 和/或現任司法部長！'
+                            introText: '請填寫此表格以申請總理大臣(CM)和參謀長(NA)的任命。\n\n時間表：\n- 建造日（星期一）[CM]\n- 研究日（星期二）[CM]\n- 士兵訓練日（星期四）[NA]\n\n要求：\n\n- 必須填寫表格才能在KvK準備週期間被考慮任命。\n- 表格必須在配對的星期日之前填寫。\n- 截止日期後填寫的表格將被添加到"遲交"提交等待列表中。\n- 集結領袖和集結領袖替代者可能會獲得優先權（如必要）。\n- 可能會要求驗證物品、加速和資源（例如，在分數非常接近的情況下，以確保我們王國獲勝，確保任命分配給能夠最大化分數的玩家）。\n\n\n更多信息：\n- 如果您對填寫此表格或更改您的表格提交有任何問題，請聯繫表格支持：#140 [COB]Vor 和/或現任司法部長！'
                         },
                         ja: {
                             submitAppointmentForm: '任命フォームを送信',
@@ -696,7 +699,7 @@
                             customAlliancePlaceholder: '同盟名を入力してください',
                             characterNameQuestion: 'キャラクター名は何ですか？',
                             characterNameNote: '注：プロフィールから名前をコピーして、下の回答に貼り付けてください。',
-                            characterNameProTip: 'ヒント：このフォームに記入した後、SvS準備週の金曜日までキャラクター名を変更しないでください。',
+                            characterNameProTip: 'ヒント：このフォームに記入した後、KvK準備週の金曜日までキャラクター名を変更しないでください。',
                             characterNamePlaceholder: 'キャラクター名を入力してください',
                             playerIdQuestion: 'プレイヤーIDは何ですか？',
                             playerIdNote: '注：IDは数字である必要があります',
@@ -734,7 +737,7 @@
                             troopsTimeSlotsError: '最低5つの時間帯を選択してください（現在選択中：{count}）',
                             additionalNotesLabel: 'このフォームへの回答について、追加のメモ、説明、またはコメントを共有してください。',
                             additionalNotesPlaceholder: '追加のメモを入力してください（任意）',
-                            suggestionsLabel: '州を改善するための提案はありますか？フィードバックをお待ちしています！',
+                            suggestionsLabel: '王国を改善するための提案はありますか？フィードバックをお待ちしています！',
                             suggestionsPlaceholder: '提案を入力してください（任意）',
                             submitButton: 'フォームを送信',
                             submitting: '送信中...',
@@ -763,7 +766,256 @@
                             constructionAcceleration: '建造加速',
                             researchAcceleration: '研究加速',
                             troopsTrainingAcceleration: '兵士訓練加速',
-                            introText: '総理大臣(CM)と貴族顧問(NA)の任命を申請するには、このフォームに記入してください。\n\nスケジュール：\n- 建設の日（月曜日）[CM]\n- 研究の日（火曜日）[CM]\n- 兵士訓練の日（木曜日）[NA]\n\n要件：\n\n- SvS準備週中に任命を検討されるには、フォームを記入する必要があります。\n- フォームはマッチメイキングの日曜日までに記入する必要があります。\n- 締切日後に記入されたフォームは「遅延」提出待機リストに追加されます。\n- ラリーリーダーとラリーリーダーの代替者は優先される場合があります（必要に応じて）。\n- アイテム、加速、リソースの検証が要求される場合があります（例：スコアが非常に近い状況で、州が勝利するように、任命がスコアを最大化できるプレイヤーに割り当てられるようにするため）。\n\n\n詳細情報：\n- このフォームの記入やフォーム提出の変更について質問がある場合は、フォームサポート：#140 [COB]Vorおよび/または現在の司法大臣にお問い合わせください！'
+                            introText: '総理大臣(CM)と参謀長(NA)の任命を申請するには、このフォームに記入してください。\n\nスケジュール：\n- 建設の日（月曜日）[CM]\n- 研究の日（火曜日）[CM]\n- 兵士訓練の日（木曜日）[NA]\n\n要件：\n\n- KvK準備週中に任命を検討されるには、フォームを記入する必要があります。\n- フォームはマッチメイキングの日曜日までに記入する必要があります。\n- 締切日後に記入されたフォームは「遅延」提出待機リストに追加されます。\n- ラリーリーダーとラリーリーダーの代替者は優先される場合があります（必要に応じて）。\n- アイテム、加速、リソースの検証が要求される場合があります（例としては、スコアが非常に近い状況で、王国が勝利するように、任命がスコアを最大化できるプレイヤーに割り当てられるようにするため）。\n\n\n詳細情報：\n- このフォームの記入やフォーム提出の変更について質問がある場合は、フォームサポート：#140 [COB]Vorおよび/または現在の司法大臣にお問い合わせください！'
+                        },
+                        es: {
+                            submitAppointmentForm: 'Enviar formulario de nombramiento',
+                            fillOutFormDescription: 'Complete el formulario para enviar sus preferencias de nombramiento',
+                            statistics: 'Estadísticas',
+                            submitForm: 'Enviar formulario',
+                            loadingFormConfiguration: 'Cargando configuración del formulario...',
+                            error: 'Error',
+                            basicInformation: 'Información básica',
+                            allianceQuestion: '¿A qué alianza perteneces?',
+                            nonOfAbove: 'Ninguna de las anteriores',
+                            customAllianceLabel: 'Si eligió "Ninguna de las anteriores", escríbalo aquí',
+                            customAlliancePlaceholder: 'Ingrese el nombre de su alianza',
+                            characterNameQuestion: '¿Cuál es el nombre de tu personaje?',
+                            characterNameNote: 'Nota: Copie su nombre de su perfil y péguelo en la respuesta a continuación.',
+                            characterNameProTip: 'Consejo profesional: Por favor, no cambie el nombre de su personaje después de completar este formulario y antes del viernes de la semana de preparación de KvK.',
+                            characterNamePlaceholder: 'Ingrese el nombre de su personaje',
+                            playerIdQuestion: '¿Cuál es tu ID de jugador?',
+                            playerIdNote: 'Nota: Tu ID debe ser un número',
+                            playerIdPlaceholder: 'Ingrese su ID de jugador',
+                            submissionType: 'Este formulario es...',
+                            newSubmission: 'Nueva presentación',
+                            updateSubmission: 'Re-presentación',
+                            constructionDay: 'Día de construcción',
+                            wantsConstruction: '¿Quieres una cita para el día de construcción?',
+                            constructionSpeedupsLabel: '¿Cuántas horas de aceleraciones planeas usar en el día de construcción?',
+                            constructionSpeedupsNote: 'Nota: Tu respuesta debe estar en horas. Suma la cantidad de horas de aceleración general y horas de aceleración de construcción que planeas usar en este día.',
+                            constructionSpeedupsPlaceholder: 'Ingrese horas',
+                            constructionTruegoldLabel: '¿Cuánto oro verdadero planeas gastar?',
+                            constructionTruegoldPlaceholder: 'Ingrese la cantidad',
+                            constructionTimeSlotsLabel: '¿A qué horas estás disponible para tu cita del día de construcción? (hora UTC)',
+                            constructionTimeSlotsNote: 'Nota: Elige un mínimo de 5 horarios.',
+                            constructionTimeSlotsError: 'Por favor selecciona al menos 5 horarios (actualmente seleccionados: {count})',
+                            researchDay: 'Día de investigación',
+                            wantsResearch: '¿Quieres una cita para el día de investigación?',
+                            researchSpeedupsLabel: '¿Cuántas horas de aceleraciones planeas usar en el día de investigación?',
+                            researchSpeedupsNote: 'Nota: Tu respuesta debe estar en horas. Suma la cantidad de horas de aceleración general y horas de aceleración de investigación que planeas usar durante este día.',
+                            researchSpeedupsPlaceholder: 'Ingrese horas',
+                            researchTruegoldDustLabel: '¿Cuánto polvo de oro verdadero planeas gastar?',
+                            researchTruegoldDustPlaceholder: 'Ingrese la cantidad',
+                            researchTimeSlotsLabel: '¿A qué horas estás disponible para tu cita del día de investigación? (hora UTC)',
+                            researchTimeSlotsNote: 'Nota: Elige un mínimo de 5 horarios.',
+                            researchTimeSlotsError: 'Por favor selecciona al menos 5 horarios (actualmente seleccionados: {count})',
+                            troopsTrainingDay: 'Día de entrenamiento de tropas',
+                            wantsTroops: '¿Quieres una cita para el día de entrenamiento de tropas?',
+                            troopsSpeedupsLabel: '¿Cuántas horas de aceleraciones planeas usar en el día de entrenamiento de tropas?',
+                            troopsSpeedupsNote: 'Nota: Tu respuesta debe estar en horas. Suma la cantidad de horas de aceleración general y horas de aceleración de entrenamiento de tropas que planeas usar durante este día.',
+                            troopsSpeedupsPlaceholder: 'Ingrese horas',
+                            troopsTimeSlotsLabel: '¿A qué horas estás disponible para tu cita del día de entrenamiento de tropas? (hora UTC)',
+                            troopsTimeSlotsNote: 'Nota: Elige un mínimo de 5 horarios.',
+                            troopsTimeSlotsError: 'Por favor selecciona al menos 5 horarios (actualmente seleccionados: {count})',
+                            additionalNotesLabel: 'Por favor comparte cualquier nota adicional, aclaraciones o comentarios sobre tus respuestas en este formulario.',
+                            additionalNotesPlaceholder: 'Ingrese notas adicionales (opcional)',
+                            suggestionsLabel: '¿Qué sugerencias tienes para mejorar nuestro reino? ¡Valoramos tus comentarios!',
+                            suggestionsPlaceholder: 'Ingrese sus sugerencias (opcional)',
+                            submitButton: 'Enviar formulario',
+                            submitting: 'Enviando...',
+                            formSubmittedSuccessfully: '¡Formulario enviado con éxito!',
+                            formSubmittedMessage: 'Tu formulario de nombramiento ha sido enviado. ¡Gracias por tu envío!',
+                            submitAnotherForm: 'Enviar otro formulario',
+                            pleaseSelectAlliance: 'Por favor selecciona una alianza',
+                            pleaseEnterCustomAlliance: 'Por favor ingresa el nombre de tu alianza personalizada',
+                            pleaseEnterCharacterName: 'Por favor ingresa el nombre de tu personaje',
+                            playerIdMustBeNumber: 'El ID del jugador debe ser un número',
+                            pleaseSelectAtLeastOneDay: 'Por favor selecciona al menos un tipo de día (Construcción, Investigación o Tropas)',
+                            pleaseEnterConstructionSpeedups: 'Por favor ingresa las horas de aceleración de construcción',
+                            pleaseEnterConstructionTruegold: 'Por favor ingresa la cantidad de oro verdadero de construcción',
+                            pleaseSelectConstructionTimeSlots: 'Por favor selecciona al menos 5 horarios de construcción',
+                            pleaseEnterResearchSpeedups: 'Por favor ingresa las horas de aceleración de investigación',
+                            pleaseEnterResearchTruegoldDust: 'Por favor ingresa la cantidad de polvo de oro verdadero de investigación',
+                            pleaseSelectResearchTimeSlots: 'Por favor selecciona al menos 5 horarios de investigación',
+                            pleaseEnterTroopsSpeedups: 'Por favor ingresa las horas de aceleración de tropas',
+                            pleaseSelectTroopsTimeSlots: 'Por favor selecciona al menos 5 horarios de tropas',
+                            formNotFound: 'Formulario no encontrado. Por favor verifica el enlace.',
+                            failedToLoadConfig: 'Error al cargar la configuración del formulario. Por favor intenta de nuevo más tarde.',
+                            failedToSubmitForm: 'Ocurrió un error al enviar el formulario. Por favor intenta de nuevo.',
+                            truegold: 'Oro verdadero',
+                            truegoldDust: 'Polvo de oro verdadero',
+                            universalAcceleration: 'Acelerador General',
+                            constructionAcceleration: 'Acelerador de construcción',
+                            researchAcceleration: 'Acelerador de Investigación',
+                            troopsTrainingAcceleration: 'Acelerador de Entrenamiento de Soldados',
+                            introText: 'Complete este formulario para solicitar nombramientos de Ministro principal (CM) y Noble asesor (NA).\n\nHorario:\n- Día de Construcción (Lunes) [CM]\n- Día de Investigación (Martes) [CM]\n- Día de Entrenamiento de Tropas (Jueves) [NA]\n\nRequisitos:\n\n- El formulario debe completarse para ser considerado para un nombramiento durante la semana de preparación de KvK.\n- El formulario debe completarse ANTES DEL DOMINGO DE EMPAREJAMIENTO.\n- Los formularios completados después de la fecha límite se agregarán a la lista de espera de presentación "Tardía".\n- Los líderes de asalto y sus sustitutos pueden recibir prioridad (si es necesario).\n- Se puede solicitar verificación de artículos, aceleraciones y recursos (un ejemplo podría ser durante situaciones donde el puntaje está muy cerca en puntos y para asegurar que nuestro reino gane asegurando que los nombramientos vayan a jugadores que puedan maximizar los puntos).\n\n\nPara más información:\n- Contacta con el soporte del formulario: #140 [COB]Vor y/o el actual Ministro de justicia si tienes preguntas sobre completar este formulario o cambios en tu presentación del formulario!'
+                        },
+                        de: {
+                            submitAppointmentForm: 'Ernennungsformular einreichen',
+                            fillOutFormDescription: 'Füllen Sie das Formular aus, um Ihre Ernennungspräferenzen einzureichen',
+                            statistics: 'Statistiken',
+                            submitForm: 'Formular einreichen',
+                            loadingFormConfiguration: 'Formularkonfiguration wird geladen...',
+                            error: 'Fehler',
+                            basicInformation: 'Grundinformationen',
+                            allianceQuestion: 'Zu welchem Bündnis gehörst du?',
+                            nonOfAbove: 'Keines der oben genannten',
+                            customAllianceLabel: 'Wenn "Keines der oben genannten" gewählt wurde, bitte hier eingeben',
+                            customAlliancePlaceholder: 'Geben Sie Ihren Bündnisnamen ein',
+                            characterNameQuestion: 'Wie lautet dein Charaktername?',
+                            characterNameNote: 'Hinweis: Kopieren Sie Ihren Namen aus Ihrem Profil und fügen Sie ihn in die Antwort unten ein.',
+                            characterNameProTip: 'Profi-Tipp: Bitte ändern Sie Ihren Charakternamen nicht nach dem Ausfüllen dieses Formulars und vor dem Freitag der KvK-Vorbereitungswoche.',
+                            characterNamePlaceholder: 'Geben Sie Ihren Charakternamen ein',
+                            playerIdQuestion: 'Wie lautet deine Spieler-ID?',
+                            playerIdNote: 'Hinweis: Deine ID muss eine Zahl sein',
+                            playerIdPlaceholder: 'Geben Sie Ihre Spieler-ID ein',
+                            submissionType: 'Dieses Formular ist...',
+                            newSubmission: 'Neue Einreichung',
+                            updateSubmission: 'Wiedereinreichung',
+                            constructionDay: 'Baustag',
+                            wantsConstruction: 'Möchtest du einen Termin am Baustag?',
+                            constructionSpeedupsLabel: 'Wie viele Stunden Beschleunigungen planst du am Baustag zu verwenden?',
+                            constructionSpeedupsNote: 'Hinweis: Deine Antwort muss in Stunden sein. Addiere die Menge der allgemeinen Beschleunigungsstunden und Baubeschleunigungsstunden, die du an diesem Tag verwenden möchtest.',
+                            constructionSpeedupsPlaceholder: 'Stunden eingeben',
+                            constructionTruegoldLabel: 'Wie viel Echtes Gold planst du auszugeben?',
+                            constructionTruegoldPlaceholder: 'Menge eingeben',
+                            constructionTimeSlotsLabel: 'Zu welchen Zeiten bist du für deinen Baustag-Termin verfügbar? (UTC-Zeit)',
+                            constructionTimeSlotsNote: 'Hinweis: Wähle mindestens 5 Zeiten.',
+                            constructionTimeSlotsError: 'Bitte wählen Sie mindestens 5 Zeitslots aus (aktuell ausgewählt: {count})',
+                            researchDay: 'Forschungstag',
+                            wantsResearch: 'Möchtest du einen Termin am Forschungstag?',
+                            researchSpeedupsLabel: 'Wie viele Stunden Beschleunigungen planst du am Forschungstag zu verwenden?',
+                            researchSpeedupsNote: 'Hinweis: Deine Antwort muss in Stunden sein. Addiere die Menge der allgemeinen Beschleunigungsstunden und Forschungsbeschleunigungsstunden, die du an diesem Tag verwenden möchtest.',
+                            researchSpeedupsPlaceholder: 'Stunden eingeben',
+                            researchTruegoldDustLabel: 'Wie viel Echtes Goldstaub planst du auszugeben?',
+                            researchTruegoldDustPlaceholder: 'Menge eingeben',
+                            researchTimeSlotsLabel: 'Zu welchen Zeiten bist du für deinen Forschungstag-Termin verfügbar? (UTC-Zeit)',
+                            researchTimeSlotsNote: 'Hinweis: Wähle mindestens 5 Zeiten.',
+                            researchTimeSlotsError: 'Bitte wählen Sie mindestens 5 Zeitslots aus (aktuell ausgewählt: {count})',
+                            troopsTrainingDay: 'Truppentrainingstag',
+                            wantsTroops: 'Möchtest du einen Termin am Truppentrainingstag?',
+                            troopsSpeedupsLabel: 'Wie viele Stunden Beschleunigungen planst du am Truppentrainingstag zu verwenden?',
+                            troopsSpeedupsNote: 'Hinweis: Deine Antwort muss in Stunden sein. Addiere die Menge der allgemeinen Beschleunigungsstunden und Truppentrainingsbeschleunigungsstunden, die du an diesem Tag verwenden möchtest.',
+                            troopsSpeedupsPlaceholder: 'Stunden eingeben',
+                            troopsTimeSlotsLabel: 'Zu welchen Zeiten bist du für deinen Truppentrainingstag-Termin verfügbar? (UTC-Zeit)',
+                            troopsTimeSlotsNote: 'Hinweis: Wähle mindestens 5 Zeiten.',
+                            troopsTimeSlotsError: 'Bitte wählen Sie mindestens 5 Zeitslots aus (aktuell ausgewählt: {count})',
+                            additionalNotesLabel: 'Bitte teilen Sie zusätzliche Notizen, Klarstellungen oder Kommentare zu Ihren Antworten in diesem Formular mit.',
+                            additionalNotesPlaceholder: 'Zusätzliche Notizen eingeben (optional)',
+                            suggestionsLabel: 'Welche Vorschläge hast du zur Verbesserung unseres Königreichs? Wir schätzen dein Feedback!',
+                            suggestionsPlaceholder: 'Geben Sie Ihre Vorschläge ein (optional)',
+                            submitButton: 'Formular einreichen',
+                            submitting: 'Wird übermittelt...',
+                            formSubmittedSuccessfully: 'Formular erfolgreich übermittelt!',
+                            formSubmittedMessage: 'Ihr Ernennungsformular wurde übermittelt. Vielen Dank für Ihre Einreichung!',
+                            submitAnotherForm: 'Weiteres Formular einreichen',
+                            pleaseSelectAlliance: 'Bitte wählen Sie ein Bündnis aus',
+                            pleaseEnterCustomAlliance: 'Bitte geben Sie Ihren benutzerdefinierten Bündnisnamen ein',
+                            pleaseEnterCharacterName: 'Bitte geben Sie Ihren Charakternamen ein',
+                            playerIdMustBeNumber: 'Die Spieler-ID muss eine Zahl sein',
+                            pleaseSelectAtLeastOneDay: 'Bitte wählen Sie mindestens einen Tagestyp aus (Bau, Forschung oder Truppen)',
+                            pleaseEnterConstructionSpeedups: 'Bitte geben Sie die Baubeschleunigungsstunden ein',
+                            pleaseEnterConstructionTruegold: 'Bitte geben Sie die Menge an Echtem Gold für den Bau ein',
+                            pleaseSelectConstructionTimeSlots: 'Bitte wählen Sie mindestens 5 Baustellenzeiten aus',
+                            pleaseEnterResearchSpeedups: 'Bitte geben Sie die Forschungsbeschleunigungsstunden ein',
+                            pleaseEnterResearchTruegoldDust: 'Bitte geben Sie die Menge an Echtem Goldstaub für die Forschung ein',
+                            pleaseSelectResearchTimeSlots: 'Bitte wählen Sie mindestens 5 Forschungszeitslots aus',
+                            pleaseEnterTroopsSpeedups: 'Bitte geben Sie die Truppentrainingsbeschleunigungsstunden ein',
+                            pleaseSelectTroopsTimeSlots: 'Bitte wählen Sie mindestens 5 Truppentrainingszeitslots aus',
+                            formNotFound: 'Formular nicht gefunden. Bitte überprüfen Sie den Link.',
+                            failedToLoadConfig: 'Formularkonfiguration konnte nicht geladen werden. Bitte versuchen Sie es später erneut.',
+                            failedToSubmitForm: 'Beim Übermitteln des Formulars ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.',
+                            truegold: 'Echtgold',
+                            truegoldDust: 'Echtgold-Staub',
+                            universalAcceleration: 'Allgemeine Beschleunigung',
+                            constructionAcceleration: 'Bau Beschleunigung',
+                            researchAcceleration: 'Schnelle Forschung',
+                            troopsTrainingAcceleration: 'Ausbildungs Beschleunigung für Soldaten',
+                            introText: 'Füllen Sie dieses Formular aus, um sich für Ernennungen als Höchster Minister (CM) und Nobler Berater (NA) zu bewerben.\n\nZeitplan:\n- Baustag (Montag) [CM]\n- Forschungstag (Dienstag) [CM]\n- Truppentrainingstag (Donnerstag) [NA]\n\nAnforderungen:\n\n- Das Formular muss ausgefüllt werden, um für eine Ernennung während der KvK-Vorbereitungswoche in Betracht gezogen zu werden.\n- Das Formular muss BIS SONNTAG DES MATCHMAKINGS ausgefüllt werden.\n- Nach dem Stichtag ausgefüllte Formulare werden der Warteliste für "Verspätete" Einreichungen hinzugefügt.\n- Angriffsführer und deren Stellvertreter erhalten möglicherweise Priorität (falls erforderlich).\n- Die Überprüfung von Gegenständen, Beschleunigungen und Ressourcen kann angefordert werden (ein Beispiel könnte während Situationen sein, in denen die Punktzahl sehr nahe ist und um sicherzustellen, dass unser Königreich gewinnt, indem sichergestellt wird, dass Ernennungen an Spieler gehen, die Punkte maximieren können).\n\n\nFür weitere Informationen:\n- Kontaktieren Sie den Formularsupport: #140 [COB]Vor und/oder den aktuellen Justizminister, wenn Sie Fragen zum Ausfüllen dieses Formulars oder Änderungen an Ihrer Formulareinreichung haben!'
+                        },
+                        fr: {
+                            submitAppointmentForm: 'Soumettre le formulaire de nomination',
+                            fillOutFormDescription: 'Remplissez le formulaire pour soumettre vos préférences de nomination',
+                            statistics: 'Statistiques',
+                            submitForm: 'Soumettre le formulaire',
+                            loadingFormConfiguration: 'Chargement de la configuration du formulaire...',
+                            error: 'Erreur',
+                            basicInformation: 'Informations de base',
+                            allianceQuestion: 'À quelle alliance appartenez-vous ?',
+                            nonOfAbove: 'Aucune des réponses ci-dessus',
+                            customAllianceLabel: 'Si vous avez choisi "Aucune des réponses ci-dessus", veuillez le saisir ici',
+                            customAlliancePlaceholder: 'Entrez le nom de votre alliance',
+                            characterNameQuestion: 'Quel est le nom de votre personnage ?',
+                            characterNameNote: 'Note : Copiez votre nom depuis votre profil et collez-le dans la réponse ci-dessous.',
+                            characterNameProTip: 'Conseil : Veuillez ne pas changer le nom de votre personnage après avoir rempli ce formulaire et avant le vendredi de la semaine de préparation KvK.',
+                            characterNamePlaceholder: 'Entrez le nom de votre personnage',
+                            playerIdQuestion: 'Quel est votre ID joueur ?',
+                            playerIdNote: 'Note : Votre ID doit être un nombre',
+                            playerIdPlaceholder: 'Entrez votre ID joueur',
+                            submissionType: 'Ce formulaire est...',
+                            newSubmission: 'Nouvelle soumission',
+                            updateSubmission: 'Nouvelle soumission',
+                            constructionDay: 'Jour de construction',
+                            wantsConstruction: 'Voulez-vous un rendez-vous pour le jour de construction ?',
+                            constructionSpeedupsLabel: 'Combien d\'heures d\'accélérations prévoyez-vous d\'utiliser le jour de construction ?',
+                            constructionSpeedupsNote: 'Note : Votre réponse doit être en heures. Additionnez la quantité d\'heures d\'accélération générales et d\'heures d\'accélération de construction que vous prévoyez d\'utiliser ce jour-là.',
+                            constructionSpeedupsPlaceholder: 'Entrez les heures',
+                            constructionTruegoldLabel: 'Combien d\'or véritable prévoyez-vous de dépenser ?',
+                            constructionTruegoldPlaceholder: 'Entrez le montant',
+                            constructionTimeSlotsLabel: 'À quels horaires êtes-vous disponible pour votre rendez-vous du jour de construction ? (heure UTC)',
+                            constructionTimeSlotsNote: 'Note : Choisissez un minimum de 5 horaires.',
+                            constructionTimeSlotsError: 'Veuillez sélectionner au moins 5 créneaux horaires (actuellement sélectionnés : {count})',
+                            researchDay: 'Jour de recherche',
+                            wantsResearch: 'Voulez-vous un rendez-vous pour le jour de recherche ?',
+                            researchSpeedupsLabel: 'Combien d\'heures d\'accélérations prévoyez-vous d\'utiliser le jour de recherche ?',
+                            researchSpeedupsNote: 'Note : Votre réponse doit être en heures. Additionnez la quantité d\'heures d\'accélération générales et d\'heures d\'accélération de recherche que vous prévoyez d\'utiliser pendant ce jour.',
+                            researchSpeedupsPlaceholder: 'Entrez les heures',
+                            researchTruegoldDustLabel: 'Combien de poussière d\'or véritable prévoyez-vous de dépenser ?',
+                            researchTruegoldDustPlaceholder: 'Entrez le montant',
+                            researchTimeSlotsLabel: 'À quels horaires êtes-vous disponible pour votre rendez-vous du jour de recherche ? (heure UTC)',
+                            researchTimeSlotsNote: 'Note : Choisissez un minimum de 5 horaires.',
+                            researchTimeSlotsError: 'Veuillez sélectionner au moins 5 créneaux horaires (actuellement sélectionnés : {count})',
+                            troopsTrainingDay: 'Jour d\'entraînement des troupes',
+                            wantsTroops: 'Voulez-vous un rendez-vous pour le jour d\'entraînement des troupes ?',
+                            troopsSpeedupsLabel: 'Combien d\'heures d\'accélérations prévoyez-vous d\'utiliser le jour d\'entraînement des troupes ?',
+                            troopsSpeedupsNote: 'Note : Votre réponse doit être en heures. Additionnez la quantité d\'heures d\'accélération générales et d\'heures d\'accélération d\'entraînement des troupes que vous prévoyez d\'utiliser pendant ce jour.',
+                            troopsSpeedupsPlaceholder: 'Entrez les heures',
+                            troopsTimeSlotsLabel: 'À quels horaires êtes-vous disponible pour votre rendez-vous du jour d\'entraînement des troupes ? (heure UTC)',
+                            troopsTimeSlotsNote: 'Note : Choisissez un minimum de 5 horaires.',
+                            troopsTimeSlotsError: 'Veuillez sélectionner au moins 5 créneaux horaires (actuellement sélectionnés : {count})',
+                            additionalNotesLabel: 'Veuillez partager toute note supplémentaire, clarification ou commentaire concernant vos réponses dans ce formulaire.',
+                            additionalNotesPlaceholder: 'Entrez des notes supplémentaires (optionnel)',
+                            suggestionsLabel: 'Quelles suggestions avez-vous pour améliorer notre royaume ? Nous apprécions vos commentaires !',
+                            suggestionsPlaceholder: 'Entrez vos suggestions (optionnel)',
+                            submitButton: 'Soumettre le formulaire',
+                            submitting: 'Envoi en cours...',
+                            formSubmittedSuccessfully: 'Formulaire soumis avec succès !',
+                            formSubmittedMessage: 'Votre formulaire de nomination a été soumis. Merci pour votre soumission !',
+                            submitAnotherForm: 'Soumettre un autre formulaire',
+                            pleaseSelectAlliance: 'Veuillez sélectionner une alliance',
+                            pleaseEnterCustomAlliance: 'Veuillez entrer le nom de votre alliance personnalisée',
+                            pleaseEnterCharacterName: 'Veuillez entrer le nom de votre personnage',
+                            playerIdMustBeNumber: 'L\'ID du joueur doit être un nombre',
+                            pleaseSelectAtLeastOneDay: 'Veuillez sélectionner au moins un type de jour (Construction, Recherche ou Troupes)',
+                            pleaseEnterConstructionSpeedups: 'Veuillez entrer les heures d\'accélération de construction',
+                            pleaseEnterConstructionTruegold: 'Veuillez entrer la quantité d\'or véritable de construction',
+                            pleaseSelectConstructionTimeSlots: 'Veuillez sélectionner au moins 5 créneaux horaires de construction',
+                            pleaseEnterResearchSpeedups: 'Veuillez entrer les heures d\'accélération de recherche',
+                            pleaseEnterResearchTruegoldDust: 'Veuillez entrer la quantité de poussière d\'or véritable de recherche',
+                            pleaseSelectResearchTimeSlots: 'Veuillez sélectionner au moins 5 créneaux horaires de recherche',
+                            pleaseEnterTroopsSpeedups: 'Veuillez entrer les heures d\'accélération des troupes',
+                            pleaseSelectTroopsTimeSlots: 'Veuillez sélectionner au moins 5 créneaux horaires des troupes',
+                            formNotFound: 'Formulaire introuvable. Veuillez vérifier le lien.',
+                            failedToLoadConfig: 'Échec du chargement de la configuration du formulaire. Veuillez réessayer plus tard.',
+                            failedToSubmitForm: 'Une erreur s\'est produite lors de la soumission du formulaire. Veuillez réessayer.',
+                            truegold: 'Or Véritable',
+                            truegoldDust: 'Poussière d\'Or Véritable',
+                            universalAcceleration: 'Accélérateur Général',
+                            constructionAcceleration: 'Accélérateur de Construction',
+                            researchAcceleration: 'Accélérateur de Recherche',
+                            troopsTrainingAcceleration: 'Vitesse d\'entraînement des soldats',
+                            introText: 'Remplissez ce formulaire pour postuler aux nominations de Premier Ministre (CM) et de Noble Conseiller (NA).\n\nCalendrier :\n- Jour de construction (Lundi) [CM]\n- Jour de recherche (Mardi) [CM]\n- Jour d\'entraînement des troupes (Jeudi) [NA]\n\nExigences :\n\n- Le formulaire doit être rempli pour être considéré pour une nomination pendant la semaine de préparation KvK.\n- Le formulaire doit être rempli AVANT LE DIMANCHE DU MATCHMAKING.\n- Les formulaires remplis après la date limite seront ajoutés à la liste d\'attente de soumission "Tardive".\n- Les chefs de raid et leurs substituts peuvent recevoir la priorité (si nécessaire).\n- La vérification des articles, accélérations et ressources peut être demandée (un exemple pourrait être pendant des situations où le score est très proche en points et pour s\'assurer que notre royaume gagne en s\'assurant que les nominations vont aux joueurs qui peuvent maximiser les points).\n\n\nPour plus d\'informations :\n- Contactez le support du formulaire : #140 [COB]Vor et/ou le ministre actuel de la Justice si vous avez des questions sur le remplissage de ce formulaire ou des modifications à votre soumission de formulaire !'
                         }
                     },
                     config: {
