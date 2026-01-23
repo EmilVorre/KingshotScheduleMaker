@@ -23,22 +23,49 @@
 ## Deployment Steps
 
 1. **Upload to VPS:**
-   - Binary: `target/release/prep-appointments`
-   - Templates: `prep-appointments/templates/` directory
-   - Static files: `prep-appointments/static/` directory (if any)
-   - Create `data/` directory on the server
+   - Binary: `target/release/prep-appointments` (make it executable: `chmod +x prep-appointments`)
+   - **Static files directory**: `prep-appointments/static/` directory (including the `icons/` subdirectory with all PNG files)
+   - **Note**: Templates are embedded in the binary at compile time, so you don't need to copy the `templates/` directory
 
-2. **Set up data directory:**
+2. **Set up directory structure on server:**
    ```bash
+   # Create the data directory structure
    mkdir -p data/current_forms data/old_forms data/schedules data/statistics
+   
+   # Ensure static directory structure exists (should match your local structure)
+   # The static/ directory should be in the same directory as the binary
+   # It should contain:
+   #   static/
+   #     style.css
+   #     icons/
+   #       Speedups.png
+   #       Truegold.png
+   #       TruegoldDust.png
    ```
 
-3. **Set environment variables (optional):**
+3. **Directory structure on server should look like:**
+   ```
+   /path/to/deployment/
+   ├── prep-appointments          # The binary executable
+   ├── static/                    # Static files directory
+   │   ├── style.css
+   │   └── icons/
+   │       ├── Speedups.png
+   │       ├── Truegold.png
+   │       └── TruegoldDust.png
+   └── data/                      # Data directory (created automatically if missing)
+       ├── current_forms/
+       ├── old_forms/
+       ├── schedules/
+       └── statistics/
+   ```
+
+4. **Set environment variables (optional):**
    ```bash
    export DATA_DIR="/path/to/data"  # Defaults to ./data
    ```
 
-4. **Run the server:**
+5. **Run the server:**
    ```bash
    # Run on port 8080 (default)
    ./prep-appointments web
@@ -47,7 +74,7 @@
    ./prep-appointments web 80
    ```
 
-5. **Run as a service (systemd example):**
+6. **Run as a service (systemd example):**
    Create `/etc/systemd/system/prep-appointments.service`:
    ```ini
    [Unit]
@@ -73,7 +100,7 @@
    sudo systemctl start prep-appointments
    ```
 
-6. **Set up reverse proxy (nginx example):**
+7. **Set up reverse proxy (nginx example):**
    ```nginx
    server {
        listen 80;

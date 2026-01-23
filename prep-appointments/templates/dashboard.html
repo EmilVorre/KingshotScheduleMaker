@@ -1378,28 +1378,36 @@
                     }
                     
                     try {
+                        const requestBody = {
+                            name: (this.config.form_name && this.config.form_name.trim()) || null,
+                            alliances: alliances,
+                            construction_times: {
+                                start_time: this.config.construction_times.start_time,
+                                end_time: this.config.construction_times.end_time || null
+                            },
+                            research_times: {
+                                start_time: this.config.research_times.start_time,
+                                end_time: this.config.research_times.end_time || null
+                            },
+                            troops_times: {
+                                start_time: this.config.troops_times.start_time,
+                                end_time: this.config.troops_times.end_time || null
+                            },
+                            predetermined_slots: this.predeterminedSlots.map(slot => ({
+                                day: slot.day,
+                                time: slot.time,
+                                alliance: slot.alliance,
+                                name: slot.name
+                            })),
+                            intro_text: this.standardIntroText
+                        };
+                        
                         const response = await fetch(`${this.baseUrl}/api/form/create`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({
-                                name: (this.config.form_name && this.config.form_name.trim()) || null,
-                                alliances: alliances,
-                                construction_times: {
-                                    start_time: this.config.construction_times.start_time,
-                                    end_time: this.config.construction_times.end_time || null
-                                },
-                                research_times: {
-                                    start_time: this.config.research_times.start_time,
-                                    end_time: this.config.research_times.end_time || null
-                                },
-                                troops_times: {
-                                    start_time: this.config.troops_times.start_time,
-                                    end_time: this.config.troops_times.end_time || null
-                                },
-                                intro_text: this.standardIntroText
-                            })
+                            body: JSON.stringify(requestBody)
                         });
                         
                         const data = await response.json();
@@ -1432,9 +1440,60 @@
                         this.creatingForm = false;
                     }
                 },
+                async savePredeterminedSlots() {
+                    if (!this.currentForm) {
+                        console.error('No current form to save predetermined slots to');
+                        return false;
+                    }
+                    
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/form/config`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                predetermined_slots: this.predeterminedSlots.map(slot => ({
+                                    day: slot.day,
+                                    time: slot.time,
+                                    alliance: slot.alliance,
+                                    name: slot.name
+                                }))
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        if (response.ok && data.success) {
+                            console.log('Predetermined slots saved successfully');
+                            // Reload current form to get updated config
+                            await this.loadCurrentForm();
+                            return true;
+                        } else {
+                            console.error('Failed to save predetermined slots:', data.error || 'Unknown error');
+                            return false;
+                        }
+                    } catch (error) {
+                        console.error('Error saving predetermined slots:', error);
+                        return false;
+                    }
+                },
                 async handleGenerateSchedule() {
                     this.generatingSchedule = true;
                     this.scheduleGenStatus = null;
+                    
+                    // Save predetermined slots first
+                    if (this.predeterminedSlots.length > 0) {
+                        console.log('Saving predetermined slots before generating schedule...');
+                        const saved = await this.savePredeterminedSlots();
+                        if (!saved) {
+                            this.scheduleGenStatus = {
+                                type: 'error',
+                                message: 'Failed to save predetermined slots. Please try again.'
+                            };
+                            this.generatingSchedule = false;
+                            return;
+                        }
+                    }
                     
                     try {
                         const response = await fetch('/api/generate-schedule', {

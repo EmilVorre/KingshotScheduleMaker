@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::path::Path;
 use rand::Rng;
 use crate::parser::{load_appointments, AppointmentEntry};
-use crate::schedule::{schedule_construction_day, schedule_research_day, schedule_troops_day, DaySchedule, slot_to_time, calculate_time_slots};
+use crate::schedule::{schedule_construction_day, schedule_construction_day_with_locked, schedule_research_day, schedule_research_day_with_locked, schedule_troops_day, schedule_troops_day_with_locked, DaySchedule, slot_to_time, calculate_time_slots};
 use crate::schedule::types::ScheduledAppointment;
 use crate::display::format_player_name;
 use crate::form::{FormSubmissionRequest, FormSubmission, validate_submission, export_submission_to_csv};
@@ -1269,6 +1269,11 @@ pub struct CreateFormRequest {
     pub intro_text: Option<String>, // Optional introduction text
 }
 
+#[derive(Deserialize)]
+pub struct UpdateFormConfigRequest {
+    pub predetermined_slots: Vec<PredeterminedSlot>, // Predetermined slot assignments
+}
+
 async fn create_form(
     path: web::Path<(String, u32)>,
     session: Session,
@@ -1451,6 +1456,103 @@ async fn create_form(
         "message": "Form created successfully",
         "code": code,
         "url": form_url
+    })))
+}
+
+// Update form config endpoint (for updating predetermined slots)
+async fn update_form_config(
+    path: web::Path<(String, u32)>,
+    session: Session,
+    body: web::Json<UpdateFormConfigRequest>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse> {
+    let (url_account_name, server_number) = path.into_inner();
+    let url_account_name = url_account_name.to_lowercase();
+    
+    // Verify session authentication
+    let session_account_name: String = match session.get("account_name") {
+        Ok(Some(name)) => name,
+        Ok(None) => {
+            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+                "success": false,
+                "error": "Not logged in"
+            })));
+        }
+        Err(_) => {
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "success": false,
+                "error": "Failed to read session"
+            })));
+        }
+    };
+    let session_server_number: u32 = match session.get("server_number") {
+        Ok(Some(num)) => num,
+        Ok(None) => {
+            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+                "success": false,
+                "error": "Not logged in"
+            })));
+        }
+        Err(_) => {
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "success": false,
+                "error": "Failed to read session"
+            })));
+        }
+    };
+    
+    // Verify account name and server number match session
+    if session_account_name.to_lowercase() != url_account_name || session_server_number != server_number {
+        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+            "success": false,
+            "error": "Unauthorized"
+        })));
+    }
+    
+    // Get current form for this account/server
+    let mut forms = state.forms.lock().unwrap();
+    let current_forms = state.current_forms.lock().unwrap();
+    let key = format!("{}:{}", url_account_name, server_number);
+    
+    let form_code = if let Some(code) = current_forms.get(&key) {
+        code.clone()
+    } else {
+        drop(forms);
+        drop(current_forms);
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "success": false,
+            "error": "No current form found"
+        })));
+    };
+    
+    // Get the form
+    let mut form_data = if let Some(form) = forms.get(&form_code).cloned() {
+        form
+    } else {
+        drop(forms);
+        drop(current_forms);
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "success": false,
+            "error": "Form not found"
+        })));
+    };
+    
+    drop(current_forms);
+    
+    // Update predetermined slots
+    form_data.config.predetermined_slots = body.predetermined_slots.clone();
+    
+    // Save updated form
+    save_form(&state.data_dir, &form_data)
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to save form: {}", e)))?;
+    
+    // Update in memory
+    forms.insert(form_code.clone(), form_data);
+    drop(forms);
+    
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": "Form config updated successfully"
     })))
 }
 
@@ -1732,8 +1834,6 @@ async fn get_current_form_info(
         } else {
             eprintln!("Failed to read directory: {}", current_forms_dir);
         }
-    } else {
-        eprintln!("Found form in mapping/forms HashMap");
     }
     
     if let Some(form) = current_form {
@@ -2290,28 +2390,82 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
     }
     
     // Helper function to convert time string to slot number using form's time configuration
+    // Falls back to default time mapping if custom slots are empty or time not found
     let time_to_slot = |time_str: &str, time_slots: &[(u8, String)]| -> Option<u8> {
         let clean_time = time_str.trim();
-        time_slots.iter()
-            .find(|(_, time)| time.trim() == clean_time)
-            .map(|(slot, _)| *slot)
+        
+        // First try to find in custom time slots
+        if !time_slots.is_empty() {
+            if let Some(slot) = time_slots.iter()
+                .find(|(_, time)| time.trim() == clean_time)
+                .map(|(slot, _)| *slot) {
+                return Some(slot);
+            }
+        }
+        
+        // Fallback to default time mapping (same logic as parser.rs::time_to_slot)
+        // Handle "00:00" case
+        if clean_time == "00:00" {
+            return Some(1);
+        }
+        
+        // Parse HH:MM format
+        let parts: Vec<&str> = clean_time.split(':').collect();
+        if parts.len() != 2 {
+            return None;
+        }
+        
+        let hours: u32 = match parts[0].parse() {
+            Ok(h) => h,
+            Err(_) => return None,
+        };
+        let minutes: u32 = match parts[1].parse() {
+            Ok(m) => m,
+            Err(_) => return None,
+        };
+        
+        // Convert to total minutes
+        let total_minutes = hours * 60 + minutes;
+        
+        // Special cases for the first slots
+        if total_minutes == 0 {
+            Some(1) // 00:00
+        } else if total_minutes == 15 {
+            Some(2) // 00:15
+        } else if total_minutes == 45 {
+            Some(3) // 00:45
+        } else if total_minutes > 45 {
+            // For times after 00:45, calculate slot based on 30-minute increments
+            // Slot 3 is at 00:45 (45 minutes), so slot 4 should be at 01:15 (75 minutes)
+            // The pattern: slot = 3 + ((total_minutes - 45) / 30)
+            let slot = 3 + ((total_minutes - 45) / 30);
+            if slot <= 49 {
+                Some(slot as u8)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     };
     
-    // Apply predetermined slots to schedules
-    let mut construction_schedule = schedule_construction_day(&entries);
-    let mut research_schedule = schedule_research_day(&entries, &construction_schedule);
-    let mut troops_schedule = schedule_troops_day(&entries);
-    
     // Process predetermined slots if form config has them
-    if let Some(config) = &form_config {
+    // Collect predetermined slot numbers FIRST so we can pass them as pre_locked_slots
+    let mut construction_predetermined_slots = HashSet::new();
+    let mut research_predetermined_slots = HashSet::new();
+    let mut troops_predetermined_slots = HashSet::new();
+    
+    // Declare schedule variables outside the if/else blocks
+    let (construction_schedule, research_schedule, troops_schedule) = if let Some(config) = &form_config {
         if !config.predetermined_slots.is_empty() {
             // Get time slot mappings
             let construction_slots_vec = construction_slots.as_ref().cloned().unwrap_or_default();
             let research_slots_vec = research_slots.as_ref().cloned().unwrap_or_default();
             let troops_slots_vec = troops_slots.as_ref().cloned().unwrap_or_default();
             
-            // Track which players have predetermined slots to avoid double-scheduling
-            let mut predetermined_player_ids = HashSet::new();
+            // Collect predetermined slot numbers for each day
+            // Also track which players have research slot 1 predetermined
+            let mut research_slot1_players: Vec<(String, String)> = Vec::new(); // (alliance, name)
             
             for pred_slot in &config.predetermined_slots {
                 let slot_num = match pred_slot.day.as_str() {
@@ -2328,26 +2482,170 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
                 };
                 
                 if let Some(slot) = slot_num {
-                    // Create a synthetic player_id for predetermined slots (use name + alliance as ID)
-                    let player_id = format!("PRED-{}-{}", pred_slot.alliance, pred_slot.name);
-                    predetermined_player_ids.insert(player_id.clone());
+                    match pred_slot.day.as_str() {
+                        "construction" => {
+                            construction_predetermined_slots.insert(slot);
+                        },
+                        "research" => {
+                            research_predetermined_slots.insert(slot);
+                            // Track players with research slot 1
+                            if slot == 1 {
+                                research_slot1_players.push((pred_slot.alliance.clone(), pred_slot.name.clone()));
+                            }
+                        },
+                        "troops" => {
+                            troops_predetermined_slots.insert(slot);
+                        },
+                        _ => {},
+                    }
+                }
+            }
+            
+            // If someone has research slot 1 predetermined, they must also have the last construction slot
+            // Find the last construction slot from all available construction slots
+            if !research_slot1_players.is_empty() {
+                let last_construction_slot = entries.iter()
+                    .flat_map(|e| &e.construction_available_slots)
+                    .max()
+                    .copied()
+                    .unwrap_or(49); // Fallback to 49 if no slots found
+                
+                // Add the last construction slot as predetermined for each player with research slot 1
+                for (alliance, name) in &research_slot1_players {
+                    // Check if this player already has a construction predetermined slot
+                    let already_has_construction = config.predetermined_slots.iter().any(|pred| {
+                        pred.day == "construction" && pred.alliance == *alliance && pred.name == *name
+                    });
                     
-                    // Create scheduled appointment for predetermined slot
+                    // Only add if they don't already have a construction predetermined slot
+                    if !already_has_construction {
+                        construction_predetermined_slots.insert(last_construction_slot);
+                    }
+                }
+            }
+            
+            // Filter entries per day - only remove players from days where they have predetermined slots
+            // This allows players to still be scheduled on other days where they don't have predetermined slots
+            // Special case: If a player has research slot 1 predetermined, they also get the last construction slot,
+            // so they should be filtered out from construction day scheduling as well
+            let construction_entries_filtered: Vec<AppointmentEntry> = entries.iter()
+                .filter(|entry| {
+                    // Filter out if they have a construction predetermined slot
+                    let has_construction_pred = config.predetermined_slots.iter().any(|pred| {
+                        pred.day == "construction" &&
+                        pred.alliance.trim().eq_ignore_ascii_case(&entry.alliance.trim()) && 
+                        pred.name.trim().eq_ignore_ascii_case(&entry.name.trim())
+                    });
+                    
+                    // Also filter out if they have research slot 1 predetermined (they get last construction slot automatically)
+                    // Use the already-calculated research_slot1_players list
+                    let has_research_slot1 = research_slot1_players.iter().any(|(alliance, name)| {
+                        alliance.trim().eq_ignore_ascii_case(&entry.alliance.trim()) && 
+                        name.trim().eq_ignore_ascii_case(&entry.name.trim())
+                    });
+                    
+                    !has_construction_pred && !has_research_slot1
+                })
+                .cloned()
+                .collect();
+            
+            let research_entries_filtered: Vec<AppointmentEntry> = entries.iter()
+                .filter(|entry| {
+                    // Only filter out if they have a research predetermined slot
+                    let has_research_pred = config.predetermined_slots.iter().any(|pred| {
+                        pred.day == "research" &&
+                        pred.alliance.trim().eq_ignore_ascii_case(&entry.alliance.trim()) && 
+                        pred.name.trim().eq_ignore_ascii_case(&entry.name.trim())
+                    });
+                    !has_research_pred
+                })
+                .cloned()
+                .collect();
+            
+            let troops_entries_filtered: Vec<AppointmentEntry> = entries.iter()
+                .filter(|entry| {
+                    // Only filter out if they have a troops predetermined slot
+                    let has_troops_pred = config.predetermined_slots.iter().any(|pred| {
+                        pred.day == "troops" &&
+                        pred.alliance.trim().eq_ignore_ascii_case(&entry.alliance.trim()) && 
+                        pred.name.trim().eq_ignore_ascii_case(&entry.name.trim())
+                    });
+                    !has_troops_pred
+                })
+                .cloned()
+                .collect();
+            
+            // Generate schedules with day-specific filtered entries, passing predetermined slots as pre_locked_slots
+            // This ensures predetermined slots are respected from the start, but players can still be scheduled on other days
+            let mut construction_schedule = schedule_construction_day_with_locked(&construction_entries_filtered, &construction_predetermined_slots);
+            let mut research_schedule = schedule_research_day_with_locked(&research_entries_filtered, &construction_schedule, &research_predetermined_slots);
+            let mut troops_schedule = schedule_troops_day_with_locked(&troops_entries_filtered, &troops_predetermined_slots);
+            
+            // Find the last construction slot for players with research slot 1
+            let last_construction_slot = entries.iter()
+                .flat_map(|e| &e.construction_available_slots)
+                .max()
+                .copied()
+                .unwrap_or(49);
+            
+            // Apply predetermined slots to the schedules (insert the actual appointments)
+            for pred_slot in &config.predetermined_slots {
+                let slot_num = match pred_slot.day.as_str() {
+                    "construction" => {
+                        time_to_slot(&pred_slot.time, &construction_slots_vec)
+                    },
+                    "research" => {
+                        time_to_slot(&pred_slot.time, &research_slots_vec)
+                    },
+                    "troops" => {
+                        time_to_slot(&pred_slot.time, &troops_slots_vec)
+                    },
+                    _ => None,
+                };
+                
+                if let Some(slot) = slot_num {
+                    let player_id = format!("PRED-{}-{}", pred_slot.alliance, pred_slot.name);
                     let appointment = ScheduledAppointment {
-                        player_id,
+                        player_id: player_id.clone(),
                         name: pred_slot.name.clone(),
                         alliance: pred_slot.alliance.clone(),
                         slot,
-                        priority_score: 9999, // High priority to ensure it's kept
+                        priority_score: 9999,
                     };
                     
-                    // Apply to appropriate schedule
                     match pred_slot.day.as_str() {
                         "construction" => {
                             construction_schedule.appointments.insert(slot, appointment);
                         },
                         "research" => {
                             research_schedule.appointments.insert(slot, appointment);
+                            
+                            // If this is research slot 1, also create construction last slot appointment
+                            if slot == 1 {
+                                // Check if they already have a construction predetermined slot
+                                let already_has_construction = config.predetermined_slots.iter().any(|pred| {
+                                    pred.day == "construction" && pred.alliance == pred_slot.alliance && pred.name == pred_slot.name
+                                });
+                                
+                                // Only add if they don't already have a construction predetermined slot
+                                if !already_has_construction {
+                                    // Remove any existing construction appointments for this player
+                                    // (in case they were scheduled normally before we filtered them out)
+                                    construction_schedule.appointments.retain(|_, appt| {
+                                        !(appt.alliance.trim().eq_ignore_ascii_case(&pred_slot.alliance.trim()) && 
+                                          appt.name.trim().eq_ignore_ascii_case(&pred_slot.name.trim()))
+                                    });
+                                    
+                                    let construction_appointment = ScheduledAppointment {
+                                        player_id: player_id.clone(),
+                                        name: pred_slot.name.clone(),
+                                        alliance: pred_slot.alliance.clone(),
+                                        slot: last_construction_slot,
+                                        priority_score: 9999,
+                                    };
+                                    construction_schedule.appointments.insert(last_construction_slot, construction_appointment);
+                                }
+                            }
                         },
                         "troops" => {
                             troops_schedule.appointments.insert(slot, appointment);
@@ -2357,67 +2655,21 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
                 }
             }
             
-            // Remove any entries from form submissions that conflict with predetermined slots
-            // (if a player was manually assigned a slot, remove them from normal scheduling)
-            let entries_filtered: Vec<AppointmentEntry> = entries.iter()
-                .filter(|entry| {
-                    // Check if this entry matches a predetermined slot (same alliance + name)
-                    !config.predetermined_slots.iter().any(|pred| {
-                        pred.alliance == entry.alliance && pred.name == entry.name
-                    })
-                })
-                .cloned()
-                .collect();
-            
-            // Re-generate schedules with filtered entries (but keep predetermined slots)
-            if entries_filtered.len() != entries.len() {
-                // Only regenerate if we filtered anything
-                construction_schedule = schedule_construction_day(&entries_filtered);
-                research_schedule = schedule_research_day(&entries_filtered, &construction_schedule);
-                troops_schedule = schedule_troops_day(&entries_filtered);
-                
-                // Re-apply predetermined slots (they may have been overwritten)
-                for pred_slot in &config.predetermined_slots {
-                    let slot_num = match pred_slot.day.as_str() {
-                        "construction" => {
-                            time_to_slot(&pred_slot.time, &construction_slots_vec)
-                        },
-                        "research" => {
-                            time_to_slot(&pred_slot.time, &research_slots_vec)
-                        },
-                        "troops" => {
-                            time_to_slot(&pred_slot.time, &troops_slots_vec)
-                        },
-                        _ => None,
-                    };
-                    
-                    if let Some(slot) = slot_num {
-                        let player_id = format!("PRED-{}-{}", pred_slot.alliance, pred_slot.name);
-                        let appointment = ScheduledAppointment {
-                            player_id,
-                            name: pred_slot.name.clone(),
-                            alliance: pred_slot.alliance.clone(),
-                            slot,
-                            priority_score: 9999,
-                        };
-                        
-                        match pred_slot.day.as_str() {
-                            "construction" => {
-                                construction_schedule.appointments.insert(slot, appointment);
-                            },
-                            "research" => {
-                                research_schedule.appointments.insert(slot, appointment);
-                            },
-                            "troops" => {
-                                troops_schedule.appointments.insert(slot, appointment);
-                            },
-                            _ => {},
-                        }
-                    }
-                }
-            }
+            (construction_schedule, research_schedule, troops_schedule)
+        } else {
+            // No predetermined slots, generate normally
+            let construction_schedule = schedule_construction_day(&entries);
+            let research_schedule = schedule_research_day(&entries, &construction_schedule);
+            let troops_schedule = schedule_troops_day(&entries);
+            (construction_schedule, research_schedule, troops_schedule)
         }
-    }
+    } else {
+        // No form config, generate normally
+        let construction_schedule = schedule_construction_day(&entries);
+        let research_schedule = schedule_research_day(&entries, &construction_schedule);
+        let troops_schedule = schedule_troops_day(&entries);
+        (construction_schedule, research_schedule, troops_schedule)
+    };
     
     // Create schedule data
     let schedule_data = ScheduleData {
@@ -2811,6 +3063,7 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
             .service(web::resource("/{account_name}/{server}/admin").route(web::get().to(admin_page)))
             // Admin form management routes
             .service(web::resource("/{account_name}/{server}/api/form/create").to(create_form))
+            .service(web::resource("/{account_name}/{server}/api/form/config").route(web::put().to(update_form_config)))
             .service(web::resource("/{account_name}/{server}/api/form/current").route(web::get().to(get_current_form_info)))
             .service(web::resource("/{account_name}/{server}/api/form/previous").route(web::get().to(get_previous_form_config)))
             .service(web::resource("/{account_name}/{server}/api/form/download-csv").route(web::get().to(download_form_csv)))

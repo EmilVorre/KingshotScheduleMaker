@@ -7,6 +7,11 @@ use super::move_chain::{find_move_chain, apply_move_chain};
 /// Schedules appointments for Construction day with smart slot ranking and stealing
 /// Prioritizes the last slot for people who want research and have slot 1 available
 pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
+    schedule_construction_day_with_locked(entries, &HashSet::new())
+}
+
+/// Schedules appointments for Construction day with pre-locked slots
+pub fn schedule_construction_day_with_locked(entries: &[AppointmentEntry], pre_locked_slots: &HashSet<u8>) -> DaySchedule {
     // Filter candidates who want construction
     let candidates: Vec<&AppointmentEntry> = entries
         .iter()
@@ -61,7 +66,7 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
     let slot_rankings = calculate_slot_rankings(&available_slots_list);
     
     let mut schedule: HashMap<u8, ScheduledAppointment> = HashMap::new();
-    let mut used_slots = HashSet::new();
+    let mut used_slots = pre_locked_slots.clone();
     let mut unassigned = Vec::new();
     
     // Create a map from player_id to entry for quick lookup

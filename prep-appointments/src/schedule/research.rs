@@ -7,16 +7,22 @@ use super::generic::schedule_day_generic_with_locked_slots;
 /// Schedules appointments for Research day with smart slot ranking and stealing
 /// The person in the last slot of construction day must be in slot 1 of research day
 pub fn schedule_research_day(entries: &[AppointmentEntry], construction_schedule: &DaySchedule) -> DaySchedule {
+    schedule_research_day_with_locked(entries, construction_schedule, &HashSet::new())
+}
+
+/// Schedules appointments for Research day with pre-locked slots
+pub fn schedule_research_day_with_locked(entries: &[AppointmentEntry], construction_schedule: &DaySchedule, pre_locked_slots: &HashSet<u8>) -> DaySchedule {
     use std::collections::HashMap;
     
     let mut schedule: HashMap<u8, ScheduledAppointment> = HashMap::new();
-    let mut used_slots = HashSet::new();
+    let mut used_slots = pre_locked_slots.clone();
     let mut locked_player_id: Option<String> = None;
     
     // Find the last slot from construction schedule (the highest slot number)
     let last_construction_slot = construction_schedule.appointments.keys().max().copied();
     
     // Check if construction day has someone in the last slot
+    // BUT: Don't override slot 1 if it's already predetermined (in pre_locked_slots/used_slots)
     if let Some(last_slot) = last_construction_slot {
         if let Some(construction_appt) = construction_schedule.appointments.get(&last_slot) {
             let player_id = &construction_appt.player_id;
@@ -24,7 +30,8 @@ pub fn schedule_research_day(entries: &[AppointmentEntry], construction_schedule
             // Find the entry for this player
             if let Some(entry) = entries.iter().find(|e| e.player_id == *player_id) {
                 // Check if they want research and have slot 1 available
-                if entry.wants_research && entry.research_available_slots.contains(&1) {
+                // AND slot 1 is not already predetermined/locked
+                if entry.wants_research && entry.research_available_slots.contains(&1) && !used_slots.contains(&1) {
                     // Assign them to slot 1 on research day - this is locked and cannot be changed
                     schedule.insert(1, ScheduledAppointment {
                         player_id: entry.player_id.clone(),
