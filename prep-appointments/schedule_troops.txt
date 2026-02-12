@@ -1,9 +1,9 @@
 ** Troops Training Day **
 00:00 [ASC] Skitique
-00:15 [ASC] Royal Alien
-00:45 [ASC] BongyTheMurderer
+00:15 [ASC] BongyTheMurderer
+00:45 [ASC] Hokies
 01:15 [TCM] LionessKat
-01:45 [ASC] Hokies
+01:45 [ASC] Royal Alien
 02:15 [ASC] Reinhardt
 02:45 [APX] Cherry skies
 03:15 [APX] MissCherry
@@ -13,38 +13,38 @@
 05:15 [DFM] New Ino
 05:45 [TCM] Driec
 06:15 [TCM] Thaloryn
-06:45 [GUN] Kaevor
+06:45 [EMPTY]
 07:15 [TCM] Abiziana
 07:45 [APX] Grecorix
-08:15 [APX] Mili
+08:15 [EMPTY]
 08:45 [GUN] Amyrlin
-09:15 [DFM] ABI
-09:45 [EMPTY]
-10:15 [APX] Technicolor
-10:45 [EMPTY]
-11:15 [EMPTY]
-11:45 [GUN] Unicorse
+09:15 [APX] Mili
+09:45 [APX] Technicolor
+10:15 [DFM] ᏚᎮᏋᏃᎥ
+10:45 [DFM] ABI
+11:15 [TCM] Moes
+11:45 [EMPTY]
 12:15 [TCM] Wiglag
-12:45 [ASC] Tilly
+12:45 [GUN] Kaevor
 13:15 [TCM] LordFartquaad
 13:45 [TCM] Tydimus
 14:15 [APX] Tugboat
-14:45 [TCM] Moes
-15:15 [DFM] ᏚᎮᏋᏃᎥ
+14:45 [TCM] Rotad
+15:15 [ASC] Tilly
 15:45 [APX] Lord Peso
 16:15 [APX] Wang
-16:45 [TCM] Poora1m
-17:15 [DFM] Luden
-17:45 [KAT] Vagabond
-18:15 [DFM] OkernRules
+16:45 [DFM] Luden
+17:15 [KAT] Vagabond
+17:45 [GUN] Unicorse
+18:15 [TCM] Poora1m
 18:45 [TCM] Woey
 19:15 [APX] Oden
 19:45 [APX] Lil Morzilla
-20:15 [TCM] Chernabog
-20:45 [GUN] RamseClause
+20:15 [APX] Atriox
+20:45 [DFM] OkernRules
 21:15 [TCM] KlausThaler
-21:45 [APX] Atriox
-22:15 [TCM] Rotad
+21:45 [TCM] Chernabog
+22:15 [GUN] RamseClause
 22:45 [TCM] Rhasky
 23:15 [ASC] Badsanta
 23:45 [ASC] Aliothman
