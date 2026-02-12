@@ -7,23 +7,36 @@ use super::move_chain::{find_move_chain, apply_move_chain};
 /// Schedules appointments for Construction day with smart slot ranking and stealing
 /// Prioritizes the last slot for people who want research and have slot 1 available
 pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
-    schedule_construction_day_with_locked(entries, &HashSet::new())
+    schedule_construction_day_with_locked(entries, &HashSet::new(), None)
 }
 
 /// Schedules appointments for Construction day with pre-locked slots
-pub fn schedule_construction_day_with_locked(entries: &[AppointmentEntry], pre_locked_slots: &HashSet<u8>) -> DaySchedule {
+/// 
+/// # Arguments
+/// * `entries` - Player appointment entries
+/// * `pre_locked_slots` - Slots that are reserved (e.g. predetermined) and cannot be assigned
+/// * `last_slot_override` - When provided, use this as the "last slot" for research handoff priority.
+///   When None, infers from candidates' available slots (fallback 49). Prefer passing from form config
+///   when available to handle custom time ranges correctly.
+pub fn schedule_construction_day_with_locked(
+    entries: &[AppointmentEntry],
+    pre_locked_slots: &HashSet<u8>,
+    last_slot_override: Option<u8>,
+) -> DaySchedule {
     // Filter candidates who want construction
     let candidates: Vec<&AppointmentEntry> = entries
         .iter()
         .filter(|e| e.wants_construction && !e.construction_available_slots.is_empty())
         .collect();
     
-    // Find the maximum slot number (last slot) from all construction available slots
-    let last_slot = candidates.iter()
-        .flat_map(|e| &e.construction_available_slots)
-        .max()
-        .copied()
-        .unwrap_or(49); // Fallback to 49 if no slots found (shouldn't happen)
+    // Determine last slot: use override from form config when provided, otherwise infer from candidates
+    let last_slot = last_slot_override.unwrap_or_else(|| {
+        candidates.iter()
+            .flat_map(|e| &e.construction_available_slots)
+            .max()
+            .copied()
+            .unwrap_or(49)
+    });
     
     // Separate candidates into two groups:
     // 1. Those who want research and have slot 1 available (priority for last slot)

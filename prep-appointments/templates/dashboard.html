@@ -772,6 +772,16 @@
                                 </div>
                                 
                                 <div class="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
+                                    <div class="mb-4 flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            id="appendCheckbox"
+                                            v-model="appendToSchedule"
+                                            class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500/50">
+                                        <label for="appendCheckbox" class="ml-2 text-gray-300">
+                                            Append to existing schedule (fill only empty slots, keep current assignments)
+                                        </label>
+                                    </div>
                                     <button 
                                         @click="handleGenerateSchedule"
                                         :disabled="generatingSchedule"
@@ -984,6 +994,7 @@
                     // Schedule generation
                     generatingSchedule: false,
                     scheduleGenStatus: null,
+                    appendToSchedule: false,
                     // Standard intro text (fixed, cannot be changed)
                     standardIntroText: 'Fill out this form to apply for Chief Minister (CM) and Noble Advisor (NA) appointments.\n\nSchedule:\n- Construction Day (Monday) [CM]\n- Research Day (Tuesday) [CM]\n- Troops Training Day (Thursday) [NA]\n\nRequirements:\n\n- Form must be filled out in order to be considered for an appointment during SvS preparation week. \n- Form must be filled out by THE SUNDAY OF MATCHMAKING.\n- Form filled out after the deadline will be added to the "Late" submission wait list.\n- Rally leaders and rally leader substitutes may be given priority (if necessary).\n- Verification of items, speedups, and resources may be requested (eg. during situations where the score is very close in points and to make sure our state wins by ensuring appointments go to players who can maximize points).\n\n\nFor more information:\n- Contact form support: #140 [COB]Vor and /or the current Minister of Justice if you have questions on filling out this form or changes to your form submission!',
                     config: {
@@ -1500,7 +1511,8 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
-                            }
+                            },
+                            body: JSON.stringify({ append: this.appendToSchedule })
                         });
                         
                         let data;

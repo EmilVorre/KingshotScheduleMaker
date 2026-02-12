@@ -9,7 +9,8 @@ A Rust-based appointment scheduling system for SvS Preparation Week with a web i
 - **Smart Scheduling**: Automatic scheduling with priority-based slot assignment from form submissions
 - **Manual Schedule Editing**: Click-to-edit schedule slots to manually assign or change players
 - **Slot Stealing**: Advanced algorithm that can move players up to 5 levels deep to optimize assignments
-- **Predetermined Slots**: Pre-assign specific time slots to players before schedule generation
+- **Predetermined Slots**: Pre-assign specific time slots to players before schedule generation. Bidirectional link: assigning research slot 1 automatically gives construction last slot, and assigning construction last slot automatically gives research slot 1.
+- **Append Mode**: Option to append to an existing schedule instead of replacing it—keeps current assignments and fills only empty slots with new form submissions.
 - **Day-Specific Logic**: 
   - Construction Day: Prioritizes slot 49 for players who want research and have slot 1 available
   - Research Day: Automatically locks slot 1 for the player in Construction Day's slot 49

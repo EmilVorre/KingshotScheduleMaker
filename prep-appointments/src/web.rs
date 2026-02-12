@@ -1023,8 +1023,14 @@ async fn get_schedule(
                 research_slots.as_ref().map(|v| v.as_slice()),
                 troops_slots.as_ref().map(|v| v.as_slice()),
             ) {
-                // Generate schedules
-                let construction_schedule = schedule_construction_day(&entries);
+                // Generate schedules (pass last_slot from form config when available)
+                let last_slot_override = construction_slots.as_ref()
+                    .and_then(|slots| slots.iter().map(|(s, _)| *s).max());
+                let construction_schedule = schedule_construction_day_with_locked(
+                    &entries,
+                    &HashSet::new(),
+                    last_slot_override,
+                );
                 let research_schedule = schedule_research_day(&entries, &construction_schedule);
                 let troops_schedule = schedule_troops_day(&entries);
                 
@@ -2290,8 +2296,19 @@ async fn list_servers(state: web::Data<AppState>) -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().json(servers))
 }
 
+#[derive(Deserialize)]
+struct GenerateScheduleRequest {
+    #[serde(default)]
+    append: bool,
+}
+
 // Generate schedule endpoint (from form submissions)
-async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> Result<HttpResponse> {
+async fn generate_schedule_api(
+    payload: Option<web::Json<GenerateScheduleRequest>>,
+    session: Session,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse> {
+    let append = payload.as_ref().map(|p| p.append).unwrap_or(false);
     // Get account_name and server_number from session
     let account_name: String = match session.get("account_name") {
         Ok(Some(name)) => name,
@@ -2389,6 +2406,72 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
         })));
     }
     
+    // Load existing schedule when appending (from in-memory state or disk)
+    // Note: Don't hold lock during load_schedule (file I/O) to avoid blocking other requests
+    let existing_schedule = if append {
+        let maybe_cached = {
+            let schedules = state.schedules.lock().unwrap();
+            schedules.get(&key).cloned()
+        };
+        maybe_cached.or_else(|| load_schedule(&state.data_dir, &account_name, server_number))
+    } else {
+        None
+    };
+    
+    let (entries_to_use, existing_construction_slots, existing_research_slots, existing_troops_slots, existing_appointments) = if let Some(ref existing) = existing_schedule {
+        // Collect existing slot numbers per day (these will be locked)
+        let existing_construction_slots: HashSet<u8> = existing.construction_schedule.as_ref()
+            .map(|s| s.appointments.keys().copied().collect())
+            .unwrap_or_default();
+        let existing_research_slots: HashSet<u8> = existing.research_schedule.as_ref()
+            .map(|s| s.appointments.keys().copied().collect())
+            .unwrap_or_default();
+        let existing_troops_slots: HashSet<u8> = existing.troops_schedule.as_ref()
+            .map(|s| s.appointments.keys().copied().collect())
+            .unwrap_or_default();
+        
+        // Collect (alliance, name) of players already in schedule - filter them from entries (case-insensitive)
+        let mut scheduled_players: HashSet<(String, String)> = HashSet::new();
+        for appt in existing.construction_schedule.as_ref().iter().flat_map(|s| s.appointments.values()) {
+            scheduled_players.insert((appt.alliance.trim().to_lowercase(), appt.name.trim().to_lowercase()));
+        }
+        for appt in existing.research_schedule.as_ref().iter().flat_map(|s| s.appointments.values()) {
+            scheduled_players.insert((appt.alliance.trim().to_lowercase(), appt.name.trim().to_lowercase()));
+        }
+        for appt in existing.troops_schedule.as_ref().iter().flat_map(|s| s.appointments.values()) {
+            scheduled_players.insert((appt.alliance.trim().to_lowercase(), appt.name.trim().to_lowercase()));
+        }
+        
+        let entries_filtered: Vec<AppointmentEntry> = entries.iter()
+            .filter(|e| !scheduled_players.contains(&(e.alliance.trim().to_lowercase(), e.name.trim().to_lowercase())))
+            .cloned()
+            .collect();
+        
+        (
+            entries_filtered,
+            existing_construction_slots,
+            existing_research_slots,
+            existing_troops_slots,
+            (existing.construction_schedule.clone(), existing.research_schedule.clone(), existing.troops_schedule.clone()),
+        )
+    } else {
+        (
+            entries.clone(),
+            HashSet::new(),
+            HashSet::new(),
+            HashSet::new(),
+            (None, None, None),
+        )
+    };
+    
+    // When appending: if all form submissions are already in the schedule, nothing to add
+    if append && existing_schedule.is_some() && entries_to_use.is_empty() {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "message": "All form submissions are already in the schedule. No new assignments to add."
+        })));
+    }
+    
     // Helper function to convert time string to slot number using form's time configuration
     // Falls back to default time mapping if custom slots are empty or time not found
     let time_to_slot = |time_str: &str, time_slots: &[(u8, String)]| -> Option<u8> {
@@ -2463,9 +2546,25 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
             let research_slots_vec = research_slots.as_ref().cloned().unwrap_or_default();
             let troops_slots_vec = troops_slots.as_ref().cloned().unwrap_or_default();
             
-            // Collect predetermined slot numbers for each day
-            // Also track which players have research slot 1 predetermined
-            let mut research_slot1_players: Vec<(String, String)> = Vec::new(); // (alliance, name)
+            // Validation: Check for duplicate predetermined slots (same day + time)
+            let mut seen_slots: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
+            for pred_slot in &config.predetermined_slots {
+                let slot_key = format!("{}:{}", pred_slot.day, pred_slot.time.trim());
+                if let Some((prev_alliance, prev_name)) = seen_slots.get(&slot_key) {
+                    return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                        "success": false,
+                        "error": format!(
+                            "Conflict: Multiple players predetermined for {} {} ({} {} and {} {})",
+                            pred_slot.day, pred_slot.time, prev_alliance, prev_name, pred_slot.alliance, pred_slot.name
+                        )
+                    })));
+                }
+                seen_slots.insert(slot_key, (pred_slot.alliance.clone(), pred_slot.name.clone()));
+            }
+            
+            // Validation: Resolve all predetermined slots and check for invalid times
+            let mut invalid_slots: Vec<String> = Vec::new();
+            let mut resolved_slots: Vec<(String, u8, String, String)> = Vec::new(); // day, slot, alliance, name
             
             for pred_slot in &config.predetermined_slots {
                 let slot_num = match pred_slot.day.as_str() {
@@ -2481,34 +2580,150 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
                     _ => None,
                 };
                 
-                if let Some(slot) = slot_num {
-                    match pred_slot.day.as_str() {
-                        "construction" => {
-                            construction_predetermined_slots.insert(slot);
-                        },
-                        "research" => {
-                            research_predetermined_slots.insert(slot);
-                            // Track players with research slot 1
-                            if slot == 1 {
-                                research_slot1_players.push((pred_slot.alliance.clone(), pred_slot.name.clone()));
-                            }
-                        },
-                        "troops" => {
-                            troops_predetermined_slots.insert(slot);
-                        },
-                        _ => {},
+                match slot_num {
+                    Some(slot) => {
+                        resolved_slots.push((pred_slot.day.clone(), slot, pred_slot.alliance.clone(), pred_slot.name.clone()));
+                    },
+                    None => {
+                        invalid_slots.push(format!("{} {} ({})", pred_slot.day, pred_slot.time, pred_slot.name));
                     }
                 }
             }
             
+            if !invalid_slots.is_empty() {
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "success": false,
+                    "error": format!(
+                        "Invalid or unrecognized time slot(s) for predetermined assignments: {}",
+                        invalid_slots.join("; ")
+                    )
+                })));
+            }
+            
+            // Validation: At most one player can have research slot 1 predetermined (either explicitly or via construction last slot)
+            let research_slot1_from_resolved = resolved_slots.iter()
+                .filter(|(day, slot, _, _)| day == "research" && *slot == 1)
+                .count();
+            if research_slot1_from_resolved > 1 {
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "success": false,
+                    "error": "Only one player can have research slot 1 predetermined. Multiple players were configured for research slot 1."
+                })));
+            }
+            
+            // Use last slot from form config (not from entries) for correct research handoff
+            let last_construction_slot = construction_slots_vec.iter()
+                .map(|(s, _)| *s)
+                .max()
+                .unwrap_or(49);
+            
+            // Collect predetermined slot numbers for each day
+            // Also track: research_slot1_players (get construction last slot), construction_last_slot_players (get research slot 1)
+            let mut research_slot1_players: Vec<(String, String)> = Vec::new(); // (alliance, name)
+            let mut construction_last_slot_players: Vec<(String, String)> = Vec::new(); // (alliance, name)
+            
+            for (day, slot, alliance, name) in &resolved_slots {
+                match day.as_str() {
+                    "construction" => {
+                        construction_predetermined_slots.insert(*slot);
+                        if *slot == last_construction_slot {
+                            construction_last_slot_players.push((alliance.clone(), name.clone()));
+                        }
+                    },
+                    "research" => {
+                        research_predetermined_slots.insert(*slot);
+                        if *slot == 1 {
+                            research_slot1_players.push((alliance.clone(), name.clone()));
+                        }
+                    },
+                    "troops" => {
+                        troops_predetermined_slots.insert(*slot);
+                    },
+                    _ => {},
+                }
+            }
+            
+            // Build effective research slot 1 players (for validation)
+            let mut effective_research_slot1: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+            for (a, n) in &research_slot1_players {
+                effective_research_slot1.insert((a.clone(), n.clone()));
+            }
+            for (a, n) in &construction_last_slot_players {
+                effective_research_slot1.insert((a.clone(), n.clone()));
+            }
+            if effective_research_slot1.len() > 1 {
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "success": false,
+                    "error": "Conflict: Only one player can have the research slot 1 + construction last slot link. You have multiple players for research slot 1 and/or construction last slot."
+                })));
+            }
+            
+            // When appending: validate that predetermined slots don't conflict with existing schedule (different player in same slot)
+            if append {
+                let check_conflict = |existing_slots: &HashSet<u8>, existing_appts: Option<&DaySchedule>, slot: u8, alliance: &str, name: &str| {
+                    if !existing_slots.contains(&slot) {
+                        return false;
+                    }
+                    let Some(appt) = existing_appts.and_then(|s| s.appointments.get(&slot)) else {
+                        return false;
+                    };
+                    !appt.alliance.trim().eq_ignore_ascii_case(alliance) || !appt.name.trim().eq_ignore_ascii_case(name)
+                };
+                for (day, slot, alliance, name) in &resolved_slots {
+                    let conflict = match day.as_str() {
+                        "construction" => check_conflict(&existing_construction_slots, existing_appointments.0.as_ref(), *slot, alliance, name),
+                        "research" => check_conflict(&existing_research_slots, existing_appointments.1.as_ref(), *slot, alliance, name),
+                        "troops" => check_conflict(&existing_troops_slots, existing_appointments.2.as_ref(), *slot, alliance, name),
+                        _ => false,
+                    };
+                    if conflict {
+                        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                            "success": false,
+                            "error": format!(
+                                "Append conflict: Predetermined slot {} {} for {} {} is already filled by a different player in the existing schedule. Clear the slot manually or generate without append.",
+                                day, slot, alliance, name
+                            )
+                        })));
+                    }
+                }
+                // Also validate research slot 1 / construction last slot link: if existing has someone in research slot 1 or construction last slot, predetermined for a different person would conflict
+                if !effective_research_slot1.is_empty() {
+                    let existing_r1 = existing_appointments.1.as_ref().and_then(|s| s.appointments.get(&1));
+                    let existing_last = existing_appointments.0.as_ref().and_then(|s| s.appointments.get(&last_construction_slot));
+                    let pred_r1_player = effective_research_slot1.iter().next();
+                    if let (Some(ex_r1), Some(pred)) = (existing_r1, pred_r1_player) {
+                        if !ex_r1.alliance.trim().eq_ignore_ascii_case(&pred.0) || !ex_r1.name.trim().eq_ignore_ascii_case(&pred.1) {
+                            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                                "success": false,
+                                "error": "Append conflict: Existing schedule has a different player in research slot 1. The research slot 1 + construction last slot link requires one player for both. Clear research slot 1 and construction last slot in the existing schedule first, or generate without append."
+                            })));
+                        }
+                    }
+                    if let (Some(ex_last), Some(pred)) = (existing_last, pred_r1_player) {
+                        if !ex_last.alliance.trim().eq_ignore_ascii_case(&pred.0) || !ex_last.name.trim().eq_ignore_ascii_case(&pred.1) {
+                            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                                "success": false,
+                                "error": "Append conflict: Existing schedule has a different player in construction last slot. The research slot 1 + construction last slot link requires one player for both. Clear research slot 1 and construction last slot in the existing schedule first, or generate without append."
+                            })));
+                        }
+                    }
+                }
+            }
+            
+            // When appending, merge existing schedule slots with predetermined slots (both are locked)
+            construction_predetermined_slots.extend(&existing_construction_slots);
+            research_predetermined_slots.extend(&existing_research_slots);
+            troops_predetermined_slots.extend(&existing_troops_slots);
+            
+            // Add research slot 1 to pre-locked slots for construction last slot players (they get it automatically)
+            for _ in &construction_last_slot_players {
+                research_predetermined_slots.insert(1);
+                break; // Only one slot 1 to add
+            }
+            
+            // Bidirectional link: research slot 1 <-> construction last slot
             // If someone has research slot 1 predetermined, they must also have the last construction slot
-            // Find the last construction slot from all available construction slots
             if !research_slot1_players.is_empty() {
-                let last_construction_slot = entries.iter()
-                    .flat_map(|e| &e.construction_available_slots)
-                    .max()
-                    .copied()
-                    .unwrap_or(49); // Fallback to 49 if no slots found
                 
                 // Add the last construction slot as predetermined for each player with research slot 1
                 for (alliance, name) in &research_slot1_players {
@@ -2528,7 +2743,7 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
             // This allows players to still be scheduled on other days where they don't have predetermined slots
             // Special case: If a player has research slot 1 predetermined, they also get the last construction slot,
             // so they should be filtered out from construction day scheduling as well
-            let construction_entries_filtered: Vec<AppointmentEntry> = entries.iter()
+            let construction_entries_filtered: Vec<AppointmentEntry> = entries_to_use.iter()
                 .filter(|entry| {
                     // Filter out if they have a construction predetermined slot
                     let has_construction_pred = config.predetermined_slots.iter().any(|pred| {
@@ -2549,20 +2764,25 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
                 .cloned()
                 .collect();
             
-            let research_entries_filtered: Vec<AppointmentEntry> = entries.iter()
+            let research_entries_filtered: Vec<AppointmentEntry> = entries_to_use.iter()
                 .filter(|entry| {
-                    // Only filter out if they have a research predetermined slot
+                    // Filter out if they have a research predetermined slot
                     let has_research_pred = config.predetermined_slots.iter().any(|pred| {
                         pred.day == "research" &&
                         pred.alliance.trim().eq_ignore_ascii_case(&entry.alliance.trim()) && 
                         pred.name.trim().eq_ignore_ascii_case(&entry.name.trim())
                     });
-                    !has_research_pred
+                    // Also filter out if they have construction last slot (they get research slot 1 automatically)
+                    let has_construction_last = construction_last_slot_players.iter().any(|(alliance, name)| {
+                        alliance.trim().eq_ignore_ascii_case(&entry.alliance.trim()) && 
+                        name.trim().eq_ignore_ascii_case(&entry.name.trim())
+                    });
+                    !has_research_pred && !has_construction_last
                 })
                 .cloned()
                 .collect();
             
-            let troops_entries_filtered: Vec<AppointmentEntry> = entries.iter()
+            let troops_entries_filtered: Vec<AppointmentEntry> = entries_to_use.iter()
                 .filter(|entry| {
                     // Only filter out if they have a troops predetermined slot
                     let has_troops_pred = config.predetermined_slots.iter().any(|pred| {
@@ -2577,16 +2797,13 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
             
             // Generate schedules with day-specific filtered entries, passing predetermined slots as pre_locked_slots
             // This ensures predetermined slots are respected from the start, but players can still be scheduled on other days
-            let mut construction_schedule = schedule_construction_day_with_locked(&construction_entries_filtered, &construction_predetermined_slots);
+            let mut construction_schedule = schedule_construction_day_with_locked(
+                &construction_entries_filtered,
+                &construction_predetermined_slots,
+                Some(last_construction_slot),
+            );
             let mut research_schedule = schedule_research_day_with_locked(&research_entries_filtered, &construction_schedule, &research_predetermined_slots);
             let mut troops_schedule = schedule_troops_day_with_locked(&troops_entries_filtered, &troops_predetermined_slots);
-            
-            // Find the last construction slot for players with research slot 1
-            let last_construction_slot = entries.iter()
-                .flat_map(|e| &e.construction_available_slots)
-                .max()
-                .copied()
-                .unwrap_or(49);
             
             // Apply predetermined slots to the schedules (insert the actual appointments)
             for pred_slot in &config.predetermined_slots {
@@ -2616,6 +2833,23 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
                     match pred_slot.day.as_str() {
                         "construction" => {
                             construction_schedule.appointments.insert(slot, appointment);
+                            
+                            // If this is construction last slot, also create research slot 1 appointment
+                            if slot == last_construction_slot {
+                                let already_has_research = config.predetermined_slots.iter().any(|pred| {
+                                    pred.day == "research" && pred.alliance == pred_slot.alliance && pred.name == pred_slot.name
+                                });
+                                if !already_has_research {
+                                    let research_appointment = ScheduledAppointment {
+                                        player_id: player_id.clone(),
+                                        name: pred_slot.name.clone(),
+                                        alliance: pred_slot.alliance.clone(),
+                                        slot: 1,
+                                        priority_score: 9999,
+                                    };
+                                    research_schedule.appointments.insert(1, research_appointment);
+                                }
+                            }
                         },
                         "research" => {
                             research_schedule.appointments.insert(slot, appointment);
@@ -2657,18 +2891,51 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
             
             (construction_schedule, research_schedule, troops_schedule)
         } else {
-            // No predetermined slots, generate normally
-            let construction_schedule = schedule_construction_day(&entries);
-            let research_schedule = schedule_research_day(&entries, &construction_schedule);
-            let troops_schedule = schedule_troops_day(&entries);
+            // No predetermined slots, generate normally but pass last_slot from form config when available
+            let last_slot_override = construction_slots.as_ref()
+                .and_then(|slots| slots.iter().map(|(s, _)| *s).max());
+            let construction_schedule = schedule_construction_day_with_locked(
+                &entries_to_use,
+                &existing_construction_slots,
+                last_slot_override,
+            );
+            let research_schedule = schedule_research_day_with_locked(&entries_to_use, &construction_schedule, &existing_research_slots);
+            let troops_schedule = schedule_troops_day_with_locked(&entries_to_use, &existing_troops_slots);
             (construction_schedule, research_schedule, troops_schedule)
         }
     } else {
-        // No form config, generate normally
-        let construction_schedule = schedule_construction_day(&entries);
-        let research_schedule = schedule_research_day(&entries, &construction_schedule);
-        let troops_schedule = schedule_troops_day(&entries);
+        // No form config, generate normally (no last_slot override)
+        let construction_schedule = schedule_construction_day_with_locked(
+            &entries_to_use,
+            &existing_construction_slots,
+            None,
+        );
+        let research_schedule = schedule_research_day_with_locked(&entries_to_use, &construction_schedule, &existing_research_slots);
+        let troops_schedule = schedule_troops_day_with_locked(&entries_to_use, &existing_troops_slots);
         (construction_schedule, research_schedule, troops_schedule)
+    };
+    
+    // When appending, merge existing appointments with new (keep existing, fill empty slots with new)
+    let (construction_schedule, research_schedule, troops_schedule) = {
+        let merge_day = |existing: Option<&DaySchedule>, new: DaySchedule| {
+            let mut merged = existing
+                .map(|e| e.appointments.clone())
+                .unwrap_or_default();
+            for (slot, appt) in new.appointments {
+                if !merged.contains_key(&slot) {
+                    merged.insert(slot, appt);
+                }
+            }
+            DaySchedule {
+                appointments: merged,
+                unassigned: new.unassigned,
+            }
+        };
+        (
+            merge_day(existing_appointments.0.as_ref(), construction_schedule),
+            merge_day(existing_appointments.1.as_ref(), research_schedule),
+            merge_day(existing_appointments.2.as_ref(), troops_schedule),
+        )
     };
     
     // Create schedule data
@@ -2693,9 +2960,16 @@ async fn generate_schedule_api(session: Session, state: web::Data<AppState>) -> 
     // (This ensures stats are up-to-date with the schedule)
     let _ = get_stats(web::Path::from((account_name.clone(), server_number)), state.clone()).await;
     
+    let actually_merged = append && existing_schedule.is_some();
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
-        "message": "Schedule generated successfully from form submissions!"
+        "message": if actually_merged {
+            "Schedule appended successfully! New assignments added to empty slots."
+        } else if append {
+            "No existing schedule found. Generated new schedule from form submissions."
+        } else {
+            "Schedule generated successfully from form submissions!"
+        }
     })))
 }
 
