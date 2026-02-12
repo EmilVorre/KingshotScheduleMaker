@@ -1407,6 +1407,7 @@
                             predetermined_slots: this.predeterminedSlots.map(slot => ({
                                 day: slot.day,
                                 time: slot.time,
+                                player_id: slot.player_id || null,
                                 alliance: slot.alliance,
                                 name: slot.name
                             })),
@@ -1467,6 +1468,7 @@
                                 predetermined_slots: this.predeterminedSlots.map(slot => ({
                                     day: slot.day,
                                     time: slot.time,
+                                    player_id: slot.player_id || null,
                                     alliance: slot.alliance,
                                     name: slot.name
                                 }))
@@ -1580,10 +1582,9 @@
                                 this.currentForm = data.form;
                                 // Load predetermined slots from form config if available
                                 if (data.form.config && data.form.config.predetermined_slots) {
-                                    // Map existing slots to include player_id and lookup state
                                     this.predeterminedSlots = data.form.config.predetermined_slots.map(slot => ({
                                         ...slot,
-                                        player_id: '', // Will need to be reverse-looked up if we want to preserve ID
+                                        player_id: slot.player_id || '',
                                         lookingUp: false,
                                         lookupError: null
                                     }));
