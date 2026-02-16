@@ -530,6 +530,44 @@
                                         </div>
                                     </div>
                                     
+                                    <!-- Current Age in Kingdom -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-amber-400 mb-4">
+                                            <i class="fas fa-coins mr-2"></i>Current Age of Your Kingdom
+                                        </h3>
+                                        <p class="text-sm text-gray-400 mb-4">Choose the current age of your kingdom from the options below.</p>
+                                        <div class="space-y-2">
+                                            <label class="flex items-start gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-600/50 transition-colors" :class="config.construction_truegold_mode === 'pre_truegold' ? 'bg-amber-900/30 border border-amber-600/50' : 'border border-transparent'">
+                                                <input type="radio" v-model="config.construction_truegold_mode" value="pre_truegold" class="mt-1">
+                                                <div>
+                                                    <span class="font-semibold text-white">Pre-truegold</span>
+                                                    <p class="text-sm text-gray-400">Neither truegold, tempered truegold, nor truegold dust unlocked</p>
+                                                </div>
+                                            </label>
+                                            <label class="flex items-start gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-600/50 transition-colors" :class="config.construction_truegold_mode === 'truegold_unlocked' ? 'bg-amber-900/30 border border-amber-600/50' : 'border border-transparent'">
+                                                <input type="radio" v-model="config.construction_truegold_mode" value="truegold_unlocked" class="mt-1">
+                                                <div>
+                                                    <span class="font-semibold text-white">Truegold unlocked</span>
+                                                    <p class="text-sm text-gray-400">Truegold unlocked but not tempered truegold</p>
+                                                </div>
+                                            </label>
+                                            <label class="flex items-start gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-600/50 transition-colors" :class="config.construction_truegold_mode === 'war_academy_unlocked' ? 'bg-amber-900/30 border border-amber-600/50' : 'border border-transparent'">
+                                                <input type="radio" v-model="config.construction_truegold_mode" value="war_academy_unlocked" class="mt-1">
+                                                <div>
+                                                    <span class="font-semibold text-white">War academy unlocked</span>
+                                                    <p class="text-sm text-gray-400">Truegold and truegold dust unlocked, but not tempered truegold</p>
+                                                </div>
+                                            </label>
+                                            <label class="flex items-start gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-600/50 transition-colors" :class="config.construction_truegold_mode === 'tempered_truegold_unlocked' ? 'bg-amber-900/30 border border-amber-600/50' : 'border border-transparent'">
+                                                <input type="radio" v-model="config.construction_truegold_mode" value="tempered_truegold_unlocked" class="mt-1">
+                                                <div>
+                                                    <span class="font-semibold text-white">Tempered truegold unlocked</span>
+                                                    <p class="text-sm text-gray-400">Truegold, tempered truegold, and truegold dust unlocked</p>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
                                     <!-- Construction Day Times -->
                                     <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
                                         <h3 class="text-xl font-bold text-orange-400 mb-4">
@@ -1000,6 +1038,7 @@
                     config: {
                         form_name: '',
                         alliances: [],
+                        construction_truegold_mode: 'truegold_unlocked',
                         construction_times: { start_time: '00:00', end_time: null },
                         research_times: { start_time: '00:00', end_time: null },
                         troops_times: { start_time: '00:00', end_time: null },
@@ -1351,6 +1390,7 @@
                                 this.config.construction_times = data.config.construction_times || { start_time: '00:00', end_time: null };
                                 this.config.research_times = data.config.research_times || { start_time: '00:00', end_time: null };
                                 this.config.troops_times = data.config.troops_times || { start_time: '00:00', end_time: null };
+                                this.config.construction_truegold_mode = data.config.construction_truegold_mode || 'truegold_unlocked';
                                 // Remove "Non of the above" from display (it will be added automatically)
                                 this.config.alliances = (data.config.alliances || []).filter(a => a !== 'Non of the above');
                                 // Always use standard intro text (not editable)
@@ -1392,6 +1432,7 @@
                         const requestBody = {
                             name: (this.config.form_name && this.config.form_name.trim()) || null,
                             alliances: alliances,
+                            construction_truegold_mode: this.config.construction_truegold_mode,
                             construction_times: {
                                 start_time: this.config.construction_times.start_time,
                                 end_time: this.config.construction_times.end_time || null

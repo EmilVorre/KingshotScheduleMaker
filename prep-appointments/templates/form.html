@@ -190,7 +190,7 @@
                                                 :placeholder="t('constructionSpeedupsPlaceholder')">
                                         </div>
                                         
-                                        <div>
+                                        <div v-if="['truegold_unlocked','war_academy_unlocked','tempered_truegold_unlocked'].includes(config.construction_truegold_mode || 'truegold_unlocked')">
                                             <label for="construction_truegold" class="block text-sm font-semibold text-gray-300 mb-2">
                                                 {{ t('constructionTruegoldLabel') }} <img src="/static/icons/Truegold.png" alt="Truegold" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
                                             </label>
@@ -198,10 +198,24 @@
                                                 type="number" 
                                                 id="construction_truegold" 
                                                 v-model.number="form.construction_truegold"
-                                                :required="form.wants_construction"
+                                                :required="form.wants_construction && ['truegold_unlocked','war_academy_unlocked','tempered_truegold_unlocked'].includes(config.construction_truegold_mode || 'truegold_unlocked')"
                                                 min="0"
                                                 class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
                                                 :placeholder="t('constructionTruegoldPlaceholder')">
+                                        </div>
+                                        
+                                        <div v-if="(config.construction_truegold_mode || 'truegold_unlocked') === 'tempered_truegold_unlocked'">
+                                            <label for="construction_tempered_truegold" class="block text-sm font-semibold text-gray-300 mb-2">
+                                                {{ t('constructionTemperedTruegoldLabel') }} <img src="/static/icons/TamperedTruegold.png" alt="Tempered Truegold" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
+                                            </label>
+                                            <input 
+                                                type="number" 
+                                                id="construction_tempered_truegold" 
+                                                v-model.number="form.construction_tempered_truegold"
+                                                :required="form.wants_construction"
+                                                min="0"
+                                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                                :placeholder="t('constructionTemperedTruegoldPlaceholder')">
                                         </div>
                                         
                                         <div>
@@ -261,7 +275,7 @@
                                                 :placeholder="t('researchSpeedupsPlaceholder')">
                                         </div>
                                         
-                                        <div>
+                                        <div v-if="['war_academy_unlocked','tempered_truegold_unlocked'].includes(config.construction_truegold_mode || 'truegold_unlocked')">
                                             <label for="research_truegold_dust" class="block text-sm font-semibold text-gray-300 mb-2">
                                                 {{ t('researchTruegoldDustLabel') }} <img src="/static/icons/TruegoldDust.png" alt="Truegold Dust" class="inline-block w-5 h-5 ml-1 align-middle"> <span class="text-red-400">*</span>
                                             </label>
@@ -269,7 +283,7 @@
                                                 type="number" 
                                                 id="research_truegold_dust" 
                                                 v-model.number="form.research_truegold_dust"
-                                                :required="form.wants_research"
+                                                :required="form.wants_research && ['war_academy_unlocked','tempered_truegold_unlocked'].includes(config.construction_truegold_mode || 'truegold_unlocked')"
                                                 min="0"
                                                 class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
                                                 :placeholder="t('researchTruegoldDustPlaceholder')">
@@ -463,6 +477,8 @@
                             constructionSpeedupsPlaceholder: 'Enter hours',
                             constructionTruegoldLabel: 'How much truegold do you plan to spend?',
                             constructionTruegoldPlaceholder: 'Enter amount',
+                            constructionTemperedTruegoldLabel: 'How much tempered truegold do you plan to spend?',
+                            constructionTemperedTruegoldPlaceholder: 'Enter amount',
                             constructionTimeSlotsLabel: 'What times are you available for your Construction day appointment? (UTC time)',
                             constructionTimeSlotsNote: 'Note: Choose a minimum of 5 times.',
                             constructionTimeSlotsError: 'Please select at least 5 time slots (currently selected: {count})',
@@ -501,6 +517,7 @@
                             pleaseSelectAtLeastOneDay: 'Please select at least one day type (Construction, Research, or Troops)',
                             pleaseEnterConstructionSpeedups: 'Please enter construction speedup hours',
                             pleaseEnterConstructionTruegold: 'Please enter construction truegold amount',
+                            pleaseEnterConstructionTemperedTruegold: 'Please enter construction tempered truegold amount',
                             pleaseSelectConstructionTimeSlots: 'Please select at least 5 construction time slots',
                             pleaseEnterResearchSpeedups: 'Please enter research speedup hours',
                             pleaseEnterResearchTruegoldDust: 'Please enter research truegold dust amount',
@@ -548,6 +565,8 @@
                             constructionSpeedupsPlaceholder: '시간을 입력하세요',
                             constructionTruegoldLabel: '얼마나 많은 순금을 사용할 계획인가요?',
                             constructionTruegoldPlaceholder: '수량을 입력하세요',
+                            constructionTemperedTruegoldLabel: '얼마나 많은 단조 순금을 사용할 계획인가요?',
+                            constructionTemperedTruegoldPlaceholder: '수량을 입력하세요',
                             constructionTimeSlotsLabel: '건설의 날 임명에 사용 가능한 시간은 언제인가요? (UTC 시간)',
                             constructionTimeSlotsNote: '참고: 최소 5개의 시간을 선택하세요.',
                             constructionTimeSlotsError: '최소 5개의 시간대를 선택하세요 (현재 선택됨: {count})',
@@ -585,6 +604,7 @@
                             pleaseSelectAtLeastOneDay: '최소한 하나의 날 유형(건설, 연구 또는 병사)을 선택하세요',
                             pleaseEnterConstructionSpeedups: '건설 속도 향상 시간을 입력하세요',
                             pleaseEnterConstructionTruegold: '건설 순금 수량을 입력하세요',
+                            pleaseEnterConstructionTemperedTruegold: '건설 단조 순금 수량을 입력하세요',
                             pleaseSelectConstructionTimeSlots: '최소 5개의 건설 시간대를 선택하세요',
                             pleaseEnterResearchSpeedups: '연구 속도 향상 시간을 입력하세요',
                             pleaseEnterResearchTruegoldDust: '연구 순금 조각 수량을 입력하세요',
@@ -631,6 +651,8 @@
                             constructionSpeedupsPlaceholder: '輸入小時數',
                             constructionTruegoldLabel: '您計劃花費多少黃金微粒?',
                             constructionTruegoldPlaceholder: '輸入數量',
+                            constructionTemperedTruegoldLabel: '您計劃花費多少淬煉真金?',
+                            constructionTemperedTruegoldPlaceholder: '輸入數量',
                             constructionTimeSlotsLabel: '您何時有空參加建造日任命? (UTC時間)',
                             constructionTimeSlotsNote: '注意：請至少選擇5個時間。',
                             constructionTimeSlotsError: '請至少選擇5個時間段（當前已選擇：{count}）',
@@ -668,6 +690,7 @@
                             pleaseSelectAtLeastOneDay: '請至少選擇一種日期類型（建造、研究或士兵）',
                             pleaseEnterConstructionSpeedups: '請輸入建造加速小時數',
                             pleaseEnterConstructionTruegold: '請輸入建造黃金微粒數量',
+                            pleaseEnterConstructionTemperedTruegold: '請輸入建造淬煉真金數量',
                             pleaseSelectConstructionTimeSlots: '請至少選擇5個建造時間段',
                             pleaseEnterResearchSpeedups: '請輸入研究加速小時數',
                             pleaseEnterResearchTruegoldDust: '請輸入研究黃金微粒數量',
@@ -714,6 +737,8 @@
                             constructionSpeedupsPlaceholder: '時間を入力してください',
                             constructionTruegoldLabel: 'いくらの黄金微粒子を使用する予定ですか？',
                             constructionTruegoldPlaceholder: '数量を入力してください',
+                            constructionTemperedTruegoldLabel: 'いくらの鍛造真金を使用する予定ですか？',
+                            constructionTemperedTruegoldPlaceholder: '数量を入力してください',
                             constructionTimeSlotsLabel: '建設の日の任命に利用可能な時間はいつですか？（UTC時間）',
                             constructionTimeSlotsNote: '注：最低5つの時間を選択してください。',
                             constructionTimeSlotsError: '最低5つの時間帯を選択してください（現在選択中：{count}）',
@@ -751,6 +776,7 @@
                             pleaseSelectAtLeastOneDay: '少なくとも1つの日タイプ（建設、研究、または兵士）を選択してください',
                             pleaseEnterConstructionSpeedups: '建設加速時間を入力してください',
                             pleaseEnterConstructionTruegold: '建設黄金微粒子の数量を入力してください',
+                            pleaseEnterConstructionTemperedTruegold: '建設鍛造真金の数量を入力してください',
                             pleaseSelectConstructionTimeSlots: '少なくとも5つの建設時間帯を選択してください',
                             pleaseEnterResearchSpeedups: '研究加速時間を入力してください',
                             pleaseEnterResearchTruegoldDust: '研究黄金微粒子の数量を入力してください',
@@ -797,6 +823,8 @@
                             constructionSpeedupsPlaceholder: 'Ingrese horas',
                             constructionTruegoldLabel: '¿Cuánto oro verdadero planeas gastar?',
                             constructionTruegoldPlaceholder: 'Ingrese la cantidad',
+                            constructionTemperedTruegoldLabel: '¿Cuánto oro verdadero templado planeas gastar?',
+                            constructionTemperedTruegoldPlaceholder: 'Ingrese la cantidad',
                             constructionTimeSlotsLabel: '¿A qué horas estás disponible para tu cita del día de construcción? (hora UTC)',
                             constructionTimeSlotsNote: 'Nota: Elige un mínimo de 5 horarios.',
                             constructionTimeSlotsError: 'Por favor selecciona al menos 5 horarios (actualmente seleccionados: {count})',
@@ -834,6 +862,7 @@
                             pleaseSelectAtLeastOneDay: 'Por favor selecciona al menos un tipo de día (Construcción, Investigación o Tropas)',
                             pleaseEnterConstructionSpeedups: 'Por favor ingresa las horas de aceleración de construcción',
                             pleaseEnterConstructionTruegold: 'Por favor ingresa la cantidad de oro verdadero de construcción',
+                            pleaseEnterConstructionTemperedTruegold: 'Por favor ingresa la cantidad de oro verdadero templado de construcción',
                             pleaseSelectConstructionTimeSlots: 'Por favor selecciona al menos 5 horarios de construcción',
                             pleaseEnterResearchSpeedups: 'Por favor ingresa las horas de aceleración de investigación',
                             pleaseEnterResearchTruegoldDust: 'Por favor ingresa la cantidad de polvo de oro verdadero de investigación',
@@ -880,6 +909,8 @@
                             constructionSpeedupsPlaceholder: 'Stunden eingeben',
                             constructionTruegoldLabel: 'Wie viel Echtes Gold planst du auszugeben?',
                             constructionTruegoldPlaceholder: 'Menge eingeben',
+                            constructionTemperedTruegoldLabel: 'Wie viel getempertes Echtes Gold planst du auszugeben?',
+                            constructionTemperedTruegoldPlaceholder: 'Menge eingeben',
                             constructionTimeSlotsLabel: 'Zu welchen Zeiten bist du für deinen Baustag-Termin verfügbar? (UTC-Zeit)',
                             constructionTimeSlotsNote: 'Hinweis: Wähle mindestens 5 Zeiten.',
                             constructionTimeSlotsError: 'Bitte wählen Sie mindestens 5 Zeitslots aus (aktuell ausgewählt: {count})',
@@ -917,6 +948,7 @@
                             pleaseSelectAtLeastOneDay: 'Bitte wählen Sie mindestens einen Tagestyp aus (Bau, Forschung oder Truppen)',
                             pleaseEnterConstructionSpeedups: 'Bitte geben Sie die Baubeschleunigungsstunden ein',
                             pleaseEnterConstructionTruegold: 'Bitte geben Sie die Menge an Echtem Gold für den Bau ein',
+                            pleaseEnterConstructionTemperedTruegold: 'Bitte geben Sie die Menge an getempertem Echtem Gold für den Bau ein',
                             pleaseSelectConstructionTimeSlots: 'Bitte wählen Sie mindestens 5 Baustellenzeiten aus',
                             pleaseEnterResearchSpeedups: 'Bitte geben Sie die Forschungsbeschleunigungsstunden ein',
                             pleaseEnterResearchTruegoldDust: 'Bitte geben Sie die Menge an Echtem Goldstaub für die Forschung ein',
@@ -963,6 +995,8 @@
                             constructionSpeedupsPlaceholder: 'Entrez les heures',
                             constructionTruegoldLabel: 'Combien d\'or véritable prévoyez-vous de dépenser ?',
                             constructionTruegoldPlaceholder: 'Entrez le montant',
+                            constructionTemperedTruegoldLabel: 'Combien d\'or véritable trempé prévoyez-vous de dépenser ?',
+                            constructionTemperedTruegoldPlaceholder: 'Entrez le montant',
                             constructionTimeSlotsLabel: 'À quels horaires êtes-vous disponible pour votre rendez-vous du jour de construction ? (heure UTC)',
                             constructionTimeSlotsNote: 'Note : Choisissez un minimum de 5 horaires.',
                             constructionTimeSlotsError: 'Veuillez sélectionner au moins 5 créneaux horaires (actuellement sélectionnés : {count})',
@@ -1000,6 +1034,7 @@
                             pleaseSelectAtLeastOneDay: 'Veuillez sélectionner au moins un type de jour (Construction, Recherche ou Troupes)',
                             pleaseEnterConstructionSpeedups: 'Veuillez entrer les heures d\'accélération de construction',
                             pleaseEnterConstructionTruegold: 'Veuillez entrer la quantité d\'or véritable de construction',
+                            pleaseEnterConstructionTemperedTruegold: 'Veuillez entrer la quantité d\'or véritable trempé de construction',
                             pleaseSelectConstructionTimeSlots: 'Veuillez sélectionner au moins 5 créneaux horaires de construction',
                             pleaseEnterResearchSpeedups: 'Veuillez entrer les heures d\'accélération de recherche',
                             pleaseEnterResearchTruegoldDust: 'Veuillez entrer la quantité de poussière d\'or véritable de recherche',
@@ -1040,6 +1075,7 @@
                         wants_construction: false,
                         construction_speedups: null,
                         construction_truegold: null,
+                        construction_tempered_truegold: null,
                         construction_time_slots: [],
                         wants_research: false,
                         research_speedups: null,
@@ -1202,8 +1238,13 @@
                             this.errorMessage = this.t('pleaseEnterConstructionSpeedups');
                             return;
                         }
-                        if (!this.form.construction_truegold && this.form.construction_truegold !== 0) {
+                        const mode = this.config.construction_truegold_mode || 'truegold_unlocked';
+                        if (['truegold_unlocked','war_academy_unlocked','tempered_truegold_unlocked'].includes(mode) && !this.form.construction_truegold && this.form.construction_truegold !== 0) {
                             this.errorMessage = this.t('pleaseEnterConstructionTruegold');
+                            return;
+                        }
+                        if (mode === 'tempered_truegold_unlocked' && !this.form.construction_tempered_truegold && this.form.construction_tempered_truegold !== 0) {
+                            this.errorMessage = this.t('pleaseEnterConstructionTemperedTruegold');
                             return;
                         }
                         if (this.form.construction_time_slots.length < 5) {
@@ -1216,7 +1257,8 @@
                             this.errorMessage = this.t('pleaseEnterResearchSpeedups');
                             return;
                         }
-                        if (!this.form.research_truegold_dust && this.form.research_truegold_dust !== 0) {
+                        const mode = this.config.construction_truegold_mode || 'truegold_unlocked';
+                        if (['war_academy_unlocked','tempered_truegold_unlocked'].includes(mode) && !this.form.research_truegold_dust && this.form.research_truegold_dust !== 0) {
                             this.errorMessage = this.t('pleaseEnterResearchTruegoldDust');
                             return;
                         }
@@ -1240,6 +1282,16 @@
                     
                     try {
                         // Prepare submission data
+                        const mode = this.config.construction_truegold_mode || 'truegold_unlocked';
+                        const constructionTruegold = this.form.wants_construction
+                            ? (mode === 'pre_truegold' ? 0 : (this.form.construction_truegold ?? 0))
+                            : null;
+                        const constructionTemperedTruegold = this.form.wants_construction
+                            ? (mode === 'tempered_truegold_unlocked' ? (this.form.construction_tempered_truegold ?? 0) : 0)
+                            : null;
+                        const researchTruegoldDust = this.form.wants_research
+                            ? (['war_academy_unlocked','tempered_truegold_unlocked'].includes(mode) ? (this.form.research_truegold_dust ?? 0) : 0)
+                            : null;
                         const submissionData = {
                             alliance: this.form.alliance,
                             custom_alliance: this.form.custom_alliance || null,
@@ -1248,11 +1300,12 @@
                             submission_type: this.form.submission_type,
                             wants_construction: this.form.wants_construction,
                             construction_speedups: this.form.wants_construction ? this.form.construction_speedups : null,
-                            construction_truegold: this.form.wants_construction ? this.form.construction_truegold : null,
+                            construction_truegold: constructionTruegold,
+                            construction_tempered_truegold: constructionTemperedTruegold,
                             construction_time_slots: this.form.wants_construction ? this.form.construction_time_slots.map(Number) : [],
                             wants_research: this.form.wants_research,
                             research_speedups: this.form.wants_research ? this.form.research_speedups : null,
-                            research_truegold_dust: this.form.wants_research ? this.form.research_truegold_dust : null,
+                            research_truegold_dust: researchTruegoldDust,
                             research_time_slots: this.form.wants_research ? this.form.research_time_slots.map(Number) : [],
                             wants_troops: this.form.wants_troops,
                             troops_speedups: this.form.wants_troops ? this.form.troops_speedups : null,
@@ -1295,6 +1348,7 @@
                         wants_construction: false,
                         construction_speedups: null,
                         construction_truegold: null,
+                        construction_tempered_truegold: null,
                         construction_time_slots: [],
                         wants_research: false,
                         research_speedups: null,

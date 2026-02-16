@@ -16,6 +16,7 @@ pub struct AppointmentEntry {
     pub research_speedups: u32,
     pub troops_speedups: u32,
     pub construction_truegold: u32,
+    pub construction_tempered_truegold: u32,
     pub construction_score: u32,
     pub research_truegold_dust: u32,
     pub research_score: u32,
@@ -153,7 +154,8 @@ pub fn load_appointments<P: AsRef<Path>>(
     let submission_type_col = headers.iter().position(|h| h.contains("Is this form")).unwrap_or(5);
     let construction_want_col = headers.iter().position(|h| h.contains("Construction day appointment")).unwrap_or(6);
     let construction_speedups_col = headers.iter().position(|h| h.contains("Construction day") && h.contains("speedups")).unwrap_or(7);
-    let construction_truegold_col = headers.iter().position(|h| h.contains("truegold") && !h.contains("dust")).unwrap_or(8);
+    let construction_truegold_col = headers.iter().position(|h| h.contains("truegold") && !h.contains("dust") && !h.to_lowercase().contains("tempered")).unwrap_or(8);
+    let construction_tempered_truegold_col = headers.iter().position(|h| h.to_lowercase().contains("tempered") && h.contains("truegold"));
     let construction_times_col = headers.iter().position(|h| h.contains("Construction day appointment") && h.contains("times")).unwrap_or(9);
     let research_want_col = headers.iter().position(|h| h.contains("Research day appointment") && !h.contains("times")).unwrap_or(10);
     let research_speedups_col = headers.iter().position(|h| h.contains("Research day") && h.contains("speedups")).unwrap_or(11);
@@ -199,9 +201,13 @@ pub fn load_appointments<P: AsRef<Path>>(
         let troops_speedups = parse_number(record.get(troops_speedups_col).unwrap_or(""));
         
         let construction_truegold = parse_number(record.get(construction_truegold_col).unwrap_or(""));
+        let construction_tempered_truegold = construction_tempered_truegold_col
+            .and_then(|col| record.get(col))
+            .map(|s| parse_number(s))
+            .unwrap_or(0);
         
-        // Calculate construction score: (truegold * 2000) + (speedups * 30)
-        let construction_score = (construction_truegold * 2000) + (construction_speedups * 30);
+        // Calculate construction score: (truegold * 2000) + (tempered_truegold * 20000) + (speedups * 30)
+        let construction_score = (construction_truegold * 2000) + (construction_tempered_truegold * 30000) + (construction_speedups * 30);
         
         let research_truegold_dust = parse_number(record.get(research_truegold_dust_col).unwrap_or(""));
         
@@ -229,6 +235,7 @@ pub fn load_appointments<P: AsRef<Path>>(
                 existing_entry.research_speedups = research_speedups;
                 existing_entry.troops_speedups = troops_speedups;
                 existing_entry.construction_truegold = construction_truegold;
+                existing_entry.construction_tempered_truegold = construction_tempered_truegold;
                 existing_entry.construction_score = construction_score;
                 existing_entry.research_truegold_dust = research_truegold_dust;
                 existing_entry.research_score = research_score;
@@ -248,6 +255,7 @@ pub fn load_appointments<P: AsRef<Path>>(
                     research_speedups,
                     troops_speedups,
                     construction_truegold,
+                    construction_tempered_truegold,
                     construction_score,
                     research_truegold_dust,
                     research_score,
@@ -270,6 +278,7 @@ pub fn load_appointments<P: AsRef<Path>>(
                 research_speedups,
                 troops_speedups,
                 construction_truegold,
+                construction_tempered_truegold,
                 construction_score,
                 research_truegold_dust,
                 research_score,

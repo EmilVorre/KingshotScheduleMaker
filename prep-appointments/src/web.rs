@@ -79,9 +79,32 @@ pub struct PredeterminedSlot {
     pub name: String,
 }
 
+/// Building resources mode - controls which truegold/truegold dust fields are shown on the form
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConstructionTruegoldMode {
+    /// Pre-truegold: neither truegold nor tempered truegold nor truegold dust unlocked (all hidden, submit 0)
+    PreTruegold,
+    /// Truegold unlocked: show construction truegold only; tempered truegold and truegold dust hidden
+    TruegoldUnlocked,
+    /// War academy unlocked: truegold and truegold dust unlocked, but not tempered truegold
+    WarAcademyUnlocked,
+    /// Tempered truegold unlocked: show construction truegold, tempered truegold, and truegold dust
+    TemperedTruegoldUnlocked,
+}
+
+impl Default for ConstructionTruegoldMode {
+    fn default() -> Self {
+        ConstructionTruegoldMode::TruegoldUnlocked
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormConfig {
     pub alliances: Vec<String>, // List of alliance names (admin must input, no defaults)
+    /// Which construction resource fields to show: pre_truegold, truegold_unlocked, or tempered_truegold_unlocked
+    #[serde(default)]
+    pub construction_truegold_mode: ConstructionTruegoldMode,
     pub construction_times: DayTimeConfig,
     pub research_times: DayTimeConfig,
     pub troops_times: DayTimeConfig,
@@ -95,6 +118,7 @@ impl Default for FormConfig {
     fn default() -> Self {
         FormConfig {
             alliances: vec![], // No default alliances - admin must input them
+            construction_truegold_mode: ConstructionTruegoldMode::default(),
             construction_times: DayTimeConfig {
                 start_time: "00:00".to_string(),
                 end_time: None,
@@ -1285,6 +1309,7 @@ async fn submit_form_by_code(
         wants_construction: req.wants_construction,
         construction_speedups: req.construction_speedups,
         construction_truegold: req.construction_truegold,
+        construction_tempered_truegold: req.construction_tempered_truegold,
         construction_time_slots: req.construction_time_slots.clone(),
         wants_research: req.wants_research,
         research_speedups: req.research_speedups,
@@ -1327,6 +1352,9 @@ async fn submit_form_by_code(
 pub struct CreateFormRequest {
     pub name: Option<String>, // Optional form name
     pub alliances: Vec<String>,
+    /// Construction truegold mode: pre_truegold, truegold_unlocked, or tempered_truegold_unlocked
+    #[serde(default)]
+    pub construction_truegold_mode: ConstructionTruegoldMode,
     pub construction_times: DayTimeConfig,
     pub research_times: DayTimeConfig,
     pub troops_times: DayTimeConfig,
@@ -1465,6 +1493,7 @@ async fn create_form(
     
     let config = FormConfig {
         alliances,
+        construction_truegold_mode: body.construction_truegold_mode.clone(),
         construction_times: body.construction_times.clone(),
         research_times: body.research_times.clone(),
         troops_times: body.troops_times.clone(),
@@ -1485,6 +1514,7 @@ async fn create_form(
         created_at,
         config: FormConfig {
             alliances: body.alliances.clone(),
+            construction_truegold_mode: body.construction_truegold_mode.clone(),
             construction_times: body.construction_times.clone(),
             research_times: body.research_times.clone(),
             troops_times: body.troops_times.clone(),

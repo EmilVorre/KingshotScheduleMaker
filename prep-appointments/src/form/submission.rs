@@ -12,6 +12,7 @@ pub struct FormSubmission {
     pub wants_construction: bool,
     pub construction_speedups: Option<u32>,
     pub construction_truegold: Option<u32>,
+    pub construction_tempered_truegold: Option<u32>,
     pub construction_time_slots: Vec<u8>,
     pub wants_research: bool,
     pub research_speedups: Option<u32>,
@@ -35,6 +36,8 @@ pub struct FormSubmissionRequest {
     pub wants_construction: bool,
     pub construction_speedups: Option<u32>,
     pub construction_truegold: Option<u32>,
+    #[serde(default)]
+    pub construction_tempered_truegold: Option<u32>,
     pub construction_time_slots: Vec<u8>,
     pub wants_research: bool,
     pub research_speedups: Option<u32>,
