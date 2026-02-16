@@ -206,7 +206,7 @@ pub fn load_appointments<P: AsRef<Path>>(
             .map(|s| parse_number(s))
             .unwrap_or(0);
         
-        // Calculate construction score: (truegold * 2000) + (tempered_truegold * 20000) + (speedups * 30)
+        // Calculate construction score: (truegold * 2000) + (tempered_truegold * 30000) + (speedups * 30)
         let construction_score = (construction_truegold * 2000) + (construction_tempered_truegold * 30000) + (construction_speedups * 30);
         
         let research_truegold_dust = parse_number(record.get(research_truegold_dust_col).unwrap_or(""));
