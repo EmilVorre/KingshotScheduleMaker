@@ -1,6 +1,6 @@
-use std::collections::HashSet;
-use crate::parser::AppointmentEntry;
 use super::DaySchedule;
+use crate::parser::AppointmentEntry;
+use std::collections::HashSet;
 
 /// Schedules appointments for Troops Training day with smart slot ranking and stealing
 pub fn schedule_troops_day(entries: &[AppointmentEntry]) -> DaySchedule {
@@ -8,7 +8,10 @@ pub fn schedule_troops_day(entries: &[AppointmentEntry]) -> DaySchedule {
 }
 
 /// Schedules appointments for Troops Training day with pre-locked slots
-pub fn schedule_troops_day_with_locked(entries: &[AppointmentEntry], pre_locked_slots: &HashSet<u8>) -> DaySchedule {
+pub fn schedule_troops_day_with_locked(
+    entries: &[AppointmentEntry],
+    pre_locked_slots: &HashSet<u8>,
+) -> DaySchedule {
     use super::generic::schedule_day_generic_with_locked_slots;
     schedule_day_generic_with_locked_slots(
         entries,
@@ -19,4 +22,3 @@ pub fn schedule_troops_day_with_locked(entries: &[AppointmentEntry], pre_locked_
         &HashSet::new(), // No locked slots for troops
     )
 }
-

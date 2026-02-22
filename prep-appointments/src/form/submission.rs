@@ -26,7 +26,7 @@ pub struct FormSubmission {
 }
 
 /// Form submission request from frontend
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct FormSubmissionRequest {
     pub alliance: String,
     pub custom_alliance: Option<String>,
@@ -56,7 +56,7 @@ pub fn validate_submission(req: &FormSubmissionRequest) -> Result<(), String> {
     if req.character_name.trim().is_empty() {
         return Err("Character name is required".to_string());
     }
-    
+
     // Validate player ID (must be a number)
     if req.player_id.trim().is_empty() {
         return Err("Player ID is required".to_string());
@@ -64,20 +64,28 @@ pub fn validate_submission(req: &FormSubmissionRequest) -> Result<(), String> {
     if !req.player_id.trim().chars().all(|c| c.is_ascii_digit()) {
         return Err("Player ID must contain only digits".to_string());
     }
-    
+
     // Validate submission type
     if req.submission_type != "New submission" && req.submission_type != "Re-Submission" {
         return Err("Invalid submission type".to_string());
     }
-    
+
     // Validate alliance
     if req.alliance.trim().is_empty() {
         return Err("Alliance selection is required".to_string());
     }
-    if req.alliance == "Non of the above" && req.custom_alliance.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
-        return Err("Custom alliance name is required when 'Non of the above' is selected".to_string());
+    if req.alliance == "Non of the above"
+        && req
+            .custom_alliance
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+    {
+        return Err(
+            "Custom alliance name is required when 'Non of the above' is selected".to_string(),
+        );
     }
-    
+
     // Validate construction day if selected
     if req.wants_construction {
         if req.construction_time_slots.len() < 5 {
@@ -90,7 +98,7 @@ pub fn validate_submission(req: &FormSubmissionRequest) -> Result<(), String> {
             }
         }
     }
-    
+
     // Validate research day if selected
     if req.wants_research {
         if req.research_time_slots.len() < 5 {
@@ -102,7 +110,7 @@ pub fn validate_submission(req: &FormSubmissionRequest) -> Result<(), String> {
             }
         }
     }
-    
+
     // Validate troops day if selected
     if req.wants_troops {
         if req.troops_time_slots.len() < 5 {
@@ -114,11 +122,14 @@ pub fn validate_submission(req: &FormSubmissionRequest) -> Result<(), String> {
             }
         }
     }
-    
+
     // At least one day type must be selected
     if !req.wants_construction && !req.wants_research && !req.wants_troops {
-        return Err("At least one day type (Construction, Research, or Troops) must be selected".to_string());
+        return Err(
+            "At least one day type (Construction, Research, or Troops) must be selected"
+                .to_string(),
+        );
     }
-    
+
     Ok(())
 }

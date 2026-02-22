@@ -51,23 +51,29 @@ pub fn calculate_time_slots(start_time: &str, end_time: Option<&str>) -> Vec<(u8
     } else {
         start_minutes + 24 * 60
     };
-    
+
     let mut slots = Vec::new();
     let mut current_minutes = start_minutes;
     let mut slot_num = 1u8;
-    
+
     // Slot 1 = start time
     slots.push((slot_num, minutes_to_time_string(current_minutes)));
     slot_num += 1;
-    
+
     // Slot 2 = start + 15 minutes
     current_minutes += 15;
-    if current_minutes < end_minutes || (end_minutes < start_minutes && current_minutes < end_minutes + 24 * 60) {
-        slots.push((slot_num, minutes_to_time_string(current_minutes % (24 * 60))));
+    if current_minutes < end_minutes
+        || (end_minutes < start_minutes && current_minutes < end_minutes + 24 * 60)
+    {
+        slots.push((
+            slot_num,
+            minutes_to_time_string(current_minutes % (24 * 60)),
+        ));
         slot_num += 1;
-        
+
         // Slot 3+ = previous + 30 minutes
-        while slot_num <= 200 { // Safety limit
+        while slot_num <= 200 {
+            // Safety limit
             current_minutes += 30;
             let check_minutes = if end_minutes < start_minutes {
                 // Handle wrap-around (e.g., 23:00 to 01:00)
@@ -79,7 +85,7 @@ pub fn calculate_time_slots(start_time: &str, end_time: Option<&str>) -> Vec<(u8
             } else {
                 current_minutes
             };
-            
+
             // Check if we've reached the end time
             if end_minutes < start_minutes {
                 // Wrap-around case
@@ -92,12 +98,12 @@ pub fn calculate_time_slots(start_time: &str, end_time: Option<&str>) -> Vec<(u8
                     break;
                 }
             }
-            
+
             slots.push((slot_num, minutes_to_time_string(check_minutes % (24 * 60))));
             slot_num += 1;
         }
     }
-    
+
     slots
 }
 
@@ -112,4 +118,3 @@ pub fn calculate_slot_rankings(available_slots_list: &[Vec<u8>]) -> HashMap<u8, 
     }
     rankings
 }
-

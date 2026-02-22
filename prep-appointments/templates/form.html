@@ -71,7 +71,7 @@
                         <!-- Introduction Text -->
                         <div v-if="config.intro_text" class="bg-blue-900/30 border-l-4 border-blue-500 rounded-lg p-6 mb-8">
                             <div class="prose prose-invert max-w-none">
-                                <div class="whitespace-pre-line text-gray-200">{{ t('introText') }}</div>
+                                <div class="whitespace-pre-line text-gray-200">{{ displayIntroText }}</div>
                             </div>
                         </div>
                         
@@ -111,47 +111,74 @@
                                     </div>
                                     
                                     <div>
-                                        <label for="character_name" class="block text-sm font-semibold text-gray-300 mb-2">
-                                            {{ t('characterNameQuestion') }} <span class="text-red-400">*</span>
-                                        </label>
-                                        <p class="text-xs text-gray-500 mb-2">{{ t('characterNameNote') }}</p>
-                                        <p class="text-xs text-gray-500 mb-2">{{ t('characterNameProTip') }}</p>
-                                        <input 
-                                            type="text" 
-                                            id="character_name" 
-                                            v-model="form.character_name"
-                                            required
-                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-                                            :placeholder="t('characterNamePlaceholder')">
-                                    </div>
-                                    
-                                    <div>
                                         <label for="player_id" class="block text-sm font-semibold text-gray-300 mb-2">
                                             {{ t('playerIdQuestion') }} <span class="text-red-400">*</span>
                                         </label>
                                         <p class="text-xs text-gray-500 mb-2">{{ t('playerIdNote') }}</p>
-                                        <input 
-                                            type="text" 
-                                            id="player_id" 
-                                            v-model="form.player_id"
-                                            required
-                                            pattern="[0-9]+"
-                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-                                            :placeholder="t('playerIdPlaceholder')">
+                                        <div class="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                id="player_id" 
+                                                v-model="form.player_id"
+                                                @input="playerCard = null; lookupError = ''; lookupSuccess = false"
+                                                @blur="checkSubmission()"
+                                                required
+                                                pattern="[0-9]+"
+                                                class="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                                                :placeholder="t('playerIdPlaceholder')">
+                                            <button 
+                                                type="button"
+                                                @click="lookupPlayerName"
+                                                :disabled="lookupLoading || !form.player_id.trim()"
+                                                class="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all whitespace-nowrap">
+                                                <i v-if="lookupLoading" class="fas fa-spinner fa-spin mr-2"></i>
+                                                <i v-else class="fas fa-check mr-2"></i>
+                                                {{ lookupLoading ? t('lookingUp') : t('confirm') }}
+                                            </button>
+                                        </div>
+                                        <p v-if="lookupError" class="text-xs text-red-400 mt-2">{{ lookupError }}</p>
+                                        <!-- Player Card (shown after successful lookup) -->
+                                        <div v-if="playerCard" class="mt-4 p-4 bg-gray-800/80 rounded-lg border border-dashed border-gray-500">
+                                            <div class="flex items-start gap-4">
+                                                <div class="flex-shrink-0">
+                                                    <img 
+                                                        v-if="playerCard.avatar_image" 
+                                                        :src="playerCard.avatar_image" 
+                                                        :alt="playerCard.name"
+                                                        class="w-16 h-16 rounded-full object-cover border-2 border-gray-500">
+                                                    <div v-else class="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center border-2 border-gray-500">
+                                                        <i class="fas fa-user text-2xl text-gray-400"></i>
+                                                    </div>
+                                                </div>
+                                                <div class="flex-1 min-w-0">
+                                                    <div class="flex items-center gap-2 flex-wrap">
+                                                        <span class="text-lg font-bold text-white">{{ playerCard.name }}</span>
+                                                    </div>
+                                                    <div class="mt-2 space-y-1 text-sm text-gray-300">
+                                                        <p><i class="fas fa-id-card text-purple-400 w-4 mr-2"></i>ID: {{ playerCard.player_id }}</p>
+                                                        <p><i class="fas fa-chess-rook text-amber-400 w-4 mr-2"></i>{{ t('castleLevel') }}: {{ playerCard.castle_level }}</p>
+                                                        <p><i class="fas fa-globe text-blue-400 w-4 mr-2"></i>{{ t('kingdom') }}: {{ playerCard.kingdom }}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     
                                     <div>
-                                        <label for="submission_type" class="block text-sm font-semibold text-gray-300 mb-2">
-                                            {{ t('submissionType') }} <span class="text-red-400">*</span>
+                                        <label class="block text-sm font-semibold text-gray-300 mb-2">
+                                            {{ t('submissionType') }}
                                         </label>
-                                        <select 
-                                            id="submission_type" 
-                                            v-model="form.submission_type"
-                                            required
-                                            class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all">
-                                            <option value="New submission">{{ t('newSubmission') }}</option>
-                                            <option value="Re-Submission">{{ t('updateSubmission') }}</option>
-                                        </select>
+                                        <div class="px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                                            <span v-if="checkSubmissionLoading" class="text-gray-400">
+                                                <i class="fas fa-spinner fa-spin mr-2"></i>{{ t('checkingSubmission') }}
+                                            </span>
+                                            <span v-else class="font-medium">
+                                                {{ form.submission_type === 'Re-Submission' ? t('updateSubmission') : t('newSubmission') }}
+                                            </span>
+                                            <span v-if="!checkSubmissionLoading && form.player_id.trim()" class="text-xs text-gray-400 ml-2">
+                                                ({{ t('autoDetected') }})
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -467,7 +494,14 @@
                             playerIdQuestion: 'What is your player ID?',
                             playerIdNote: 'Note: Your ID must be a number',
                             playerIdPlaceholder: 'Enter your player ID',
-                            submissionType: 'Is this form a...',
+                            confirm: 'Confirm',
+                            lookingUp: 'Looking up...',
+                            nameFound: 'Name found! You can edit it if needed.',
+                            checkingSubmission: 'Checking...',
+                            autoDetected: 'auto-detected from your player ID',
+                            castleLevel: 'Castle Level',
+                            kingdom: 'Kingdom',
+                            submissionType: 'Submission type',
                             newSubmission: 'New submission',
                             updateSubmission: 'Re-Submission',
                             constructionDay: 'Construction Day',
@@ -512,7 +546,7 @@
                             // Validation messages
                             pleaseSelectAlliance: 'Please select an alliance',
                             pleaseEnterCustomAlliance: 'Please enter your custom alliance name',
-                            pleaseEnterCharacterName: 'Please enter your character name',
+                            pleaseEnterCharacterName: 'Please confirm your player ID by clicking Confirm',
                             playerIdMustBeNumber: 'Player ID must be a number',
                             pleaseSelectAtLeastOneDay: 'Please select at least one day type (Construction, Research, or Troops)',
                             pleaseEnterConstructionSpeedups: 'Please enter construction speedup hours',
@@ -555,7 +589,14 @@
                             playerIdQuestion: '플레이어 ID는 무엇인가요?',
                             playerIdNote: '참고: ID는 숫자여야 합니다',
                             playerIdPlaceholder: '플레이어 ID를 입력하세요',
-                            submissionType: '이 양식은...',
+                            confirm: '확인',
+                            lookingUp: '찾는 중...',
+                            nameFound: '이름을 찾았습니다! 필요하면 수정할 수 있습니다.',
+                            castleLevel: '성 레벨',
+                            kingdom: '왕국',
+                            checkingSubmission: '확인 중...',
+                            autoDetected: '플레이어 ID로 자동 감지됨',
+                            submissionType: '제출 유형',
                             newSubmission: '새 제출',
                             updateSubmission: '재제출',
                             constructionDay: '건설의 날',
@@ -599,7 +640,7 @@
                             submitAnotherForm: '다른 양식 제출',
                             pleaseSelectAlliance: '동맹을 선택하세요',
                             pleaseEnterCustomAlliance: '사용자 지정 동맹 이름을 입력하세요',
-                            pleaseEnterCharacterName: '캐릭터 이름을 입력하세요',
+                            pleaseEnterCharacterName: '확인 버튼을 클릭하여 플레이어 ID를 확인해 주세요',
                             playerIdMustBeNumber: '플레이어 ID는 숫자여야 합니다',
                             pleaseSelectAtLeastOneDay: '최소한 하나의 날 유형(건설, 연구 또는 병사)을 선택하세요',
                             pleaseEnterConstructionSpeedups: '건설 속도 향상 시간을 입력하세요',
@@ -641,7 +682,14 @@
                             playerIdQuestion: '您的玩家ID是什麼?',
                             playerIdNote: '注意：您的ID必須是數字',
                             playerIdPlaceholder: '輸入您的玩家ID',
-                            submissionType: '此表格是...',
+                            confirm: '確認',
+                            lookingUp: '查找中...',
+                            nameFound: '已找到名稱！如需可修改。',
+                            castleLevel: '城堡等級',
+                            kingdom: '王國',
+                            checkingSubmission: '檢查中...',
+                            autoDetected: '根據您的玩家ID自動檢測',
+                            submissionType: '提交類型',
                             newSubmission: '新提交',
                             updateSubmission: '重新提交',
                             constructionDay: '建造日',
@@ -685,7 +733,7 @@
                             submitAnotherForm: '提交另一個表格',
                             pleaseSelectAlliance: '請選擇聯盟',
                             pleaseEnterCustomAlliance: '請輸入您的自定義聯盟名稱',
-                            pleaseEnterCharacterName: '請輸入您的角色名稱',
+                            pleaseEnterCharacterName: '請點擊確認按鈕以確認您的玩家ID',
                             playerIdMustBeNumber: '玩家ID必須是數字',
                             pleaseSelectAtLeastOneDay: '請至少選擇一種日期類型（建造、研究或士兵）',
                             pleaseEnterConstructionSpeedups: '請輸入建造加速小時數',
@@ -727,7 +775,14 @@
                             playerIdQuestion: 'プレイヤーIDは何ですか？',
                             playerIdNote: '注：IDは数字である必要があります',
                             playerIdPlaceholder: 'プレイヤーIDを入力してください',
-                            submissionType: 'このフォームは...',
+                            confirm: '確認',
+                            lookingUp: '検索中...',
+                            nameFound: '名前が見つかりました！必要に応じて編集できます。',
+                            castleLevel: '城レベル',
+                            kingdom: '王国',
+                            checkingSubmission: '確認中...',
+                            autoDetected: 'プレイヤーIDで自動検出',
+                            submissionType: '提出タイプ',
                             newSubmission: '新規提出',
                             updateSubmission: '再提出',
                             constructionDay: '建設の日',
@@ -771,7 +826,7 @@
                             submitAnotherForm: '別のフォームを送信',
                             pleaseSelectAlliance: '同盟を選択してください',
                             pleaseEnterCustomAlliance: 'カスタム同盟名を入力してください',
-                            pleaseEnterCharacterName: 'キャラクター名を入力してください',
+                            pleaseEnterCharacterName: '確認ボタンをクリックしてプレイヤーIDを確認してください',
                             playerIdMustBeNumber: 'プレイヤーIDは数字である必要があります',
                             pleaseSelectAtLeastOneDay: '少なくとも1つの日タイプ（建設、研究、または兵士）を選択してください',
                             pleaseEnterConstructionSpeedups: '建設加速時間を入力してください',
@@ -813,7 +868,14 @@
                             playerIdQuestion: '¿Cuál es tu ID de jugador?',
                             playerIdNote: 'Nota: Tu ID debe ser un número',
                             playerIdPlaceholder: 'Ingrese su ID de jugador',
-                            submissionType: 'Este formulario es...',
+                            confirm: 'Confirmar',
+                            lookingUp: 'Buscando...',
+                            nameFound: '¡Nombre encontrado! Puede editarlo si es necesario.',
+                            castleLevel: 'Nivel del castillo',
+                            kingdom: 'Reino',
+                            checkingSubmission: 'Comprobando...',
+                            autoDetected: 'detectado automáticamente por tu ID de jugador',
+                            submissionType: 'Tipo de envío',
                             newSubmission: 'Nueva presentación',
                             updateSubmission: 'Re-presentación',
                             constructionDay: 'Día de construcción',
@@ -857,7 +919,7 @@
                             submitAnotherForm: 'Enviar otro formulario',
                             pleaseSelectAlliance: 'Por favor selecciona una alianza',
                             pleaseEnterCustomAlliance: 'Por favor ingresa el nombre de tu alianza personalizada',
-                            pleaseEnterCharacterName: 'Por favor ingresa el nombre de tu personaje',
+                            pleaseEnterCharacterName: 'Por favor haz clic en Confirmar para verificar tu ID de jugador',
                             playerIdMustBeNumber: 'El ID del jugador debe ser un número',
                             pleaseSelectAtLeastOneDay: 'Por favor selecciona al menos un tipo de día (Construcción, Investigación o Tropas)',
                             pleaseEnterConstructionSpeedups: 'Por favor ingresa las horas de aceleración de construcción',
@@ -899,7 +961,14 @@
                             playerIdQuestion: 'Wie lautet deine Spieler-ID?',
                             playerIdNote: 'Hinweis: Deine ID muss eine Zahl sein',
                             playerIdPlaceholder: 'Geben Sie Ihre Spieler-ID ein',
-                            submissionType: 'Dieses Formular ist...',
+                            confirm: 'Bestätigen',
+                            lookingUp: 'Suche...',
+                            nameFound: 'Name gefunden! Sie können ihn bei Bedarf bearbeiten.',
+                            castleLevel: 'Burgstufe',
+                            kingdom: 'Königreich',
+                            checkingSubmission: 'Prüfe...',
+                            autoDetected: 'automatisch anhand Ihrer Spieler-ID erkannt',
+                            submissionType: 'Einreichungstyp',
                             newSubmission: 'Neue Einreichung',
                             updateSubmission: 'Wiedereinreichung',
                             constructionDay: 'Baustag',
@@ -943,7 +1012,7 @@
                             submitAnotherForm: 'Weiteres Formular einreichen',
                             pleaseSelectAlliance: 'Bitte wählen Sie ein Bündnis aus',
                             pleaseEnterCustomAlliance: 'Bitte geben Sie Ihren benutzerdefinierten Bündnisnamen ein',
-                            pleaseEnterCharacterName: 'Bitte geben Sie Ihren Charakternamen ein',
+                            pleaseEnterCharacterName: 'Bitte klicken Sie auf Bestätigen, um Ihre Spieler-ID zu bestätigen',
                             playerIdMustBeNumber: 'Die Spieler-ID muss eine Zahl sein',
                             pleaseSelectAtLeastOneDay: 'Bitte wählen Sie mindestens einen Tagestyp aus (Bau, Forschung oder Truppen)',
                             pleaseEnterConstructionSpeedups: 'Bitte geben Sie die Baubeschleunigungsstunden ein',
@@ -985,7 +1054,14 @@
                             playerIdQuestion: 'Quel est votre ID joueur ?',
                             playerIdNote: 'Note : Votre ID doit être un nombre',
                             playerIdPlaceholder: 'Entrez votre ID joueur',
-                            submissionType: 'Ce formulaire est...',
+                            confirm: 'Confirmer',
+                            lookingUp: 'Recherche...',
+                            nameFound: 'Nom trouvé ! Vous pouvez le modifier si nécessaire.',
+                            castleLevel: 'Niveau du château',
+                            kingdom: 'Royaume',
+                            checkingSubmission: 'Vérification...',
+                            autoDetected: 'détecté automatiquement selon votre ID joueur',
+                            submissionType: 'Type de soumission',
                             newSubmission: 'Nouvelle soumission',
                             updateSubmission: 'Nouvelle soumission',
                             constructionDay: 'Jour de construction',
@@ -1029,7 +1105,7 @@
                             submitAnotherForm: 'Soumettre un autre formulaire',
                             pleaseSelectAlliance: 'Veuillez sélectionner une alliance',
                             pleaseEnterCustomAlliance: 'Veuillez entrer le nom de votre alliance personnalisée',
-                            pleaseEnterCharacterName: 'Veuillez entrer le nom de votre personnage',
+                            pleaseEnterCharacterName: 'Veuillez cliquer sur Confirmer pour vérifier votre ID joueur',
                             playerIdMustBeNumber: 'L\'ID du joueur doit être un nombre',
                             pleaseSelectAtLeastOneDay: 'Veuillez sélectionner au moins un type de jour (Construction, Recherche ou Troupes)',
                             pleaseEnterConstructionSpeedups: 'Veuillez entrer les heures d\'accélération de construction',
@@ -1066,6 +1142,11 @@
                     submitted: false,
                     errorMessage: '',
                     loading: true,
+                    lookupLoading: false,
+                    lookupError: '',
+                    lookupSuccess: false,
+                    playerCard: null,
+                    checkSubmissionLoading: false,
                     form: {
                         alliance: '',
                         custom_alliance: '',
@@ -1091,6 +1172,16 @@
             },
             async mounted() {
                 await this.loadConfig();
+            },
+            computed: {
+                displayIntroText() {
+                    const base = this.t('introText');
+                    const supportName = this.config.support_person_name && this.config.support_person_name.trim();
+                    if (supportName) {
+                        return base.replace(/#140 \[COB\]Vor/g, supportName);
+                    }
+                    return base;
+                }
             },
             methods: {
                 t(key, params = {}) {
@@ -1207,6 +1298,59 @@
                 handleAllianceChange() {
                     if (this.form.alliance !== 'Non of the above') {
                         this.form.custom_alliance = '';
+                    }
+                },
+                async checkSubmission() {
+                    const id = this.form.player_id.trim();
+                    if (!id || !/^[0-9]+$/.test(id)) {
+                        this.form.submission_type = 'New submission';
+                        return;
+                    }
+                    this.checkSubmissionLoading = true;
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/check-submission/${encodeURIComponent(id)}`);
+                        const data = await response.json();
+                        this.form.submission_type = data.has_submitted ? 'Re-Submission' : 'New submission';
+                    } catch (err) {
+                        this.form.submission_type = 'New submission';
+                    } finally {
+                        this.checkSubmissionLoading = false;
+                    }
+                },
+                async lookupPlayerName() {
+                    const id = this.form.player_id.trim();
+                    if (!id || !/^[0-9]+$/.test(id)) {
+                        this.lookupError = this.t('playerIdMustBeNumber');
+                        this.lookupSuccess = false;
+                        return;
+                    }
+                    this.lookupLoading = true;
+                    this.lookupError = '';
+                    this.lookupSuccess = false;
+                    try {
+                        const response = await fetch(`${this.baseUrl}/api/player-lookup/${encodeURIComponent(id)}`);
+                        const data = await response.json();
+                        if (data.success && data.name) {
+                            this.form.character_name = data.name;
+                            this.lookupSuccess = true;
+                            this.lookupError = '';
+                            await this.checkSubmission();
+                            this.playerCard = {
+                                name: data.name,
+                                player_id: data.player_id,
+                                avatar_image: data.avatar_image || null,
+                                castle_level: data.castle_level || '',
+                                kingdom: data.kingdom || ''
+                            };
+                        } else {
+                            this.lookupError = data.error || this.t('failedToLoadConfig');
+                            this.playerCard = null;
+                        }
+                    } catch (err) {
+                        this.lookupError = err.message || this.t('failedToLoadConfig');
+                        this.playerCard = null;
+                    } finally {
+                        this.lookupLoading = false;
                     }
                 },
                 async handleSubmit() {
@@ -1339,6 +1483,10 @@
                 resetForm() {
                     this.submitted = false;
                     this.errorMessage = '';
+                    this.lookupError = '';
+                    this.lookupSuccess = false;
+                    this.playerCard = null;
+                    this.form.submission_type = 'New submission';
                     this.form = {
                         alliance: '',
                         custom_alliance: '',

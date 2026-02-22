@@ -1,5 +1,5 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
 /// Represents a scheduled appointment for a specific day
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,7 +15,7 @@ pub struct ScheduledAppointment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaySchedule {
     pub appointments: HashMap<u8, ScheduledAppointment>, // slot -> appointment
-    pub unassigned: Vec<String>, // player IDs that couldn't be assigned
+    pub unassigned: Vec<String>,                         // player IDs that couldn't be assigned
 }
 
 /// Represents a move in a chain of slot reassignments
@@ -25,4 +25,3 @@ pub struct Move {
     pub from_slot: u8,
     pub to_slot: u8,
 }
-

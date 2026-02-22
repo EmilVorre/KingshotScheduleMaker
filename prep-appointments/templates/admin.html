@@ -286,114 +286,6 @@
                                         </div>
                                     </div>
                                     
-                                    <!-- Construction Day Times -->
-                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
-                                        <h3 class="text-xl font-bold text-orange-400 mb-4">
-                                            <i class="fas fa-hammer mr-2"></i>Construction Day Times
-                                        </h3>
-                                        <div class="grid md:grid-cols-2 gap-4">
-                                            <div class="flex flex-col">
-                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
-                                                    Start Time <span class="text-red-400">*</span>
-                                                </label>
-                                                <input 
-                                                    v-model="config.construction_times.start_time"
-                                                    type="time"
-                                                    required
-                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
-                                            </div>
-                                            <div class="flex flex-col">
-                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
-                                                    End Time (optional, defaults to start + 24h)
-                                                </label>
-                                                <div class="flex flex-col">
-                                                    <input 
-                                                        v-model="config.construction_times.end_time"
-                                                        type="time"
-                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
-                                                    <button 
-                                                        @click.prevent="config.construction_times.end_time = null"
-                                                        type="button"
-                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
-                                                        Reset to default (24h)
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Research Day Times -->
-                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
-                                        <h3 class="text-xl font-bold text-purple-400 mb-4">
-                                            <i class="fas fa-flask mr-2"></i>Research Day Times
-                                        </h3>
-                                        <div class="grid md:grid-cols-2 gap-4">
-                                            <div class="flex flex-col">
-                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
-                                                    Start Time <span class="text-red-400">*</span>
-                                                </label>
-                                                <input 
-                                                    v-model="config.research_times.start_time"
-                                                    type="time"
-                                                    required
-                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
-                                            </div>
-                                            <div class="flex flex-col">
-                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
-                                                    End Time (optional, defaults to start + 24h)
-                                                </label>
-                                                <div class="flex flex-col">
-                                                    <input 
-                                                        v-model="config.research_times.end_time"
-                                                        type="time"
-                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
-                                                    <button 
-                                                        @click.prevent="config.research_times.end_time = null"
-                                                        type="button"
-                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
-                                                        Reset to default (24h)
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Troops Day Times -->
-                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
-                                        <h3 class="text-xl font-bold text-green-400 mb-4">
-                                            <i class="fas fa-users mr-2"></i>Troops Training Day Times
-                                        </h3>
-                                        <div class="grid md:grid-cols-2 gap-4">
-                                            <div class="flex flex-col">
-                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
-                                                    Start Time <span class="text-red-400">*</span>
-                                                </label>
-                                                <input 
-                                                    v-model="config.troops_times.start_time"
-                                                    type="time"
-                                                    required
-                                                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
-                                            </div>
-                                            <div class="flex flex-col">
-                                                <label class="block text-sm font-semibold text-gray-300 mb-2">
-                                                    End Time (optional, defaults to start + 24h)
-                                                </label>
-                                                <div class="flex flex-col">
-                                                    <input 
-                                                        v-model="config.troops_times.end_time"
-                                                        type="time"
-                                                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none">
-                                                    <button 
-                                                        @click.prevent="config.troops_times.end_time = null"
-                                                        type="button"
-                                                        class="mt-2 text-sm text-gray-400 hover:text-gray-300 self-start">
-                                                        Reset to default (24h)
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
                                     <button 
                                         type="submit"
                                         :disabled="creatingForm"
@@ -559,6 +451,10 @@
                                 this.config = data.config;
                                 // Remove "Non of the above" from display (it will be added automatically)
                                 this.config.alliances = this.config.alliances.filter(a => a !== 'Non of the above');
+                                // Times always use defaults (no custom start/end in UI)
+                                this.config.construction_times = { start_time: '00:00', end_time: null };
+                                this.config.research_times = { start_time: '00:00', end_time: null };
+                                this.config.troops_times = { start_time: '00:00', end_time: null };
                             }
                         }
                     } catch (error) {
@@ -594,18 +490,9 @@
                             },
                             body: JSON.stringify({
                                 alliances: alliances,
-                                construction_times: {
-                                    start_time: this.config.construction_times.start_time,
-                                    end_time: this.config.construction_times.end_time || null
-                                },
-                                research_times: {
-                                    start_time: this.config.research_times.start_time,
-                                    end_time: this.config.research_times.end_time || null
-                                },
-                                troops_times: {
-                                    start_time: this.config.troops_times.start_time,
-                                    end_time: this.config.troops_times.end_time || null
-                                }
+                                construction_times: { start_time: '00:00', end_time: null },
+                                research_times: { start_time: '00:00', end_time: null },
+                                troops_times: { start_time: '00:00', end_time: null }
                             })
                         });
                         

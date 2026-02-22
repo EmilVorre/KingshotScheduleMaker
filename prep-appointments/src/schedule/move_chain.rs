@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
-use crate::parser::AppointmentEntry;
 use super::types::{Move, ScheduledAppointment};
+use crate::parser::AppointmentEntry;
+use std::collections::{HashMap, HashSet};
 
 /// Tries to find a chain of moves to free up a slot, with depth limit
 /// Returns Some(Vec<Move>) if a chain is found, None otherwise
@@ -20,12 +20,12 @@ pub fn find_move_chain(
     if depth > max_depth {
         return None;
     }
-    
+
     // Cannot move from a locked slot
     if locked_slots.contains(&current_slot) {
         return None;
     }
-    
+
     // Try to find a free slot first
     for &slot in available_slots {
         if slot != current_slot && !used_slots.contains(&slot) {
@@ -37,7 +37,7 @@ pub fn find_move_chain(
             }]);
         }
     }
-    
+
     // No free slot found, try to create a chain by moving other players
     // Sort available slots by priority (try most popular slots first)
     let mut slot_priorities: Vec<(u8, u32)> = available_slots
@@ -50,27 +50,27 @@ pub fn find_move_chain(
         })
         .collect();
     slot_priorities.sort_by(|a, b| b.1.cmp(&a.1));
-    
+
     for (target_slot, _) in slot_priorities {
         if let Some(blocking_appt) = schedule.get(&target_slot) {
             let blocking_player_id = &blocking_appt.player_id;
-            
+
             // Cannot move from a locked slot
             if locked_slots.contains(&target_slot) {
                 continue;
             }
-            
+
             // Avoid cycles - don't revisit players we've already tried in this chain
             if visited.contains(blocking_player_id) {
                 continue;
             }
-            
+
             visited.insert(blocking_player_id.to_string());
-            
+
             // Get the blocking player's available slots
             if let Some(blocking_entry) = entry_map.get(blocking_player_id) {
                 let blocking_available = get_available_slots(blocking_entry);
-                
+
                 // Recursively try to move the blocking player
                 if let Some(mut sub_chain) = find_move_chain(
                     blocking_player_id,
@@ -86,19 +86,22 @@ pub fn find_move_chain(
                     locked_slots,
                 ) {
                     // Found a chain! Prepend our move
-                    sub_chain.insert(0, Move {
-                        player_id: player_id.to_string(),
-                        from_slot: current_slot,
-                        to_slot: target_slot,
-                    });
+                    sub_chain.insert(
+                        0,
+                        Move {
+                            player_id: player_id.to_string(),
+                            from_slot: current_slot,
+                            to_slot: target_slot,
+                        },
+                    );
                     return Some(sub_chain);
                 }
             }
-            
+
             visited.remove(blocking_player_id);
         }
     }
-    
+
     None
 }
 
@@ -122,9 +125,11 @@ pub fn apply_move_chain(
             } else {
                 // This shouldn't happen, but if it does, put the appointment back
                 schedule.insert(mv.from_slot, appt);
-                eprintln!("Warning: Attempted to move wrong player from slot {}", mv.from_slot);
+                eprintln!(
+                    "Warning: Attempted to move wrong player from slot {}",
+                    mv.from_slot
+                );
             }
         }
     }
 }
-
