@@ -32,8 +32,8 @@ pub async fn submit_form_by_code(
     let form_data = forms.get(&code).cloned();
     drop(forms);
 
-    let config = if let Some(fd) = form_data {
-        fd.config
+    let (config, server_number) = if let Some(fd) = form_data {
+        (fd.config, fd.server_number)
     } else {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "success": false,
@@ -46,6 +46,17 @@ pub async fn submit_form_by_code(
             "success": false,
             "error": err
         })));
+    }
+
+    // Verify player is in the kingdom this form is for
+    if let Ok(player) = kingshot_api::fetch_player(req.player_id.trim()).await {
+        let expected = server_number.to_string();
+        if player.kid.trim() != expected {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error": "This player is not in the kingdom this form is for"
+            })));
+        }
     }
 
     let timestamp = chrono::Local::now().format("%d/%m/%Y %H.%M.%S").to_string();
@@ -396,23 +407,41 @@ pub async fn check_submission_by_code(
     })))
 }
 
-/// Player lookup by ID (Kingshot API, public)
+/// Player lookup by ID (Kingshot API, public).
+/// Verifies the player is in the kingdom the form was created for (server_number).
 pub async fn player_lookup_by_code(
     path: web::Path<(String, String)>,
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
 ) -> Result<HttpResponse> {
-    let (_code, player_id) = path.into_inner();
+    let (code, player_id) = path.into_inner();
+    let player_id = player_id.trim();
+
+    let expected_kingdom = {
+        let forms = state.forms.lock().unwrap();
+        forms
+            .get(&code)
+            .map(|f| f.server_number.to_string())
+    };
 
     match kingshot_api::fetch_player(&player_id).await {
         Ok(player) => {
             let castle_level = kingshot_api::stove_lv_to_label(player.stove_lv);
+
+            let kingdom_mismatch = if let Some(ref exp) = expected_kingdom {
+                player.kid.trim() != exp.as_str()
+            } else {
+                false
+            };
+
             Ok(HttpResponse::Ok().json(serde_json::json!({
-                "success": true,
+                "success": !kingdom_mismatch,
                 "name": player.nickname,
                 "player_id": player.fid,
                 "avatar_image": player.avatar_image,
                 "castle_level": castle_level,
-                "kingdom": player.kid
+                "kingdom": player.kid,
+                "kingdom_mismatch": kingdom_mismatch,
+                "error": if kingdom_mismatch { Some("This player is not in the kingdom this form is for") } else { None::<&str> }
             })))
         }
         Err(e) => Ok(HttpResponse::Ok().json(serde_json::json!({

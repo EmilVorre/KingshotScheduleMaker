@@ -51,6 +51,7 @@
                             <li>Add the <strong>first person</strong> from the schedule to the position</li>
                             <li>The 15 minutes <em>before</em> reset are for positioning only – do not use the slot during this time</li>
                             <li>The 15 minutes <em>after</em> reset are when their appointment time actually starts</li>
+                            <li><strong>Why 15 min instead of 30?</strong> Slot 1 needs the 15 min before reset to get the first person into place. All other slots are 30 minutes because the next person can be queued while the previous one is using the appointment.</li>
                         </ul>
 
                         <h4 class="text-lg font-semibold text-gray-200 mt-4">After reset – rest of the schedule</h4>
@@ -60,11 +61,11 @@
                         </ul>
 
                         <h4 class="text-lg font-semibold text-gray-200 mt-4">Back-to-back days (e.g. Construction → Research)</h4>
-                        <p>When two days use the same appointment and run back-to-back, there is a <strong>crossover slot</strong>:</p>
+                        <p>When two days use the same appointment and run back-to-back, there is a <strong>crossover slot</strong> between Day 1 and Day 2:</p>
                         <ul>
-                            <li>The last slot of Day 1 overlaps with the first slot of Day 2 – one person gets 15 min on Day 1 and 15 min on Day 2</li>
+                            <li><strong>What it is:</strong> Each day runs from 15 min before reset to 15 min after reset the next day. When Day 2 follows Day 1, the end of Day 1 (15 min after Day 1's reset) overlaps with the start of Day 2 (15 min before Day 2's reset). One person occupies this overlap – they get 15 min at the end of Day 1 and 15 min at the start of Day 2.</li>
                             <li>The program only assigns someone here if they applied for <strong>both</strong> days</li>
-                            <li><strong>What to do:</strong> When the last person from Day 1 has been added, extend the queue to include the Day 2 schedule, starting with <strong>slot 2</strong> (slot 1 is the crossover person already in place)</li>
+                            <li><strong>What to do:</strong> When the last person from Day 1 has been added, extend the queue to include the Day 2 schedule, starting with <strong>slot 2</strong> (slot 1 is the crossover person, already in the queue from Day 1)</li>
                         </ul>
                     </div>
 
