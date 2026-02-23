@@ -43,6 +43,7 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
             .wrap(middleware::Logger::default())
             .service(Files::new("/static", "static").show_files_listing())
             .route("/", web::get().to(pages::index))
+            .route("/info", web::get().to(pages::info_page))
             .route("/create-account", web::get().to(pages::create_account_page))
             .route("/api/create-account", web::post().to(auth::create_account))
             .route("/api/login", web::post().to(auth::login_api))

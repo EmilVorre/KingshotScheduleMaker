@@ -214,22 +214,6 @@ pub async fn create_form(
         }
     }
 
-    let mut alliances = body.alliances.clone();
-    if !alliances.contains(&"Non of the above".to_string()) {
-        alliances.push("Non of the above".to_string());
-    }
-
-    let _config = FormConfig {
-        alliances,
-        construction_truegold_mode: body.construction_truegold_mode.clone(),
-        construction_times: body.construction_times.clone(),
-        research_times: body.research_times.clone(),
-        troops_times: body.troops_times.clone(),
-        predetermined_slots: body.predetermined_slots.clone(),
-        intro_text: body.intro_text.clone(),
-        support_person_name: body.support_person_name.clone(),
-    };
-
     let form_name = body
         .name
         .clone()
@@ -244,6 +228,7 @@ pub async fn create_form(
         created_at,
         config: FormConfig {
             alliances: body.alliances.clone(),
+            include_non_of_above: body.include_non_of_above,
             construction_truegold_mode: body.construction_truegold_mode.clone(),
             construction_times: body.construction_times.clone(),
             research_times: body.research_times.clone(),
@@ -654,6 +639,7 @@ pub async fn get_current_form_info(
                 "submissions_count": submissions_count,
                 "config": {
                     "alliances": form.config.alliances,
+                    "include_non_of_above": form.config.include_non_of_above,
                     "construction_times": form.config.construction_times,
                     "research_times": form.config.research_times,
                     "troops_times": form.config.troops_times,

@@ -28,9 +28,12 @@
                 <p class="text-gray-400">Manage your schedules, statistics, and forms</p>
             </header>
             
-            <nav class="flex justify-center gap-4 mb-8">
+            <nav class="flex justify-center gap-4 mb-8 flex-wrap">
                 <a href="/" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-all">
                     <i class="fas fa-home mr-2"></i>Home
+                </a>
+                <a href="/info" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-all">
+                    <i class="fas fa-info-circle mr-2"></i>How to Use
                 </a>
             </nav>
             
@@ -510,24 +513,29 @@
                                         <h3 class="text-xl font-bold text-white mb-4">
                                             <i class="fas fa-users mr-2"></i>Alliances
                                         </h3>
-                                        <p class="text-sm text-gray-400 mb-4">Add or remove alliance names. "Non of the above" will be automatically added.</p>
+                                        <p class="text-sm text-gray-400 mb-4">Add or remove alliance names. Players will select from this list.</p>
+                                        <div class="mb-4">
+                                            <button 
+                                                type="button"
+                                                @click.prevent="config.include_non_of_above = !config.include_non_of_above"
+                                                :class="[
+                                                    'w-full px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2',
+                                                    config.include_non_of_above 
+                                                        ? 'bg-green-600/30 border-2 border-green-500 text-green-200 hover:bg-green-600/50' 
+                                                        : 'bg-gray-700 border-2 border-gray-600 text-gray-400 hover:bg-gray-600'
+                                                ]">
+                                                <i :class="config.include_non_of_above ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
+                                                {{ config.include_non_of_above ? 'Include "Non of the above" (users can type custom alliance)' : 'Exclude "Non of the above"' }}
+                                            </button>
+                                        </div>
                                         <div class="space-y-3">
                                             <div v-for="(alliance, index) in config.alliances" :key="index" class="flex items-center gap-2">
                                                 <input 
-                                                    v-if="alliance !== 'Non of the above'"
                                                     v-model="config.alliances[index]"
                                                     type="text"
                                                     class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
                                                     placeholder="Alliance name">
-                                                <input 
-                                                    v-else
-                                                    v-model="config.alliances[index]"
-                                                    type="text"
-                                                    disabled
-                                                    class="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-500 cursor-not-allowed"
-                                                    placeholder="Non of the above">
                                                 <button 
-                                                    v-if="alliance !== 'Non of the above'"
                                                     @click.prevent="config.alliances.splice(index, 1)"
                                                     type="button"
                                                     class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all">
@@ -543,7 +551,7 @@
                                         </div>
                                     </div>
                                     
-                                    <!-- Current Age in Kingdom -->
+                                    <!-- Current Age of Your Kingdom -->
                                     <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
                                         <h3 class="text-xl font-bold text-amber-400 mb-4">
                                             <i class="fas fa-coins mr-2"></i>Current Age of Your Kingdom
@@ -945,6 +953,7 @@
                     config: {
                         form_name: '',
                         alliances: [],
+                        include_non_of_above: true,
                         construction_truegold_mode: 'truegold_unlocked',
                         construction_times: { start_time: '00:00', end_time: null },
                         research_times: { start_time: '00:00', end_time: null },
@@ -1300,7 +1309,8 @@
                                 this.config.research_times = { start_time: '00:00', end_time: null };
                                 this.config.troops_times = { start_time: '00:00', end_time: null };
                                 this.config.construction_truegold_mode = data.config.construction_truegold_mode || 'truegold_unlocked';
-                                // Remove "Non of the above" from display (it will be added automatically)
+                                this.config.include_non_of_above = data.config.include_non_of_above !== false;
+                                // Remove "Non of the above" from display (it's optional now)
                                 this.config.alliances = (data.config.alliances || []).filter(a => a !== 'Non of the above');
                                 // Always use standard intro text (not editable)
                                 this.config.intro_text = this.standardIntroText;
@@ -1342,6 +1352,7 @@
                         const requestBody = {
                             name: (this.config.form_name && this.config.form_name.trim()) || null,
                             alliances: alliances,
+                            include_non_of_above: this.config.include_non_of_above,
                             construction_truegold_mode: this.config.construction_truegold_mode,
                             construction_times: { start_time: '00:00', end_time: null },
                             research_times: { start_time: '00:00', end_time: null },

@@ -11,6 +11,12 @@ pub async fn index() -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().content_type("text/html").body(html))
 }
 
+/// Information / How to Use page
+pub async fn info_page() -> Result<HttpResponse> {
+    let html = include_str!("../../templates/info.html");
+    Ok(HttpResponse::Ok().content_type("text/html").body(html))
+}
+
 /// Servers list page
 pub async fn servers_list_page() -> Result<HttpResponse> {
     let html = include_str!("../../templates/servers_list.html");

@@ -1260,8 +1260,8 @@
                         const response = await fetch(`${this.baseUrl}/api/config`);
                         if (response.ok) {
                             this.config = await response.json();
-                            // Ensure "Non of the above" is in alliances
-                            if (!this.config.alliances.includes('Non of the above')) {
+                            // Add "Non of the above" only when form config allows it
+                            if (this.config.include_non_of_above !== false && !this.config.alliances.includes('Non of the above')) {
                                 this.config.alliances.push('Non of the above');
                             }
                             
