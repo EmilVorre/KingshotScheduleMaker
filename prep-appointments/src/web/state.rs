@@ -113,9 +113,15 @@ impl Default for ConstructionTruegoldMode {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormConfig {
     pub alliances: Vec<String>,
+    #[serde(default = "default_true")]
+    pub include_non_of_above: bool,
     #[serde(default)]
     pub construction_truegold_mode: ConstructionTruegoldMode,
     pub construction_times: DayTimeConfig,
@@ -133,6 +139,7 @@ impl Default for FormConfig {
     fn default() -> Self {
         FormConfig {
             alliances: vec![],
+            include_non_of_above: true,
             construction_truegold_mode: ConstructionTruegoldMode::default(),
             construction_times: DayTimeConfig {
                 start_time: "00:00".to_string(),
@@ -249,6 +256,8 @@ pub struct ScheduleSlot {
 pub struct CreateFormRequest {
     pub name: Option<String>,
     pub alliances: Vec<String>,
+    #[serde(default = "default_true")]
+    pub include_non_of_above: bool,
     #[serde(default)]
     pub construction_truegold_mode: ConstructionTruegoldMode,
     pub construction_times: DayTimeConfig,

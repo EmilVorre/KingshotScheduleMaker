@@ -548,6 +548,7 @@
                             pleaseEnterCustomAlliance: 'Please enter your custom alliance name',
                             pleaseEnterCharacterName: 'Please confirm your player ID by clicking Confirm',
                             playerIdMustBeNumber: 'Player ID must be a number',
+                            playerNotInKingdom: 'This player is not in the kingdom this form is for',
                             pleaseSelectAtLeastOneDay: 'Please select at least one day type (Construction, Research, or Troops)',
                             pleaseEnterConstructionSpeedups: 'Please enter construction speedup hours',
                             pleaseEnterConstructionTruegold: 'Please enter construction truegold amount',
@@ -642,6 +643,7 @@
                             pleaseEnterCustomAlliance: '사용자 지정 동맹 이름을 입력하세요',
                             pleaseEnterCharacterName: '확인 버튼을 클릭하여 플레이어 ID를 확인해 주세요',
                             playerIdMustBeNumber: '플레이어 ID는 숫자여야 합니다',
+                            playerNotInKingdom: '이 플레이어는 이 양식이 대상으로 하는 왕국에 속해 있지 않습니다',
                             pleaseSelectAtLeastOneDay: '최소한 하나의 날 유형(건설, 연구 또는 병사)을 선택하세요',
                             pleaseEnterConstructionSpeedups: '건설 속도 향상 시간을 입력하세요',
                             pleaseEnterConstructionTruegold: '건설 순금 수량을 입력하세요',
@@ -735,6 +737,7 @@
                             pleaseEnterCustomAlliance: '請輸入您的自定義聯盟名稱',
                             pleaseEnterCharacterName: '請點擊確認按鈕以確認您的玩家ID',
                             playerIdMustBeNumber: '玩家ID必須是數字',
+                            playerNotInKingdom: '此玩家不屬於此表格所針對的王國',
                             pleaseSelectAtLeastOneDay: '請至少選擇一種日期類型（建造、研究或士兵）',
                             pleaseEnterConstructionSpeedups: '請輸入建造加速小時數',
                             pleaseEnterConstructionTruegold: '請輸入建造黃金微粒數量',
@@ -828,6 +831,7 @@
                             pleaseEnterCustomAlliance: 'カスタム同盟名を入力してください',
                             pleaseEnterCharacterName: '確認ボタンをクリックしてプレイヤーIDを確認してください',
                             playerIdMustBeNumber: 'プレイヤーIDは数字である必要があります',
+                            playerNotInKingdom: 'このプレイヤーは、このフォームの対象王国に属していません',
                             pleaseSelectAtLeastOneDay: '少なくとも1つの日タイプ（建設、研究、または兵士）を選択してください',
                             pleaseEnterConstructionSpeedups: '建設加速時間を入力してください',
                             pleaseEnterConstructionTruegold: '建設黄金微粒子の数量を入力してください',
@@ -921,6 +925,7 @@
                             pleaseEnterCustomAlliance: 'Por favor ingresa el nombre de tu alianza personalizada',
                             pleaseEnterCharacterName: 'Por favor haz clic en Confirmar para verificar tu ID de jugador',
                             playerIdMustBeNumber: 'El ID del jugador debe ser un número',
+                            playerNotInKingdom: 'Este jugador no pertenece al reino para el que está destinado este formulario',
                             pleaseSelectAtLeastOneDay: 'Por favor selecciona al menos un tipo de día (Construcción, Investigación o Tropas)',
                             pleaseEnterConstructionSpeedups: 'Por favor ingresa las horas de aceleración de construcción',
                             pleaseEnterConstructionTruegold: 'Por favor ingresa la cantidad de oro verdadero de construcción',
@@ -1014,6 +1019,7 @@
                             pleaseEnterCustomAlliance: 'Bitte geben Sie Ihren benutzerdefinierten Bündnisnamen ein',
                             pleaseEnterCharacterName: 'Bitte klicken Sie auf Bestätigen, um Ihre Spieler-ID zu bestätigen',
                             playerIdMustBeNumber: 'Die Spieler-ID muss eine Zahl sein',
+                            playerNotInKingdom: 'Dieser Spieler gehört nicht zum Königreich, für das dieses Formular bestimmt ist',
                             pleaseSelectAtLeastOneDay: 'Bitte wählen Sie mindestens einen Tagestyp aus (Bau, Forschung oder Truppen)',
                             pleaseEnterConstructionSpeedups: 'Bitte geben Sie die Baubeschleunigungsstunden ein',
                             pleaseEnterConstructionTruegold: 'Bitte geben Sie die Menge an Echtem Gold für den Bau ein',
@@ -1260,8 +1266,8 @@
                         const response = await fetch(`${this.baseUrl}/api/config`);
                         if (response.ok) {
                             this.config = await response.json();
-                            // Ensure "Non of the above" is in alliances
-                            if (!this.config.alliances.includes('Non of the above')) {
+                            // Add "Non of the above" only when form config allows it
+                            if (this.config.include_non_of_above !== false && !this.config.alliances.includes('Non of the above')) {
                                 this.config.alliances.push('Non of the above');
                             }
                             
@@ -1343,7 +1349,7 @@
                                 kingdom: data.kingdom || ''
                             };
                         } else {
-                            this.lookupError = data.error || this.t('failedToLoadConfig');
+                            this.lookupError = data.kingdom_mismatch ? this.t('playerNotInKingdom') : (data.error || this.t('failedToLoadConfig'));
                             this.playerCard = null;
                         }
                     } catch (err) {
