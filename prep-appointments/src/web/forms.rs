@@ -427,7 +427,9 @@ pub async fn player_lookup_by_code(
 
     let expected_kingdom = {
         let forms = state.forms.lock().unwrap();
-        forms.get(&code).map(|f| f.config.kingdom_id.trim().to_string())
+        forms
+            .get(&code)
+            .map(|f| f.config.kingdom_id.trim().to_string())
     };
 
     match kingshot_api::fetch_player(&player_id).await {
