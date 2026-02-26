@@ -32,7 +32,7 @@ pub async fn submit_form_by_code(
     let form_data = forms.get(&code).cloned();
     drop(forms);
 
-    let (config, server_number) = if let Some(fd) = form_data {
+    let (config, _server_number) = if let Some(fd) = form_data {
         (fd.config, fd.server_number)
     } else {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
@@ -49,9 +49,10 @@ pub async fn submit_form_by_code(
     }
 
     // Verify player is in the kingdom this form is for
+    let expected_kingdom = config.kingdom_id.trim();
+
     if let Ok(player) = kingshot_api::fetch_player(req.player_id.trim()).await {
-        let expected = server_number.to_string();
-        if player.kid.trim() != expected {
+        if player.kid.trim() != expected_kingdom {
             return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "success": false,
                 "error": "This player is not in the kingdom this form is for"
@@ -183,6 +184,13 @@ pub async fn create_form(
         })));
     }
 
+    if body.kingdom_id.trim().is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": "Kingdom ID is required"
+        })));
+    }
+
     let mut code = generate_form_code();
     let mut max_attempts = 100;
     loop {
@@ -247,6 +255,7 @@ pub async fn create_form(
             predetermined_slots: body.predetermined_slots.clone(),
             intro_text: body.intro_text.clone(),
             support_person_name: body.support_person_name.clone(),
+            kingdom_id: body.kingdom_id.trim().to_string(),
         },
     };
 
@@ -408,7 +417,7 @@ pub async fn check_submission_by_code(
 }
 
 /// Player lookup by ID (Kingshot API, public).
-/// Verifies the player is in the kingdom the form was created for (server_number).
+/// Verifies the player is in the kingdom the form was created for (kingdom_id).
 pub async fn player_lookup_by_code(
     path: web::Path<(String, String)>,
     state: web::Data<AppState>,
@@ -418,7 +427,9 @@ pub async fn player_lookup_by_code(
 
     let expected_kingdom = {
         let forms = state.forms.lock().unwrap();
-        forms.get(&code).map(|f| f.server_number.to_string())
+        forms
+            .get(&code)
+            .map(|f| f.config.kingdom_id.trim().to_string())
     };
 
     match kingshot_api::fetch_player(&player_id).await {
@@ -672,7 +683,8 @@ pub async fn get_current_form_info(
                     "troops_times": form.config.troops_times,
                     "predetermined_slots": form.config.predetermined_slots,
                     "intro_text": form.config.intro_text,
-                    "support_person_name": form.config.support_person_name
+                    "support_person_name": form.config.support_person_name,
+                    "kingdom_id": form.config.kingdom_id
                 }
             }
         })))

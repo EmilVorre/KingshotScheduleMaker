@@ -480,6 +480,20 @@
                                             placeholder="Enter form name (optional)">
                                     </div>
                                     
+                                    <!-- Kingdom ID -->
+                                    <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                                        <h3 class="text-xl font-bold text-white mb-4">
+                                            <i class="fas fa-crown mr-2"></i>Kingdom ID <span class="text-red-400">*</span>
+                                        </h3>
+                                        <p class="text-sm text-gray-400 mb-4">The kingdom ID used to validate applicants. Only players whose kingdom ID (from the game) matches this value can submit the form.</p>
+                                        <input 
+                                            v-model="config.kingdom_id"
+                                            type="text"
+                                            required
+                                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
+                                            placeholder="e.g. 123 or 456">
+                                    </div>
+                                    
                                     <!-- Introduction Text -->
                                     <div class="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
                                         <h3 class="text-xl font-bold text-white mb-4">
@@ -952,6 +966,7 @@
                     standardIntroText: 'Fill out this form to apply for Chief Minister (CM) and Noble Advisor (NA) appointments.\n\nSchedule:\n- Construction Day (Monday) [CM]\n- Research Day (Tuesday) [CM]\n- Troops Training Day (Thursday) [NA]\n\nRequirements:\n\n- Form must be filled out in order to be considered for an appointment during SvS preparation week. \n- Form must be filled out by THE SUNDAY OF MATCHMAKING.\n- Form filled out after the deadline will be added to the "Late" submission wait list.\n- Rally leaders and rally leader substitutes may be given priority (if necessary).\n- Verification of items, speedups, and resources may be requested (eg. during situations where the score is very close in points and to make sure our state wins by ensuring appointments go to players who can maximize points).\n\n\nFor more information:\n- Contact form support: #140 [COB]Vor and /or the current Minister of Justice if you have questions on filling out this form or changes to your form submission!',
                     config: {
                         form_name: '',
+                        kingdom_id: '',
                         alliances: [],
                         include_non_of_above: true,
                         construction_truegold_mode: 'truegold_unlocked',
@@ -1315,6 +1330,7 @@
                                 // Always use standard intro text (not editable)
                                 this.config.intro_text = this.standardIntroText;
                                 this.config.support_person_name = data.config.support_person_name || '';
+                                this.config.kingdom_id = data.config.kingdom_id || '';
                                 // Note: form_name is not preserved from previous config (user should set a new name)
                             }
                         }
@@ -1348,9 +1364,20 @@
                         return;
                     }
                     
+                    // Validate kingdom ID is provided
+                    if (!this.config.kingdom_id || !this.config.kingdom_id.trim()) {
+                        this.configStatus = {
+                            type: 'error',
+                            message: 'Error: Kingdom ID is required'
+                        };
+                        this.creatingForm = false;
+                        return;
+                    }
+                    
                     try {
                         const requestBody = {
                             name: (this.config.form_name && this.config.form_name.trim()) || null,
+                            kingdom_id: this.config.kingdom_id.trim(),
                             alliances: alliances,
                             include_non_of_above: this.config.include_non_of_above,
                             construction_truegold_mode: this.config.construction_truegold_mode,

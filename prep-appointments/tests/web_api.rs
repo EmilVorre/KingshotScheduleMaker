@@ -8,6 +8,8 @@ use prep_appointments::form::FormSubmissionRequest;
 use prep_appointments::web::{forms, AppState, FormConfig, FormData};
 
 fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
+    let mut config = FormConfig::default();
+    config.kingdom_id = "1".to_string();
     let mut forms = HashMap::new();
     forms.insert(
         "TESTCODE123".to_string(),
@@ -17,7 +19,7 @@ fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
             server_number: 1,
             name: "Test Form".to_string(),
             created_at: "2025-01-01T00:00:00Z".to_string(),
-            config: FormConfig::default(),
+            config,
         },
     );
     web::Data::new(AppState {

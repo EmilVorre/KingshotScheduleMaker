@@ -133,6 +133,9 @@ pub struct FormConfig {
     pub intro_text: Option<String>,
     #[serde(default)]
     pub support_person_name: Option<String>,
+    /// Kingdom ID used to validate applicants: only players whose kid matches this can submit.
+    #[serde(default)]
+    pub kingdom_id: String,
 }
 
 impl Default for FormConfig {
@@ -156,6 +159,7 @@ impl Default for FormConfig {
             predetermined_slots: vec![],
             intro_text: None,
             support_person_name: None,
+            kingdom_id: String::new(),
         }
     }
 }
@@ -269,6 +273,8 @@ pub struct CreateFormRequest {
     pub intro_text: Option<String>,
     #[serde(default)]
     pub support_person_name: Option<String>,
+    #[serde(default)]
+    pub kingdom_id: String,
 }
 
 #[derive(Deserialize)]
