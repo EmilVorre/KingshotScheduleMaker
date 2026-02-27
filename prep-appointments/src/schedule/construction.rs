@@ -117,25 +117,25 @@ pub fn schedule_construction_day_with_locked(
 
     // First, try to assign last slot to priority candidates (if not already set by crossover)
     if !last_slot_assigned {
-    for entry in &last_slot_priority {
-        if entry.construction_available_slots.contains(&last_slot)
-            && !used_slots.contains(&last_slot)
-        {
-            schedule.insert(
-                last_slot,
-                ScheduledAppointment {
-                    player_id: entry.player_id.clone(),
-                    name: entry.name.clone(),
-                    alliance: entry.alliance.clone(),
-                    slot: last_slot,
-                    priority_score: entry.construction_score,
-                },
-            );
-            used_slots.insert(last_slot);
-            last_slot_assigned = true;
-            break;
+        for entry in &last_slot_priority {
+            if entry.construction_available_slots.contains(&last_slot)
+                && !used_slots.contains(&last_slot)
+            {
+                schedule.insert(
+                    last_slot,
+                    ScheduledAppointment {
+                        player_id: entry.player_id.clone(),
+                        name: entry.name.clone(),
+                        alliance: entry.alliance.clone(),
+                        slot: last_slot,
+                        priority_score: entry.construction_score,
+                    },
+                );
+                used_slots.insert(last_slot);
+                last_slot_assigned = true;
+                break;
+            }
         }
-    }
     }
 
     // Combine remaining candidates (priority candidates that didn't get last slot + other candidates)
@@ -154,16 +154,12 @@ pub fn schedule_construction_day_with_locked(
     } else {
         last_slot_priority
     };
-    remaining_candidates.extend(
-        other_candidates
-            .into_iter()
-            .filter(|e| {
-                last_slot_player_id
-                    .as_ref()
-                    .map(|id| e.player_id != *id)
-                    .unwrap_or(true)
-            }),
-    );
+    remaining_candidates.extend(other_candidates.into_iter().filter(|e| {
+        last_slot_player_id
+            .as_ref()
+            .map(|id| e.player_id != *id)
+            .unwrap_or(true)
+    }));
 
     // Sort remaining candidates by construction score
     remaining_candidates.sort_by(|a, b| b.construction_score.cmp(&a.construction_score));

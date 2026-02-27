@@ -1,10 +1,10 @@
 mod admin;
 mod auth;
 mod avatar;
-pub mod forms;
 mod feedback;
+pub mod forms;
 mod oauth;
-mod oauth_state;
+pub mod oauth_state;
 mod pages;
 mod persistence;
 mod schedule;
@@ -58,15 +58,16 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
             .route("/api/logout", web::post().to(auth::logout_api))
             .route("/api/session", web::get().to(auth::get_session_info))
             .route("/api/profile/update", web::put().to(auth::update_profile))
-            .route("/api/profile/kingshot-lookup", web::post().to(auth::kingshot_lookup_profile))
+            .route(
+                "/api/profile/kingshot-lookup",
+                web::post().to(auth::kingshot_lookup_profile),
+            )
             .route("/api/auth/callback", web::get().to(oauth::oauth_callback))
             .service(
-                web::resource("/api/auth/{provider}")
-                    .route(web::get().to(oauth::oauth_initiate)),
+                web::resource("/api/auth/{provider}").route(web::get().to(oauth::oauth_initiate)),
             )
             .service(
-                web::resource("/api/avatar/{player_id}")
-                    .route(web::get().to(avatar::get_avatar)),
+                web::resource("/api/avatar/{player_id}").route(web::get().to(avatar::get_avatar)),
             )
             .route(
                 "/api/generate-schedule",
@@ -74,9 +75,15 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
             )
             .route("/api/servers", web::get().to(auth::list_servers))
             .route("/api/admin/accounts", web::get().to(admin::list_accounts))
-            .route("/api/admin/accounts/{account_name}/admin", web::post().to(admin::set_admin))
+            .route(
+                "/api/admin/accounts/{account_name}/admin",
+                web::post().to(admin::set_admin),
+            )
             .route("/api/feedback", web::post().to(feedback::submit_feedback))
-            .route("/api/admin/feedback", web::get().to(feedback::list_feedback))
+            .route(
+                "/api/admin/feedback",
+                web::get().to(feedback::list_feedback),
+            )
             .service(
                 web::resource("/api/admin/feedback/{id}/archive")
                     .route(web::post().to(feedback::archive_feedback)),

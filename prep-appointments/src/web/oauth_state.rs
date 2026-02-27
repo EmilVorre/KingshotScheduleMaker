@@ -28,17 +28,23 @@ impl OAuthStateCache {
             .unwrap()
             .as_secs();
         let mut g = self.inner.lock().unwrap();
-        g.insert(state, PendingOAuthState {
-            pkce_verifier,
-            provider,
-            created_at: created,
-        });
+        g.insert(
+            state,
+            PendingOAuthState {
+                pkce_verifier,
+                provider,
+                created_at: created,
+            },
+        );
     }
 
     pub fn take(&self, state: &str) -> Option<PendingOAuthState> {
         let mut g = self.inner.lock().unwrap();
         let entry = g.remove(state);
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         g.retain(|_, v| now - v.created_at < 600);
         entry
     }
@@ -71,7 +77,10 @@ impl PendingOAuthCache {
     pub fn take(&self, token: &str) -> Option<PendingOAuthAccount> {
         let mut g = self.inner.lock().unwrap();
         let entry = g.remove(token);
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         g.retain(|_, v| now - v.created_at < 900);
         entry
     }

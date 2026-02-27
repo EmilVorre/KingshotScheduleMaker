@@ -10,7 +10,9 @@ use super::state::AppState;
 fn require_admin(session: &Session, state: &web::Data<AppState>) -> Result<String, HttpResponse> {
     let account_name: String = session
         .get("account_name")
-        .map_err(|_| HttpResponse::InternalServerError().json(serde_json::json!({"error": "Session error"})))?
+        .map_err(|_| {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": "Session error"}))
+        })?
         .ok_or_else(|| {
             HttpResponse::Unauthorized().json(serde_json::json!({
                 "success": false,
@@ -90,10 +92,7 @@ pub async fn submit_feedback(
 }
 
 /// GET /api/admin/feedback - List all feedback (admin only)
-pub async fn list_feedback(
-    session: Session,
-    state: web::Data<AppState>,
-) -> Result<HttpResponse> {
+pub async fn list_feedback(session: Session, state: web::Data<AppState>) -> Result<HttpResponse> {
     let _admin = match require_admin(&session, &state) {
         Ok(n) => n,
         Err(resp) => return Ok(resp),

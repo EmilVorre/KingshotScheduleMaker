@@ -42,9 +42,7 @@ pub async fn get_avatar(
             } else {
                 "image/png"
             };
-            return Ok(HttpResponse::Ok()
-                .content_type(content_type)
-                .body(bytes));
+            return Ok(HttpResponse::Ok().content_type(content_type).body(bytes));
         }
     }
 
@@ -115,7 +113,5 @@ pub async fn get_avatar(
         _ => "image/png",
     };
 
-    Ok(HttpResponse::Ok()
-        .content_type(content_type)
-        .body(bytes))
+    Ok(HttpResponse::Ok().content_type(content_type).body(bytes))
 }

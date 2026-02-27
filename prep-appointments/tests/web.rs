@@ -95,6 +95,7 @@ fn test_get_current_form_from_mapping() {
         server_number: 1,
         name: "Form 1".to_string(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
+        delete_date: None,
         config: FormConfig::default(),
     };
     forms.insert("ABC123".to_string(), form1.clone());
@@ -114,6 +115,7 @@ fn test_get_current_form_fallback_to_most_recent() {
         server_number: 1,
         name: "Old".to_string(),
         created_at: "2025-01-01T00:00:00Z".to_string(),
+        delete_date: None,
         config: FormConfig::default(),
     };
     let form2 = FormData {
@@ -122,6 +124,7 @@ fn test_get_current_form_fallback_to_most_recent() {
         server_number: 1,
         name: "New".to_string(),
         created_at: "2025-01-02T00:00:00Z".to_string(),
+        delete_date: None,
         config: FormConfig::default(),
     };
     forms.insert("OLD".to_string(), form1);
@@ -155,6 +158,10 @@ fn test_load_save_accounts_roundtrip() {
             server_number: 1,
             password: "secret".to_string(),
             in_game_name: "AliceIG".to_string(),
+            player_id: None,
+            oauth_provider: None,
+            oauth_id: None,
+            admin: false,
         },
     );
 

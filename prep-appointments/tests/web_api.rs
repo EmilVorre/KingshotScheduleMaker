@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use prep_appointments::form::FormSubmissionRequest;
-use prep_appointments::web::{forms, AppState, FormConfig, FormData};
+use prep_appointments::web::{forms, oauth_state, AppState, FormConfig, FormData};
 
 fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
     let mut config = FormConfig::default();
@@ -19,6 +19,7 @@ fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
             server_number: 1,
             name: "Test Form".to_string(),
             created_at: "2025-01-01T00:00:00Z".to_string(),
+            delete_date: None,
             config,
         },
     );
@@ -28,6 +29,8 @@ fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
         forms: Mutex::new(forms),
         current_forms: Mutex::new(HashMap::new()),
         data_dir,
+        oauth_state_cache: oauth_state::OAuthStateCache::new(),
+        pending_oauth_cache: oauth_state::PendingOAuthCache::new(),
     })
 }
 

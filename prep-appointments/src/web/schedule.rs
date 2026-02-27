@@ -20,8 +20,8 @@ use super::persistence::{
     get_current_form, load_schedule, load_statistics, save_schedule, save_statistics, schedule_key,
 };
 use super::state::{
-    derive_scheduled_player_ids, get_scheduled_player_ids, AllianceStats, AppState, FormTimeSlotStats,
-    ScheduleData, ScheduleResponse, ScheduleSlot, StatsResponse, TimeSlotStats,
+    derive_scheduled_player_ids, get_scheduled_player_ids, AllianceStats, AppState,
+    FormTimeSlotStats, ScheduleData, ScheduleResponse, ScheduleSlot, StatsResponse, TimeSlotStats,
 };
 
 /// Stats endpoint
@@ -828,15 +828,15 @@ pub async fn generate_schedule_api(
         }
 
         let construction_slots_vec = construction_slots.as_ref().cloned().unwrap_or_default();
-        let last_slot_override = construction_slots_vec
-            .iter()
-            .map(|(s, _)| *s)
-            .max();
+        let last_slot_override = construction_slots_vec.iter().map(|(s, _)| *s).max();
 
         let entries_for_day: Vec<AppointmentEntry> = match day {
             "construction" => {
                 let mut in_other = HashSet::new();
-                for s in [existing_appointments.1.as_ref(), existing_appointments.2.as_ref()] {
+                for s in [
+                    existing_appointments.1.as_ref(),
+                    existing_appointments.2.as_ref(),
+                ] {
                     if let Some(sched) = s {
                         for a in sched.appointments.values() {
                             in_other.insert(a.player_id.clone());
@@ -845,13 +845,19 @@ pub async fn generate_schedule_api(
                 }
                 let mut e: Vec<_> = entries
                     .iter()
-                    .filter(|e| e.wants_construction && !e.construction_available_slots.is_empty() && !in_other.contains(&e.player_id))
+                    .filter(|e| {
+                        e.wants_construction
+                            && !e.construction_available_slots.is_empty()
+                            && !in_other.contains(&e.player_id)
+                    })
                     .cloned()
                     .collect();
                 if let Some(ref r) = existing_appointments.1 {
                     if let Some(r1) = r.appointments.get(&1) {
                         if !e.iter().any(|x| x.player_id == r1.player_id) {
-                            if let Some(entry) = entries.iter().find(|x| x.player_id == r1.player_id) {
+                            if let Some(entry) =
+                                entries.iter().find(|x| x.player_id == r1.player_id)
+                            {
                                 e.push(entry.clone());
                             }
                         }
@@ -861,7 +867,10 @@ pub async fn generate_schedule_api(
             }
             "research" => {
                 let mut in_other = HashSet::new();
-                for s in [existing_appointments.0.as_ref(), existing_appointments.2.as_ref()] {
+                for s in [
+                    existing_appointments.0.as_ref(),
+                    existing_appointments.2.as_ref(),
+                ] {
                     if let Some(sched) = s {
                         for a in sched.appointments.values() {
                             in_other.insert(a.player_id.clone());
@@ -871,13 +880,19 @@ pub async fn generate_schedule_api(
                 let last_slot = last_slot_override.unwrap_or(49);
                 let mut e: Vec<_> = entries
                     .iter()
-                    .filter(|e| e.wants_research && !e.research_available_slots.is_empty() && !in_other.contains(&e.player_id))
+                    .filter(|e| {
+                        e.wants_research
+                            && !e.research_available_slots.is_empty()
+                            && !in_other.contains(&e.player_id)
+                    })
                     .cloned()
                     .collect();
                 if let Some(ref c) = existing_appointments.0 {
                     if let Some(clast) = c.appointments.get(&last_slot) {
                         if !e.iter().any(|x| x.player_id == clast.player_id) {
-                            if let Some(entry) = entries.iter().find(|x| x.player_id == clast.player_id) {
+                            if let Some(entry) =
+                                entries.iter().find(|x| x.player_id == clast.player_id)
+                            {
                                 e.push(entry.clone());
                             }
                         }
@@ -887,7 +902,10 @@ pub async fn generate_schedule_api(
             }
             "troops" => {
                 let mut in_other = HashSet::new();
-                for s in [existing_appointments.0.as_ref(), existing_appointments.1.as_ref()] {
+                for s in [
+                    existing_appointments.0.as_ref(),
+                    existing_appointments.1.as_ref(),
+                ] {
                     if let Some(sched) = s {
                         for a in sched.appointments.values() {
                             in_other.insert(a.player_id.clone());
@@ -896,7 +914,11 @@ pub async fn generate_schedule_api(
                 }
                 entries
                     .iter()
-                    .filter(|e| e.wants_troops && !e.troops_available_slots.is_empty() && !in_other.contains(&e.player_id))
+                    .filter(|e| {
+                        e.wants_troops
+                            && !e.troops_available_slots.is_empty()
+                            && !in_other.contains(&e.player_id)
+                    })
                     .cloned()
                     .collect()
             }
@@ -925,7 +947,8 @@ pub async fn generate_schedule_api(
                 (None, Some(sched), None)
             }
             "troops" => {
-                let sched = schedule_troops_day_with_locked(&entries_for_day, &existing_troops_slots);
+                let sched =
+                    schedule_troops_day_with_locked(&entries_for_day, &existing_troops_slots);
                 (None, None, Some(sched))
             }
             _ => unreachable!(),
@@ -945,28 +968,39 @@ pub async fn generate_schedule_api(
         };
 
         let construction_schedule = match (new_construction.as_ref(), day, append) {
-            (Some(n), "construction", true) => merge_day(existing_appointments.0.as_ref(), n.clone()),
+            (Some(n), "construction", true) => {
+                merge_day(existing_appointments.0.as_ref(), n.clone())
+            }
             (Some(n), "construction", false) => n.clone(),
-            _ => existing_appointments.0.clone().unwrap_or_else(|| DaySchedule {
-                appointments: HashMap::new(),
-                unassigned: Vec::new(),
-            }),
+            _ => existing_appointments
+                .0
+                .clone()
+                .unwrap_or_else(|| DaySchedule {
+                    appointments: HashMap::new(),
+                    unassigned: Vec::new(),
+                }),
         };
         let research_schedule = match (new_research.as_ref(), day, append) {
             (Some(n), "research", true) => merge_day(existing_appointments.1.as_ref(), n.clone()),
             (Some(n), "research", false) => n.clone(),
-            _ => existing_appointments.1.clone().unwrap_or_else(|| DaySchedule {
-                appointments: HashMap::new(),
-                unassigned: Vec::new(),
-            }),
+            _ => existing_appointments
+                .1
+                .clone()
+                .unwrap_or_else(|| DaySchedule {
+                    appointments: HashMap::new(),
+                    unassigned: Vec::new(),
+                }),
         };
         let troops_schedule = match (new_troops.as_ref(), day, append) {
             (Some(n), "troops", true) => merge_day(existing_appointments.2.as_ref(), n.clone()),
             (Some(n), "troops", false) => n.clone(),
-            _ => existing_appointments.2.clone().unwrap_or_else(|| DaySchedule {
-                appointments: HashMap::new(),
-                unassigned: Vec::new(),
-            }),
+            _ => existing_appointments
+                .2
+                .clone()
+                .unwrap_or_else(|| DaySchedule {
+                    appointments: HashMap::new(),
+                    unassigned: Vec::new(),
+                }),
         };
 
         let scheduled_ids: Vec<String> = {
@@ -1009,9 +1043,15 @@ pub async fn generate_schedule_api(
         )
         .await;
 
-        let day_name = day.replace("construction", "Construction").replace("research", "Research").replace("troops", "Troops");
+        let day_name = day
+            .replace("construction", "Construction")
+            .replace("research", "Research")
+            .replace("troops", "Troops");
         let msg = if append {
-            format!("{} schedule appended successfully. Empty slots filled.", day_name)
+            format!(
+                "{} schedule appended successfully. Empty slots filled.",
+                day_name
+            )
         } else {
             format!("{} schedule replaced successfully.", day_name)
         };

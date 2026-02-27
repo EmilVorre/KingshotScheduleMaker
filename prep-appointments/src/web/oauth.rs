@@ -11,9 +11,7 @@ use oauth2::{
 use super::persistence::{save_accounts, schedule_key};
 use super::state::{Account, AppState, ScheduleData};
 
-fn generate_random_account_name(
-    accounts: &std::collections::HashMap<String, Account>,
-) -> String {
+fn generate_random_account_name(accounts: &std::collections::HashMap<String, Account>) -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     loop {
@@ -48,12 +46,17 @@ fn discord_client(req: &HttpRequest) -> Result<BasicClient, HttpResponse> {
     let base = base_url(req);
     let redirect = format!("{}/api/auth/callback?provider=discord", base);
 
-    let auth_url = AuthUrl::new("https://discord.com/api/oauth2/authorize".to_string())
-        .map_err(|e| HttpResponse::InternalServerError().body(format!("Invalid auth URL: {}", e)))?;
-    let token_url = TokenUrl::new("https://discord.com/api/oauth2/token".to_string())
-        .map_err(|e| HttpResponse::InternalServerError().body(format!("Invalid token URL: {}", e)))?;
-    let redirect_url = RedirectUrl::new(redirect)
-        .map_err(|e| HttpResponse::InternalServerError().body(format!("Invalid redirect: {}", e)))?;
+    let auth_url =
+        AuthUrl::new("https://discord.com/api/oauth2/authorize".to_string()).map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Invalid auth URL: {}", e))
+        })?;
+    let token_url =
+        TokenUrl::new("https://discord.com/api/oauth2/token".to_string()).map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Invalid token URL: {}", e))
+        })?;
+    let redirect_url = RedirectUrl::new(redirect).map_err(|e| {
+        HttpResponse::InternalServerError().body(format!("Invalid redirect: {}", e))
+    })?;
 
     let client = BasicClient::new(
         ClientId::new(client_id),
@@ -75,11 +78,16 @@ fn google_client(req: &HttpRequest) -> Result<BasicClient, HttpResponse> {
     let redirect = format!("{}/api/auth/callback?provider=google", base);
 
     let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())
-        .map_err(|e| HttpResponse::InternalServerError().body(format!("Invalid auth URL: {}", e)))?;
-    let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".to_string())
-        .map_err(|e| HttpResponse::InternalServerError().body(format!("Invalid token URL: {}", e)))?;
-    let redirect_url = RedirectUrl::new(redirect)
-        .map_err(|e| HttpResponse::InternalServerError().body(format!("Invalid redirect: {}", e)))?;
+        .map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Invalid auth URL: {}", e))
+        })?;
+    let token_url =
+        TokenUrl::new("https://oauth2.googleapis.com/token".to_string()).map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Invalid token URL: {}", e))
+        })?;
+    let redirect_url = RedirectUrl::new(redirect).map_err(|e| {
+        HttpResponse::InternalServerError().body(format!("Invalid redirect: {}", e))
+    })?;
 
     let client = BasicClient::new(
         ClientId::new(client_id),
@@ -105,7 +113,13 @@ pub async fn oauth_initiate(
                 Ok(c) => c,
                 Err(e) => return Ok(e),
             };
-            (c, vec![Scope::new("identify".to_string()), Scope::new("email".to_string())])
+            (
+                c,
+                vec![
+                    Scope::new("identify".to_string()),
+                    Scope::new("email".to_string()),
+                ],
+            )
         }
         "google" => {
             let c = match google_client(&req) {
@@ -131,11 +145,9 @@ pub async fn oauth_initiate(
         .set_pkce_challenge(pkce_challenge)
         .url();
 
-    state.oauth_state_cache.insert(
-        csrf_token.secret().clone(),
-        pkce_verifier,
-        provider.clone(),
-    );
+    state
+        .oauth_state_cache
+        .insert(csrf_token.secret().clone(), pkce_verifier, provider.clone());
 
     Ok(HttpResponse::Found()
         .append_header(("Location", auth_url.to_string()))
@@ -149,12 +161,14 @@ pub async fn oauth_callback(
     session: Session,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse> {
-    let code = query.code.as_ref().ok_or_else(|| {
-        actix_web::error::ErrorBadRequest("Missing code")
-    })?;
-    let state_param = query.state.as_ref().ok_or_else(|| {
-        actix_web::error::ErrorBadRequest("Missing state")
-    })?;
+    let code = query
+        .code
+        .as_ref()
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing code"))?;
+    let state_param = query
+        .state
+        .as_ref()
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing state"))?;
     let provider = query.provider.as_deref().unwrap_or("discord");
 
     let pending = state
@@ -189,7 +203,9 @@ pub async fn oauth_callback(
         .set_pkce_verifier(pending.pkce_verifier)
         .request_async(async_http_client)
         .await
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Token exchange failed: {}", e)))?;
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Token exchange failed: {}", e))
+        })?;
 
     let access_token = token_result.access_token().secret();
 
@@ -232,7 +248,12 @@ pub async fn oauth_callback(
             let id = user_json
                 .get("id")
                 .and_then(|v| v.as_str())
-                .unwrap_or_else(|| user_json.get("email").and_then(|v| v.as_str()).unwrap_or(""))
+                .unwrap_or_else(|| {
+                    user_json
+                        .get("email")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                })
                 .to_string();
             let name = user_json
                 .get("name")
@@ -251,8 +272,7 @@ pub async fn oauth_callback(
     let existing = accounts
         .values()
         .find(|a| {
-            a.oauth_provider.as_deref() == Some(provider)
-                && a.oauth_id.as_ref() == Some(&oauth_id)
+            a.oauth_provider.as_deref() == Some(provider) && a.oauth_id.as_ref() == Some(&oauth_id)
         })
         .cloned();
 
@@ -304,7 +324,11 @@ pub async fn oauth_callback(
     Ok(HttpResponse::Found()
         .append_header((
             "Location",
-            format!("{}/dashboard/{}", redirect_base.trim_end_matches('/'), account.account_name),
+            format!(
+                "{}/dashboard/{}",
+                redirect_base.trim_end_matches('/'),
+                account.account_name
+            ),
         ))
         .finish())
 }

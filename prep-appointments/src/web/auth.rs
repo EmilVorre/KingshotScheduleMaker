@@ -54,7 +54,11 @@ pub async fn create_account(
         in_game_name: req.in_game_name.clone(),
         player_id: req.player_id.clone().and_then(|s| {
             let t = s.trim();
-            if t.is_empty() { None } else { Some(t.to_string()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
         }),
         oauth_provider: None,
         oauth_id: None,
@@ -307,12 +311,12 @@ pub async fn update_profile(
     session: Session,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse> {
-    let session_account: Option<String> = session.get("account_name").map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to read session")
-    })?;
-    let session_server: Option<u32> = session.get("server_number").map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to read session")
-    })?;
+    let session_account: Option<String> = session
+        .get("account_name")
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Failed to read session"))?;
+    let session_server: Option<u32> = session
+        .get("server_number")
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Failed to read session"))?;
 
     let old_account_name = match (&session_account, &session_server) {
         (Some(a), Some(_)) => a.clone(),
@@ -325,9 +329,10 @@ pub async fn update_profile(
     };
 
     let mut accounts = state.accounts.lock().unwrap();
-    let account = accounts.get(&old_account_name).cloned().ok_or_else(|| {
-        actix_web::error::ErrorNotFound("Account not found")
-    })?;
+    let account = accounts
+        .get(&old_account_name)
+        .cloned()
+        .ok_or_else(|| actix_web::error::ErrorNotFound("Account not found"))?;
 
     let new_account_name = req
         .account_name
@@ -383,12 +388,12 @@ pub async fn update_profile(
         }
         drop(forms);
 
-        session.insert("account_name", &new_account_name).map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Session: {}", e))
-        })?;
-        session.insert("server_number", new_server).map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Session: {}", e))
-        })?;
+        session
+            .insert("account_name", &new_account_name)
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Session: {}", e)))?;
+        session
+            .insert("server_number", new_server)
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Session: {}", e)))?;
     } else {
         let mut updated = account.clone();
         updated.server_number = new_server;
@@ -457,12 +462,12 @@ pub async fn kingshot_lookup_profile(
     session: Session,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse> {
-    let session_account: Option<String> = session.get("account_name").map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to read session")
-    })?;
-    let session_server: Option<u32> = session.get("server_number").map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to read session")
-    })?;
+    let session_account: Option<String> = session
+        .get("account_name")
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Failed to read session"))?;
+    let session_server: Option<u32> = session
+        .get("server_number")
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Failed to read session"))?;
 
     let account_name = match (&session_account, &session_server) {
         (Some(a), Some(_)) => a.clone(),
@@ -496,20 +501,26 @@ pub async fn kingshot_lookup_profile(
 
     let mut accounts = state.accounts.lock().unwrap();
     let (server_number, player_id, in_game_name) = {
-        let account = accounts.get_mut(&account_name).ok_or_else(|| {
-            actix_web::error::ErrorNotFound("Account not found")
-        })?;
+        let account = accounts
+            .get_mut(&account_name)
+            .ok_or_else(|| actix_web::error::ErrorNotFound("Account not found"))?;
 
         account.in_game_name = player.nickname.clone();
         account.player_id = Some(player.fid.clone());
         if server_from_kid > 0 {
             account.server_number = server_from_kid;
-            session.insert("server_number", server_from_kid).map_err(|e| {
-                actix_web::error::ErrorInternalServerError(format!("Session: {}", e))
-            })?;
+            session
+                .insert("server_number", server_from_kid)
+                .map_err(|e| {
+                    actix_web::error::ErrorInternalServerError(format!("Session: {}", e))
+                })?;
         }
 
-        (account.server_number, player.fid.clone(), player.nickname.clone())
+        (
+            account.server_number,
+            player.fid.clone(),
+            player.nickname.clone(),
+        )
     };
 
     save_accounts(&state.data_dir, &accounts).map_err(|e| {

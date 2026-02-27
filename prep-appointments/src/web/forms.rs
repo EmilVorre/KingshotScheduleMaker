@@ -780,9 +780,7 @@ pub async fn reopen_form_api(
         .as_ref()
         .and_then(|j| j.get("archive_name"))
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            actix_web::error::ErrorBadRequest("archive_name required in body")
-        })?;
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("archive_name required in body"))?;
 
     let authenticated = {
         let session_account_name: Option<String> = session.get("account_name").ok().flatten();

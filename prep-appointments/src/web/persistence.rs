@@ -194,11 +194,7 @@ fn move_expired_form_to_old(
     let json_path = format!("{}/{}.json", current_forms_dir, code);
     let old_json_path = format!(
         "{}/{}_{}_{}_{}.json",
-        old_forms_dir,
-        form_data.account_name,
-        form_data.server_number,
-        code,
-        timestamp
+        old_forms_dir, form_data.account_name, form_data.server_number, code, timestamp
     );
     if Path::new(&json_path).exists() {
         std::fs::copy(&json_path, &old_json_path)?;
@@ -208,11 +204,7 @@ fn move_expired_form_to_old(
     if Path::new(&csv_path).exists() {
         let old_csv_path = format!(
             "{}/{}_{}_{}_{}_submissions.csv",
-            old_forms_dir,
-            form_data.account_name,
-            form_data.server_number,
-            code,
-            timestamp
+            old_forms_dir, form_data.account_name, form_data.server_number, code, timestamp
         );
         std::fs::copy(&csv_path, &old_csv_path)?;
         std::fs::remove_file(&csv_path)?;
