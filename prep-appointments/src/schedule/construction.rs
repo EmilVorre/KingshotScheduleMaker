@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 /// Schedules appointments for Construction day with smart slot ranking and stealing
 /// Prioritizes the last slot for people who want research and have slot 1 available
 pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
-    schedule_construction_day_with_locked(entries, &HashSet::new(), None)
+    schedule_construction_day_with_locked(entries, &HashSet::new(), None, None)
 }
 
 /// Schedules appointments for Construction day with pre-locked slots
@@ -18,10 +18,13 @@ pub fn schedule_construction_day(entries: &[AppointmentEntry]) -> DaySchedule {
 /// * `last_slot_override` - When provided, use this as the "last slot" for research handoff priority.
 ///   When None, infers from candidates' available slots (fallback 49). Prefer passing from form config
 ///   when available to handle custom time ranges correctly.
+/// * `crossover_from_research` - When Research was generated first and has slot 1, that player must
+///   get Construction's last slot (crossover). Pass Research schedule to lock last slot for them.
 pub fn schedule_construction_day_with_locked(
     entries: &[AppointmentEntry],
     pre_locked_slots: &HashSet<u8>,
     last_slot_override: Option<u8>,
+    crossover_from_research: Option<&DaySchedule>,
 ) -> DaySchedule {
     // Filter candidates who want construction
     let candidates: Vec<&AppointmentEntry> = entries
@@ -85,8 +88,35 @@ pub fn schedule_construction_day_with_locked(
         .map(|e| (e.player_id.clone(), *e))
         .collect();
 
-    // First, try to assign last slot to priority candidates
+    // Crossover from Research: if Research was generated first and has slot 1, that player must get
+    // Construction's last slot. Lock it for them.
     let mut last_slot_assigned = false;
+    if let Some(research_sched) = crossover_from_research {
+        if let Some(r1_appt) = research_sched.appointments.get(&1) {
+            let player_id = &r1_appt.player_id;
+            if let Some(entry) = entry_map.get(player_id) {
+                if entry.construction_available_slots.contains(&last_slot)
+                    && !used_slots.contains(&last_slot)
+                {
+                    schedule.insert(
+                        last_slot,
+                        ScheduledAppointment {
+                            player_id: entry.player_id.clone(),
+                            name: entry.name.clone(),
+                            alliance: entry.alliance.clone(),
+                            slot: last_slot,
+                            priority_score: entry.construction_score,
+                        },
+                    );
+                    used_slots.insert(last_slot);
+                    last_slot_assigned = true;
+                }
+            }
+        }
+    }
+
+    // First, try to assign last slot to priority candidates (if not already set by crossover)
+    if !last_slot_assigned {
     for entry in &last_slot_priority {
         if entry.construction_available_slots.contains(&last_slot)
             && !used_slots.contains(&last_slot)
@@ -106,24 +136,34 @@ pub fn schedule_construction_day_with_locked(
             break;
         }
     }
+    }
 
     // Combine remaining candidates (priority candidates that didn't get last slot + other candidates)
+    // Exclude the player who got last slot (either from crossover or priority)
+    let last_slot_player_id = schedule.get(&last_slot).map(|a| a.player_id.clone());
     let mut remaining_candidates: Vec<&AppointmentEntry> = if last_slot_assigned {
-        // Remove the one who got last slot from priority list
         last_slot_priority
             .into_iter()
             .filter(|e| {
-                !used_slots.contains(&last_slot)
-                    || schedule
-                        .get(&last_slot)
-                        .map(|a| a.player_id != e.player_id)
-                        .unwrap_or(true)
+                last_slot_player_id
+                    .as_ref()
+                    .map(|id| e.player_id != *id)
+                    .unwrap_or(true)
             })
             .collect()
     } else {
         last_slot_priority
     };
-    remaining_candidates.extend(other_candidates);
+    remaining_candidates.extend(
+        other_candidates
+            .into_iter()
+            .filter(|e| {
+                last_slot_player_id
+                    .as_ref()
+                    .map(|id| e.player_id != *id)
+                    .unwrap_or(true)
+            }),
+    );
 
     // Sort remaining candidates by construction score
     remaining_candidates.sort_by(|a, b| b.construction_score.cmp(&a.construction_score));

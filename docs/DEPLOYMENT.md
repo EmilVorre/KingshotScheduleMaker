@@ -1,147 +1,110 @@
 # Deployment Guide
 
-## VPS Requirements
+Deploy with minimal manual steps: store secrets once in `.env`, then use a simple deploy flow.
 
-**Minimum Recommended:**
-- **CPU**: 2 vCPU (sufficient for moderate traffic)
-- **RAM**: 4GB (plenty for typical usage)
-- **Disk**: 5GB (more than enough for data storage)
+## One-time setup on the server
 
-## Building for Production
+### 1. Create `.env` (secrets live here, never in git)
 
-1. **Build optimized release binary:**
-   ```bash
-   cd prep-appointments
-   cargo build --release
-   ```
-
-2. **The binary will be at:**
-   ```
-   target/release/prep-appointments
-   ```
-
-## Deployment Steps
-
-1. **Upload to VPS:**
-   - Binary: `target/release/prep-appointments` (make it executable: `chmod +x prep-appointments`)
-   - **Static files directory**: `prep-appointments/static/` directory (including the `icons/` subdirectory with all PNG files)
-   - **Note**: Templates are embedded in the binary at compile time, so you don't need to copy the `templates/` directory
-
-2. **Set up directory structure on server:**
-   ```bash
-   # Create the data directory structure
-   mkdir -p data/current_forms data/old_forms data/schedules data/statistics
-   
-   # Ensure static directory structure exists (should match your local structure)
-   # The static/ directory should be in the same directory as the binary
-   # It should contain:
-   #   static/
-   #     style.css
-   #     icons/
-   #       Speedups.png
-   #       Truegold.png
-   #       TruegoldDust.png
-   ```
-
-3. **Directory structure on server should look like:**
-   ```
-   /path/to/deployment/
-   ├── prep-appointments          # The binary executable
-   ├── static/                    # Static files directory
-   │   ├── style.css
-   │   └── icons/
-   │       ├── Speedups.png
-   │       ├── Truegold.png
-   │       └── TruegoldDust.png
-   └── data/                      # Data directory (created automatically if missing)
-       ├── current_forms/
-       ├── old_forms/
-       ├── schedules/
-       └── statistics/
-   ```
-
-4. **Set environment variables (optional):**
-   ```bash
-   export DATA_DIR="/path/to/data"  # Defaults to ./data
-   ```
-
-5. **Run the server:**
-   ```bash
-   # Run on port 8080 (default)
-   ./prep-appointments web
-   
-   # Or specify a port
-   ./prep-appointments web 80
-   ```
-
-6. **Run as a service (systemd example):**
-   Create `/etc/systemd/system/prep-appointments.service`:
-   ```ini
-   [Unit]
-   Description=Prep Appointments Scheduler
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=your-user
-   WorkingDirectory=/path/to/KingshotScheduleMaker/prep-appointments
-   ExecStart=/path/to/KingshotScheduleMaker/prep-appointments/target/release/prep-appointments web 8080
-   Restart=always
-   RestartSec=10
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-   Then:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable prep-appointments
-   sudo systemctl start prep-appointments
-   ```
-
-7. **Set up reverse proxy (nginx example):**
-   ```nginx
-   server {
-       listen 80;
-       server_name your-domain.com;
-
-       location / {
-           proxy_pass http://localhost:8080;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-   }
-   ```
-
-## Resource Usage Estimates
-
-- **Binary size**: ~10-20MB (release build)
-- **Memory usage**: ~50-200MB at idle, ~500MB-1GB under moderate load
-- **CPU usage**: <5% at idle, spikes during schedule generation
-- **Disk usage**: 
-  - Application: ~50MB
-  - Data: Depends on usage (typically <1GB for hundreds of forms/submissions)
-
-## Performance Tips
-
-1. **Use release build** (already optimized in Cargo.toml)
-2. **Monitor disk space** - old forms are archived but not deleted
-3. **Consider periodic cleanup** of old forms if disk space becomes an issue
-4. **Use a reverse proxy** (nginx/caddy) for SSL/TLS termination
-
-## Monitoring
-
-Check resource usage:
 ```bash
-# Check memory and CPU
-htop
-
-# Check disk usage
-du -sh data/
-
-# Check if service is running
-systemctl status prep-appointments
+cd /path/to/KingshotScheduleMaker
+cp .env.example .env
+nano .env   # or vim, etc.
 ```
+
+Fill in all values. See [OAUTH_SETUP.md](OAUTH_SETUP.md) for OAuth credentials.
+
+### 2. Ensure data directory exists
+
+```bash
+mkdir -p prep-appointments/data
+```
+
+---
+
+## Deploy workflow
+
+### Option A: Manual deploy (improved)
+
+```bash
+# On your machine
+git push origin main
+
+# On the server
+cd /path/to/KingshotScheduleMaker
+git pull
+./scripts/deploy.sh 8080
+cd prep-appointments && ./scripts/run.sh 8080
+```
+
+No secrets to re-enter. The `.env` file stays on the server and is loaded automatically.
+
+### Option B: GitHub Actions (fully automated)
+
+Push to `main` → GitHub Actions builds and deploys via SSH.
+
+**Setup:**
+
+1. Add these **GitHub Secrets** (Settings → Secrets and variables → Actions):
+   - `DEPLOY_HOST` – server hostname or IP
+   - `DEPLOY_USER` – SSH user (e.g. `root` or `deploy`)
+   - `DEPLOY_KEY` – private SSH key (contents of `id_rsa` or similar)
+   - `DEPLOY_PATH` – project path on server (e.g. `/home/deploy/KingshotScheduleMaker`)
+
+2. Ensure the server has:
+   - `.env` with all secrets (one-time setup)
+   - SSH key added to `~/.ssh/authorized_keys` for `DEPLOY_USER`
+   - Git (for `git pull`). Node/Rust not required – the workflow builds and copies artifacts.
+
+3. Optional: Add `DEPLOY_RESTART_CMD` secret (e.g. `sudo systemctl restart prep-appointments`) for a clean restart instead of pkill + nohup.
+
+4. Push to `main` – the workflow builds and deploys automatically.
+
+---
+
+## Process manager (recommended for production)
+
+### systemd
+
+Create `/etc/systemd/system/prep-appointments.service`:
+
+```ini
+[Unit]
+Description=Prep Appointments Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/path/to/KingshotScheduleMaker/prep-appointments
+EnvironmentFile=/path/to/KingshotScheduleMaker/.env
+ExecStart=/path/to/KingshotScheduleMaker/prep-appointments/target/release/prep-appointments web 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable prep-appointments
+sudo systemctl start prep-appointments
+```
+
+Deploy becomes: `git pull && ./scripts/deploy.sh && sudo systemctl restart prep-appointments`
+
+---
+
+## Environment variables reference
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OAUTH_DISCORD_CLIENT_ID` | For Discord login | Discord app client ID |
+| `OAUTH_DISCORD_CLIENT_SECRET` | For Discord login | Discord app secret |
+| `OAUTH_GOOGLE_CLIENT_ID` | For Google login | Google OAuth client ID |
+| `OAUTH_GOOGLE_CLIENT_SECRET` | For Google login | Google OAuth secret |
+| `BASE_URL` | Production | e.g. `https://prep.vorre.dev` |
+| `FRONTEND_URL` | If frontend separate | Usually same as BASE_URL in prod |

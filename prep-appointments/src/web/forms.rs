@@ -12,7 +12,8 @@ use crate::kingshot_api;
 use crate::parser::{has_player_submitted, load_appointments};
 
 use super::persistence::{
-    archive_old_forms, generate_form_code, get_current_form, save_current_forms, save_form,
+    archive_old_forms, generate_form_code, get_current_form, list_old_forms, reopen_old_form,
+    save_current_forms, save_form,
 };
 use super::state::{
     AppState, CreateFormRequest, FormConfig, FormData, FormStatsResponse, FormTimeSlotStats,
@@ -238,6 +239,9 @@ pub async fn create_form(
         .clone()
         .unwrap_or_else(|| format!("Form {} {}", url_account_name, server_number));
     let created_at = chrono::Utc::now().to_rfc3339();
+    let delete_date = chrono::Utc::now()
+        .checked_add_signed(chrono::Duration::days(14))
+        .map(|d| d.format("%Y-%m-%d").to_string());
 
     let form_data = FormData {
         code: code.clone(),
@@ -245,6 +249,7 @@ pub async fn create_form(
         server_number,
         name: form_name,
         created_at,
+        delete_date,
         config: FormConfig {
             alliances: body.alliances.clone(),
             include_non_of_above: body.include_non_of_above,
@@ -673,6 +678,7 @@ pub async fn get_current_form_info(
                 "code": form.code,
                 "name": form.name,
                 "created_at": form.created_at,
+                "delete_date": form.delete_date,
                 "url": form_url,
                 "submissions_count": submissions_count,
                 "config": {
@@ -694,6 +700,158 @@ pub async fn get_current_form_info(
             "form": null
         })))
     }
+}
+
+/// List old/archived forms for account (admin)
+pub async fn list_old_forms_api(
+    path: web::Path<(String, u32)>,
+    session: Session,
+    state: web::Data<AppState>,
+    req: HttpRequest,
+) -> Result<HttpResponse> {
+    let (url_account_name, server_number) = path.into_inner();
+    let url_account_name = url_account_name.to_lowercase();
+
+    let authenticated = {
+        let session_account_name: Option<String> = session.get("account_name").ok().flatten();
+        let session_server_number: Option<u32> = session.get("server_number").ok().flatten();
+
+        if let (Some(session_account_name), Some(session_server_number)) =
+            (session_account_name, session_server_number)
+        {
+            session_account_name == url_account_name && session_server_number == server_number
+        } else {
+            if let Some(password_header) = req.headers().get("X-Password") {
+                if let Ok(password) = password_header.to_str() {
+                    let accounts = state.accounts.lock().unwrap();
+                    if let Some(account) = accounts.get(&url_account_name) {
+                        account.password == password && account.server_number == server_number
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+    };
+
+    if !authenticated {
+        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+            "success": false,
+            "error": "Not authenticated"
+        })));
+    }
+
+    let old_forms = list_old_forms(&state.data_dir, &url_account_name, server_number);
+    let items: Vec<serde_json::Value> = old_forms
+        .into_iter()
+        .map(|(archive_name, form)| {
+            serde_json::json!({
+                "archive_name": archive_name,
+                "code": form.code,
+                "name": form.name,
+                "created_at": form.created_at,
+                "delete_date": form.delete_date
+            })
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "old_forms": items
+    })))
+}
+
+/// Reopen an archived form (admin)
+pub async fn reopen_form_api(
+    path: web::Path<(String, u32)>,
+    session: Session,
+    body: Option<web::Json<serde_json::Value>>,
+    state: web::Data<AppState>,
+    req: HttpRequest,
+) -> Result<HttpResponse> {
+    let (url_account_name, server_number) = path.into_inner();
+    let url_account_name = url_account_name.to_lowercase();
+
+    let archive_name = body
+        .as_ref()
+        .and_then(|j| j.get("archive_name"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            actix_web::error::ErrorBadRequest("archive_name required in body")
+        })?;
+
+    let authenticated = {
+        let session_account_name: Option<String> = session.get("account_name").ok().flatten();
+        let session_server_number: Option<u32> = session.get("server_number").ok().flatten();
+
+        if let (Some(session_account_name), Some(session_server_number)) =
+            (session_account_name, session_server_number)
+        {
+            session_account_name == url_account_name && session_server_number == server_number
+        } else {
+            if let Some(password_header) = req.headers().get("X-Password") {
+                if let Ok(password) = password_header.to_str() {
+                    let accounts = state.accounts.lock().unwrap();
+                    if let Some(account) = accounts.get(&url_account_name) {
+                        account.password == password && account.server_number == server_number
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+    };
+
+    if !authenticated {
+        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+            "success": false,
+            "error": "Not authenticated"
+        })));
+    }
+
+    let form_data = match reopen_old_form(
+        &state.data_dir,
+        &url_account_name,
+        server_number,
+        archive_name,
+    ) {
+        Ok(f) => f,
+        Err(e) => {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error": e.to_string()
+            })));
+        }
+    };
+
+    let mut forms = state.forms.lock().unwrap();
+    forms.insert(form_data.code.clone(), form_data.clone());
+    drop(forms);
+
+    let mut current_forms = state.current_forms.lock().unwrap();
+    let key = format!("{}:{}", url_account_name, server_number);
+    current_forms.insert(key, form_data.code.clone());
+    save_current_forms(&state.data_dir, &current_forms).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+    })?;
+    drop(current_forms);
+
+    let form_url = format!("/form/{}", form_data.code);
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": "Form reopened successfully",
+        "code": form_data.code,
+        "url": form_url
+    })))
 }
 
 /// Get player by ID from form submissions

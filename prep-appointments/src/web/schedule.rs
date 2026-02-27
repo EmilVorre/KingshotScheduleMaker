@@ -20,8 +20,8 @@ use super::persistence::{
     get_current_form, load_schedule, load_statistics, save_schedule, save_statistics, schedule_key,
 };
 use super::state::{
-    get_scheduled_player_ids, AllianceStats, AppState, FormTimeSlotStats, ScheduleData,
-    ScheduleResponse, ScheduleSlot, StatsResponse, TimeSlotStats,
+    derive_scheduled_player_ids, get_scheduled_player_ids, AllianceStats, AppState, FormTimeSlotStats,
+    ScheduleData, ScheduleResponse, ScheduleSlot, StatsResponse, TimeSlotStats,
 };
 
 /// Stats endpoint
@@ -529,6 +529,7 @@ pub async fn get_schedule(
                     &entries,
                     &HashSet::new(),
                     last_slot_override,
+                    None,
                 );
                 let research_schedule = schedule_research_day(&entries, &construction_schedule);
                 let troops_schedule = schedule_troops_day(&entries);
@@ -618,6 +619,9 @@ pub async fn get_schedule(
 pub struct GenerateScheduleRequest {
     #[serde(default)]
     pub append: bool,
+    /// When set, only generate this day. Crossover slot (Construction last = Research slot 1) works both ways.
+    #[serde(default)]
+    pub day: Option<String>,
 }
 
 /// Generate schedule endpoint (from form submissions)
@@ -627,6 +631,10 @@ pub async fn generate_schedule_api(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse> {
     let append = payload.as_ref().map(|p| p.append).unwrap_or(false);
+    let day_filter = payload
+        .as_ref()
+        .and_then(|p| p.day.as_ref())
+        .map(|s| s.to_lowercase());
     let account_name: String = match session.get("account_name") {
         Ok(Some(name)) => name,
         Ok(None) => {
@@ -741,7 +749,7 @@ pub async fn generate_schedule_api(
         })));
     }
 
-    let existing_schedule = if append {
+    let existing_schedule = if append || day_filter.is_some() {
         let maybe_cached = {
             let schedules = state.schedules.lock().unwrap();
             schedules.get(&key).cloned()
@@ -806,6 +814,210 @@ pub async fn generate_schedule_api(
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
             "message": "All form submissions are already in the schedule. No new assignments to add."
+        })));
+    }
+
+    // Day-by-day generation: only generate the requested day and merge into existing schedule
+    if let Some(ref day) = day_filter {
+        let day = day.as_str();
+        if !["construction", "research", "troops"].contains(&day) {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error": format!("Invalid day '{}'. Use 'construction', 'research', or 'troops'.", day)
+            })));
+        }
+
+        let construction_slots_vec = construction_slots.as_ref().cloned().unwrap_or_default();
+        let last_slot_override = construction_slots_vec
+            .iter()
+            .map(|(s, _)| *s)
+            .max();
+
+        let entries_for_day: Vec<AppointmentEntry> = match day {
+            "construction" => {
+                let mut in_other = HashSet::new();
+                for s in [existing_appointments.1.as_ref(), existing_appointments.2.as_ref()] {
+                    if let Some(sched) = s {
+                        for a in sched.appointments.values() {
+                            in_other.insert(a.player_id.clone());
+                        }
+                    }
+                }
+                let mut e: Vec<_> = entries
+                    .iter()
+                    .filter(|e| e.wants_construction && !e.construction_available_slots.is_empty() && !in_other.contains(&e.player_id))
+                    .cloned()
+                    .collect();
+                if let Some(ref r) = existing_appointments.1 {
+                    if let Some(r1) = r.appointments.get(&1) {
+                        if !e.iter().any(|x| x.player_id == r1.player_id) {
+                            if let Some(entry) = entries.iter().find(|x| x.player_id == r1.player_id) {
+                                e.push(entry.clone());
+                            }
+                        }
+                    }
+                }
+                e
+            }
+            "research" => {
+                let mut in_other = HashSet::new();
+                for s in [existing_appointments.0.as_ref(), existing_appointments.2.as_ref()] {
+                    if let Some(sched) = s {
+                        for a in sched.appointments.values() {
+                            in_other.insert(a.player_id.clone());
+                        }
+                    }
+                }
+                let last_slot = last_slot_override.unwrap_or(49);
+                let mut e: Vec<_> = entries
+                    .iter()
+                    .filter(|e| e.wants_research && !e.research_available_slots.is_empty() && !in_other.contains(&e.player_id))
+                    .cloned()
+                    .collect();
+                if let Some(ref c) = existing_appointments.0 {
+                    if let Some(clast) = c.appointments.get(&last_slot) {
+                        if !e.iter().any(|x| x.player_id == clast.player_id) {
+                            if let Some(entry) = entries.iter().find(|x| x.player_id == clast.player_id) {
+                                e.push(entry.clone());
+                            }
+                        }
+                    }
+                }
+                e
+            }
+            "troops" => {
+                let mut in_other = HashSet::new();
+                for s in [existing_appointments.0.as_ref(), existing_appointments.1.as_ref()] {
+                    if let Some(sched) = s {
+                        for a in sched.appointments.values() {
+                            in_other.insert(a.player_id.clone());
+                        }
+                    }
+                }
+                entries
+                    .iter()
+                    .filter(|e| e.wants_troops && !e.troops_available_slots.is_empty() && !in_other.contains(&e.player_id))
+                    .cloned()
+                    .collect()
+            }
+            _ => unreachable!(),
+        };
+
+        let (new_construction, new_research, new_troops) = match day {
+            "construction" => {
+                let sched = schedule_construction_day_with_locked(
+                    &entries_for_day,
+                    &existing_construction_slots,
+                    last_slot_override,
+                    existing_appointments.1.as_ref(),
+                );
+                (Some(sched), None, None)
+            }
+            "research" => {
+                let sched = schedule_research_day_with_locked(
+                    &entries_for_day,
+                    existing_appointments.0.as_ref().unwrap_or(&DaySchedule {
+                        appointments: HashMap::new(),
+                        unassigned: Vec::new(),
+                    }),
+                    &existing_research_slots,
+                );
+                (None, Some(sched), None)
+            }
+            "troops" => {
+                let sched = schedule_troops_day_with_locked(&entries_for_day, &existing_troops_slots);
+                (None, None, Some(sched))
+            }
+            _ => unreachable!(),
+        };
+
+        let merge_day = |existing: Option<&DaySchedule>, new: DaySchedule| {
+            let mut merged = existing.map(|e| e.appointments.clone()).unwrap_or_default();
+            for (slot, appt) in new.appointments {
+                if !merged.contains_key(&slot) {
+                    merged.insert(slot, appt);
+                }
+            }
+            DaySchedule {
+                appointments: merged,
+                unassigned: new.unassigned,
+            }
+        };
+
+        let construction_schedule = match (new_construction.as_ref(), day, append) {
+            (Some(n), "construction", true) => merge_day(existing_appointments.0.as_ref(), n.clone()),
+            (Some(n), "construction", false) => n.clone(),
+            _ => existing_appointments.0.clone().unwrap_or_else(|| DaySchedule {
+                appointments: HashMap::new(),
+                unassigned: Vec::new(),
+            }),
+        };
+        let research_schedule = match (new_research.as_ref(), day, append) {
+            (Some(n), "research", true) => merge_day(existing_appointments.1.as_ref(), n.clone()),
+            (Some(n), "research", false) => n.clone(),
+            _ => existing_appointments.1.clone().unwrap_or_else(|| DaySchedule {
+                appointments: HashMap::new(),
+                unassigned: Vec::new(),
+            }),
+        };
+        let troops_schedule = match (new_troops.as_ref(), day, append) {
+            (Some(n), "troops", true) => merge_day(existing_appointments.2.as_ref(), n.clone()),
+            (Some(n), "troops", false) => n.clone(),
+            _ => existing_appointments.2.clone().unwrap_or_else(|| DaySchedule {
+                appointments: HashMap::new(),
+                unassigned: Vec::new(),
+            }),
+        };
+
+        let scheduled_ids: Vec<String> = {
+            let mut ids = HashSet::new();
+            for appt in construction_schedule.appointments.values() {
+                ids.insert(appt.player_id.clone());
+            }
+            for appt in research_schedule.appointments.values() {
+                ids.insert(appt.player_id.clone());
+            }
+            for appt in troops_schedule.appointments.values() {
+                ids.insert(appt.player_id.clone());
+            }
+            ids.into_iter().collect()
+        };
+        let schedule_data = ScheduleData {
+            construction_schedule: Some(construction_schedule.clone()),
+            research_schedule: Some(research_schedule.clone()),
+            troops_schedule: Some(troops_schedule.clone()),
+            entries: Some(entries.clone()),
+            scheduled_player_ids: Some(scheduled_ids),
+        };
+
+        let mut schedules = state.schedules.lock().unwrap();
+        schedules.insert(key.clone(), schedule_data.clone());
+        drop(schedules);
+
+        if let Err(e) = save_schedule(
+            &state.data_dir,
+            &account_name,
+            server_number,
+            &schedule_data,
+        ) {
+            eprintln!("Warning: Failed to save schedule to disk: {}", e);
+        }
+
+        let _ = get_stats(
+            web::Path::from((account_name.clone(), server_number)),
+            state.clone(),
+        )
+        .await;
+
+        let day_name = day.replace("construction", "Construction").replace("research", "Research").replace("troops", "Troops");
+        let msg = if append {
+            format!("{} schedule appended successfully. Empty slots filled.", day_name)
+        } else {
+            format!("{} schedule replaced successfully.", day_name)
+        };
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "message": msg
         })));
     }
 
@@ -1155,6 +1367,7 @@ pub async fn generate_schedule_api(
                 &construction_entries_filtered,
                 &construction_predetermined_slots,
                 Some(last_construction_slot),
+                None,
             );
             let mut research_schedule = schedule_research_day_with_locked(
                 &research_entries_filtered,
@@ -1239,6 +1452,7 @@ pub async fn generate_schedule_api(
                 &entries_to_use,
                 &existing_construction_slots,
                 last_slot_override,
+                existing_appointments.1.as_ref(),
             );
             let research_schedule = schedule_research_day_with_locked(
                 &entries_to_use,
@@ -1254,6 +1468,7 @@ pub async fn generate_schedule_api(
             &entries_to_use,
             &existing_construction_slots,
             None,
+            existing_appointments.1.as_ref(),
         );
         let research_schedule = schedule_research_day_with_locked(
             &entries_to_use,
@@ -1556,5 +1771,114 @@ pub async fn update_schedule_slot(
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "message": "Slot updated successfully"
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct ClearScheduleRequest {
+    #[serde(default)]
+    pub day: Option<String>,
+}
+
+/// Clear schedule endpoint - clear all days or a single day
+pub async fn clear_schedule_api(
+    path: web::Path<(String, u32)>,
+    payload: Option<web::Json<ClearScheduleRequest>>,
+    session: Session,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse> {
+    let (account_name, server_number) = path.into_inner();
+    let account_name = account_name.to_lowercase();
+
+    if let (Some(session_account), Some(session_server)) = (
+        session.get::<String>("account_name")?,
+        session.get::<u32>("server_number")?,
+    ) {
+        if session_account != account_name || session_server != server_number {
+            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+                "success": false,
+                "error": "Not authorized"
+            })));
+        }
+    } else {
+        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+            "success": false,
+            "error": "Not authenticated"
+        })));
+    }
+
+    let day_filter = payload.and_then(|p| p.day.clone());
+
+    let key = schedule_key(&account_name, server_number);
+    let mut schedule_data = {
+        let schedules = state.schedules.lock().unwrap();
+        schedules
+            .get(&key)
+            .cloned()
+            .or_else(|| load_schedule(&state.data_dir, &account_name, server_number))
+    };
+
+    if schedule_data.is_none() {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "message": "Schedule already empty"
+        })));
+    }
+
+    let mut schedule_data = schedule_data.unwrap();
+    let empty_day = DaySchedule {
+        appointments: HashMap::new(),
+        unassigned: Vec::new(),
+    };
+
+    match day_filter.as_deref() {
+        Some("construction") => {
+            schedule_data.construction_schedule = Some(empty_day);
+        }
+        Some("research") => {
+            schedule_data.research_schedule = Some(empty_day);
+        }
+        Some("troops") => {
+            schedule_data.troops_schedule = Some(empty_day);
+        }
+        _ => {
+            schedule_data.construction_schedule = Some(empty_day.clone());
+            schedule_data.research_schedule = Some(empty_day.clone());
+            schedule_data.troops_schedule = Some(empty_day);
+        }
+    }
+
+    schedule_data.scheduled_player_ids = Some(
+        derive_scheduled_player_ids(&schedule_data)
+            .into_iter()
+            .collect::<Vec<_>>(),
+    );
+
+    {
+        let mut schedules = state.schedules.lock().unwrap();
+        schedules.insert(key.clone(), schedule_data.clone());
+    }
+
+    if let Err(e) = save_schedule(
+        &state.data_dir,
+        &account_name,
+        server_number,
+        &schedule_data,
+    ) {
+        eprintln!("Warning: Failed to save schedule: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "error": "Failed to save schedule"
+        })));
+    }
+
+    let msg = match day_filter.as_deref() {
+        Some(d) => format!("{} schedule cleared", d),
+        _ => "All schedules cleared".to_string(),
+    };
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": msg
     })))
 }
