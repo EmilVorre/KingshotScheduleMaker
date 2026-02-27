@@ -50,6 +50,7 @@ Push to `main` → GitHub Actions builds and deploys via SSH.
    - `DEPLOY_USER` – SSH user (e.g. `root` or `deploy`)
    - `DEPLOY_KEY` – private SSH key (contents of `id_rsa` or similar)
    - `DEPLOY_PATH` – project path on server (e.g. `/home/deploy/KingshotScheduleMaker`)
+   - `DEPLOY_PORT` – (optional) port to run on (default: 8080)
 
 2. Ensure the server has:
    - `.env` with all secrets (one-time setup)

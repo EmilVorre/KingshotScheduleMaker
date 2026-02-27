@@ -1,6 +1,6 @@
 # Deploy to server on push to main.
 # Add secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY, DEPLOY_PATH
-# Optional: DEPLOY_RESTART_CMD (e.g. "sudo systemctl restart prep-appointments")
+# Optional: DEPLOY_PORT (default 8080), DEPLOY_RESTART_CMD (e.g. "sudo systemctl restart prep-appointments")
 
 name: Deploy
 
@@ -41,12 +41,14 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_RESTART_CMD: ${{ secrets.DEPLOY_RESTART_CMD }}
         run: |
           mkdir -p ~/.ssh
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           SSH_OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/deploy_key"
+          PORT="${DEPLOY_PORT:-8080}"
 
           # Pull latest (for non-built files)
           ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && git pull"
@@ -65,5 +67,5 @@ jobs:
             ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "$DEPLOY_RESTART_CMD"
           else
             ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} \
-              "cd ${DEPLOY_PATH}/prep-appointments && (pkill -f 'prep-appointments web' 2>/dev/null || true); sleep 1; nohup ./target/release/prep-appointments web 8080 >> /tmp/prep-appointments.log 2>&1 &"
+              "cd ${DEPLOY_PATH}/prep-appointments && (pkill -f 'prep-appointments web' 2>/dev/null || true); sleep 1; nohup ./target/release/prep-appointments web ${PORT} >> /tmp/prep-appointments.log 2>&1 &"
           fi
