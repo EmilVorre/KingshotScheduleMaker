@@ -40,9 +40,6 @@ This will:
 ### Web Server Mode
 
 ```bash
-# Set admin password (optional, defaults to "admin123")
-$env:ADMIN_PASSWORD="your-secure-password"
-
 # Start web server on port 8080 (default)
 cargo run web
 
@@ -50,7 +47,9 @@ cargo run web
 cargo run web 3000
 ```
 
-Then access:
+**Development (hot reload):** Run `npm run dev` from project root to start both backend and Vite. Open **http://localhost:5173** — frontend changes hot-reload instantly without rebuilding.
+
+Then access (port 5173 in dev, 8080 in prod):
 - Home: http://localhost:8080
 - Create Account: http://localhost:8080/create-account
 - Dashboard: http://localhost:8080/dashboard/{account_name} (after login)

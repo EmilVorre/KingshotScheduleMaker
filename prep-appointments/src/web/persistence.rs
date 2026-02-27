@@ -175,7 +175,45 @@ pub fn generate_form_code() -> String {
         .collect()
 }
 
+/// Move a single expired form to old_forms. Returns true if moved.
+fn move_expired_form_to_old(
+    _data_dir: &str,
+    form_data: &FormData,
+    current_forms_dir: &str,
+    old_forms_dir: &str,
+) -> std::io::Result<bool> {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let delete_date = match &form_data.delete_date {
+        Some(d) if d.as_str() <= today.as_str() => d,
+        _ => return Ok(false),
+    };
+    let _ = delete_date; // used in condition above
+
+    let code = &form_data.code;
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let json_path = format!("{}/{}.json", current_forms_dir, code);
+    let old_json_path = format!(
+        "{}/{}_{}_{}_{}.json",
+        old_forms_dir, form_data.account_name, form_data.server_number, code, timestamp
+    );
+    if Path::new(&json_path).exists() {
+        std::fs::copy(&json_path, &old_json_path)?;
+        std::fs::remove_file(&json_path)?;
+    }
+    let csv_path = format!("{}/{}_submissions.csv", current_forms_dir, code);
+    if Path::new(&csv_path).exists() {
+        let old_csv_path = format!(
+            "{}/{}_{}_{}_{}_submissions.csv",
+            old_forms_dir, form_data.account_name, form_data.server_number, code, timestamp
+        );
+        std::fs::copy(&csv_path, &old_csv_path)?;
+        std::fs::remove_file(&csv_path)?;
+    }
+    Ok(true)
+}
+
 /// Load all forms from current_forms folder
+/// Expired forms (delete_date <= today) are moved to old_forms and excluded
 pub fn load_forms(data_dir: &str) -> HashMap<String, FormData> {
     let current_forms_dir = format!("{}/current_forms", data_dir);
     let mut forms = HashMap::new();
@@ -225,12 +263,25 @@ pub fn load_forms(data_dir: &str) -> HashMap<String, FormData> {
         return forms;
     }
 
+    let old_forms_dir = format!("{}/old_forms", data_dir);
+    std::fs::create_dir_all(&old_forms_dir).ok();
+
     if let Ok(entries) = std::fs::read_dir(&current_forms_dir) {
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str() {
                 if file_name.ends_with(".json") {
                     if let Ok(content) = std::fs::read_to_string(entry.path()) {
                         if let Ok(form_data) = serde_json::from_str::<FormData>(&content) {
+                            if move_expired_form_to_old(
+                                data_dir,
+                                &form_data,
+                                &current_forms_dir,
+                                &old_forms_dir,
+                            )
+                            .unwrap_or(false)
+                            {
+                                continue;
+                            }
                             forms.insert(form_data.code.clone(), form_data);
                         }
                     }
@@ -253,6 +304,7 @@ pub fn save_form(data_dir: &str, form_data: &FormData) -> std::io::Result<()> {
 }
 
 /// Archive old forms to old_forms folder (including CSV files)
+/// Uses format {account}_{server}_{code}_{timestamp} for unique filenames
 pub fn archive_old_forms(
     data_dir: &str,
     account_name: &str,
@@ -276,8 +328,8 @@ pub fn archive_old_forms(
                                 let code = &form_data.code;
 
                                 let old_form_json_path = format!(
-                                    "{}/{}_{}_{}.json",
-                                    old_forms_dir, account_name, server_number, timestamp
+                                    "{}/{}_{}_{}_{}.json",
+                                    old_forms_dir, account_name, server_number, code, timestamp
                                 );
                                 std::fs::copy(entry.path(), &old_form_json_path)?;
                                 std::fs::remove_file(entry.path())?;
@@ -286,8 +338,8 @@ pub fn archive_old_forms(
                                 let csv_path = format!("{}/{}", current_forms_dir, csv_file_name);
                                 if Path::new(&csv_path).exists() {
                                     let old_csv_path = format!(
-                                        "{}/{}_{}_{}_submissions.csv",
-                                        old_forms_dir, account_name, server_number, timestamp
+                                        "{}/{}_{}_{}_{}_submissions.csv",
+                                        old_forms_dir, account_name, server_number, code, timestamp
                                     );
                                     std::fs::copy(&csv_path, &old_csv_path)?;
                                     std::fs::remove_file(&csv_path)?;
@@ -301,4 +353,109 @@ pub fn archive_old_forms(
     }
 
     Ok(())
+}
+
+/// List archived forms for an account/server
+pub fn list_old_forms(
+    data_dir: &str,
+    account_name: &str,
+    server_number: u32,
+) -> Vec<(String, FormData)> {
+    let old_forms_dir = format!("{}/old_forms", data_dir);
+    let mut result = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&old_forms_dir) {
+        let prefix = format!("{}_{}_", account_name, server_number);
+        for entry in entries.flatten() {
+            if let Some(file_name) = entry.file_name().to_str() {
+                if file_name.ends_with(".json") && file_name.starts_with(&prefix) {
+                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                        if let Ok(form_data) = serde_json::from_str::<FormData>(&content) {
+                            if form_data.account_name == account_name
+                                && form_data.server_number == server_number
+                            {
+                                let archive_name = file_name
+                                    .strip_suffix(".json")
+                                    .unwrap_or(file_name)
+                                    .to_string();
+                                result.push((archive_name, form_data));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    result.sort_by(|a, b| b.1.created_at.cmp(&a.1.created_at));
+    result
+}
+
+/// Feedback entry for user-submitted feedback
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FeedbackEntry {
+    pub id: String,
+    pub r#type: String, // "bug" | "feature" | "general"
+    pub text: String,
+    pub created_at: String,
+    /// When true, hidden from the feedback list but still saved
+    #[serde(default)]
+    pub archived: bool,
+}
+
+/// Load all feedback from file
+pub fn load_feedback(data_dir: &str) -> Vec<FeedbackEntry> {
+    let path = format!("{}/feedback.json", data_dir);
+    if Path::new(&path).exists() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Ok(entries) = serde_json::from_str::<Vec<FeedbackEntry>>(&content) {
+                return entries;
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// Save feedback to file
+pub fn save_feedback(data_dir: &str, feedback: &[FeedbackEntry]) -> std::io::Result<()> {
+    std::fs::create_dir_all(data_dir)?;
+    let path = format!("{}/feedback.json", data_dir);
+    let content = serde_json::to_string_pretty(feedback)?;
+    std::fs::write(&path, content)?;
+    Ok(())
+}
+
+/// Reopen an archived form: copy from old_forms back to current_forms
+pub fn reopen_old_form(
+    data_dir: &str,
+    account_name: &str,
+    server_number: u32,
+    archive_name: &str,
+) -> std::io::Result<FormData> {
+    let old_forms_dir = format!("{}/old_forms", data_dir);
+    let current_forms_dir = format!("{}/current_forms", data_dir);
+    std::fs::create_dir_all(&current_forms_dir)?;
+
+    let json_path = format!("{}/{}.json", old_forms_dir, archive_name);
+    let content = std::fs::read_to_string(&json_path)?;
+    let form_data: FormData = serde_json::from_str(&content)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+    if form_data.account_name != account_name || form_data.server_number != server_number {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Form does not belong to this account/server",
+        ));
+    }
+
+    let code = &form_data.code;
+    let dest_json = format!("{}/{}.json", current_forms_dir, code);
+    std::fs::copy(&json_path, &dest_json)?;
+
+    let csv_src = format!("{}_submissions.csv", archive_name);
+    let csv_path = format!("{}/{}", old_forms_dir, csv_src);
+    if Path::new(&csv_path).exists() {
+        let dest_csv = format!("{}/{}_submissions.csv", current_forms_dir, code);
+        std::fs::copy(&csv_path, &dest_csv)?;
+    }
+
+    Ok(form_data)
 }

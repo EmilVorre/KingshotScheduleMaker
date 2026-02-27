@@ -66,6 +66,8 @@ pub struct AppState {
     pub forms: Mutex<HashMap<String, FormData>>,
     pub current_forms: Mutex<HashMap<String, String>>,
     pub data_dir: String,
+    pub oauth_state_cache: super::oauth_state::OAuthStateCache,
+    pub pending_oauth_cache: super::oauth_state::PendingOAuthCache,
 }
 
 // ============ Account ============
@@ -74,8 +76,20 @@ pub struct AppState {
 pub struct Account {
     pub account_name: String,
     pub server_number: u32,
+    #[serde(default)]
     pub password: String,
     pub in_game_name: String,
+    #[serde(default)]
+    pub player_id: Option<String>,
+    /// OAuth provider: "discord" or "google"
+    #[serde(default)]
+    pub oauth_provider: Option<String>,
+    /// OAuth user ID from the provider
+    #[serde(default)]
+    pub oauth_id: Option<String>,
+    /// Admin privileges: can access admin resources and manage other admins
+    #[serde(default)]
+    pub admin: bool,
 }
 
 // ============ Form types ============
@@ -171,6 +185,9 @@ pub struct FormData {
     pub server_number: u32,
     pub name: String,
     pub created_at: String,
+    /// ISO date (YYYY-MM-DD) when form should be moved to old_forms. Default: created_at + 14 days.
+    #[serde(default)]
+    pub delete_date: Option<String>,
     pub config: FormConfig,
 }
 
@@ -180,8 +197,11 @@ pub struct FormData {
 pub struct CreateAccountRequest {
     pub account_name: String,
     pub server_number: u32,
-    pub password: String,
+    #[serde(default)]
+    pub password: Option<String>,
     pub in_game_name: String,
+    #[serde(default)]
+    pub player_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -195,6 +215,21 @@ pub struct CreateAccountResponse {
 pub struct LoginRequest {
     pub account_name: Option<String>,
     pub password: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateProfileRequest {
+    #[serde(default)]
+    pub account_name: Option<String>,
+    #[serde(default)]
+    pub server_number: Option<u32>,
+    #[serde(default)]
+    pub in_game_name: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct KingshotLookupRequest {
+    pub player_id: String,
 }
 
 #[derive(Serialize)]

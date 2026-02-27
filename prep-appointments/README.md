@@ -42,9 +42,6 @@ This will:
 ### Web Server Mode
 
 ```bash
-# Set admin password (optional, defaults to "admin123")
-$env:ADMIN_PASSWORD="your-secure-password"
-
 # Start web server on port 8080 (default)
 cargo run web
 

@@ -1,5 +1,10 @@
+mod admin;
 mod auth;
+mod avatar;
+mod feedback;
 pub mod forms;
+mod oauth;
+pub mod oauth_state;
 mod pages;
 mod persistence;
 mod schedule;
@@ -15,13 +20,15 @@ use std::sync::Mutex;
 pub use persistence::*;
 pub use state::*;
 
-pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result<()> {
+pub async fn start_server(port: u16) -> std::io::Result<()> {
     let data_dir = "data".to_string();
     std::fs::create_dir_all(&data_dir)?;
 
     let accounts = persistence::load_accounts(&data_dir);
     let forms = persistence::load_forms(&data_dir);
-    let current_forms = persistence::load_current_forms(&data_dir);
+    let mut current_forms = persistence::load_current_forms(&data_dir);
+    current_forms.retain(|_, code| forms.contains_key(code));
+    persistence::save_current_forms(&data_dir, &current_forms).ok();
 
     let app_state = web::Data::new(state::AppState {
         accounts: Mutex::new(accounts),
@@ -29,6 +36,8 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
         forms: Mutex::new(forms),
         current_forms: Mutex::new(current_forms),
         data_dir,
+        oauth_state_cache: oauth_state::OAuthStateCache::new(),
+        pending_oauth_cache: oauth_state::PendingOAuthCache::new(),
     });
 
     let secret_key = Key::generate();
@@ -42,31 +51,42 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
             ))
             .wrap(middleware::Logger::default())
             .service(Files::new("/static", "static").show_files_listing())
-            .route("/", web::get().to(pages::index))
-            .route("/info", web::get().to(pages::info_page))
-            .route("/create-account", web::get().to(pages::create_account_page))
+            .service(Files::new("/assets", "static/dist/assets"))
+            .route("/", web::get().to(pages::spa_index))
             .route("/api/create-account", web::post().to(auth::create_account))
             .route("/api/login", web::post().to(auth::login_api))
             .route("/api/logout", web::post().to(auth::logout_api))
             .route("/api/session", web::get().to(auth::get_session_info))
+            .route("/api/profile/update", web::put().to(auth::update_profile))
+            .route(
+                "/api/profile/kingshot-lookup",
+                web::post().to(auth::kingshot_lookup_profile),
+            )
+            .route("/api/auth/callback", web::get().to(oauth::oauth_callback))
+            .service(
+                web::resource("/api/auth/{provider}").route(web::get().to(oauth::oauth_initiate)),
+            )
+            .service(
+                web::resource("/api/avatar/{player_id}").route(web::get().to(avatar::get_avatar)),
+            )
             .route(
                 "/api/generate-schedule",
                 web::post().to(schedule::generate_schedule_api),
             )
-            .route("/servers", web::get().to(pages::servers_list_page))
             .route("/api/servers", web::get().to(auth::list_servers))
+            .route("/api/admin/accounts", web::get().to(admin::list_accounts))
             .route(
-                "/dashboard/{account_name}",
-                web::get().to(pages::dashboard_page),
+                "/api/admin/accounts/{account_name}/admin",
+                web::post().to(admin::set_admin),
+            )
+            .route("/api/feedback", web::post().to(feedback::submit_feedback))
+            .route(
+                "/api/admin/feedback",
+                web::get().to(feedback::list_feedback),
             )
             .service(
-                web::resource("/view/{account_name}/{server}")
-                    .route(web::get().to(pages::view_schedule_page)),
-            )
-            .service(web::resource("/form/{code}").route(web::get().to(pages::public_form_page)))
-            .service(
-                web::resource("/form/{code}/stats")
-                    .route(web::get().to(pages::public_form_stats_page)),
+                web::resource("/api/admin/feedback/{id}/archive")
+                    .route(web::post().to(feedback::archive_feedback)),
             )
             .service(
                 web::resource("/form/{code}/api/config")
@@ -89,18 +109,6 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
                     .route(web::post().to(forms::submit_form_by_code)),
             )
             .service(
-                web::resource("/{account_name}/{server}")
-                    .route(web::get().to(pages::schedules_page)),
-            )
-            .service(
-                web::resource("/{account_name}/{server}/stats")
-                    .route(web::get().to(pages::stats_page)),
-            )
-            .service(
-                web::resource("/{account_name}/{server}/admin")
-                    .route(web::get().to(pages::admin_page)),
-            )
-            .service(
                 web::resource("/{account_name}/{server}/api/form/create")
                     .route(web::post().to(forms::create_form)),
             )
@@ -111,6 +119,14 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
             .service(
                 web::resource("/{account_name}/{server}/api/form/current")
                     .route(web::get().to(forms::get_current_form_info)),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/form/old")
+                    .route(web::get().to(forms::list_old_forms_api)),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/form/reopen")
+                    .route(web::post().to(forms::reopen_form_api)),
             )
             .service(
                 web::resource("/{account_name}/{server}/api/form/previous")
@@ -142,9 +158,14 @@ pub async fn start_server(port: u16, _admin_password: String) -> std::io::Result
                     .route(web::put().to(schedule::update_schedule_slot)),
             )
             .service(
+                web::resource("/{account_name}/{server}/api/schedule/clear")
+                    .route(web::post().to(schedule::clear_schedule_api)),
+            )
+            .service(
                 web::resource("/{account_name}/{server}/api/form/submissions")
                     .route(web::get().to(forms::get_form_submissions)),
             )
+            .default_service(web::to(pages::spa_index))
     })
     .bind(("0.0.0.0", port))?
     .run()

@@ -14,13 +14,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .get(2)
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(8080);
-        let password = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin123".to_string()); // Default password, change this!
 
         println!("Starting web server on port {}...", port);
-        println!("Admin password: {}", password);
         println!("Access the site at http://localhost:{}", port);
 
-        web::start_server(port, password).await?;
+        web::start_server(port).await?;
         return Ok(());
     }
 

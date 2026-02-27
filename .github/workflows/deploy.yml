@@ -1,0 +1,69 @@
+# Deploy to server on push to main.
+# Add secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY, DEPLOY_PATH
+# Optional: DEPLOY_RESTART_CMD (e.g. "sudo systemctl restart prep-appointments")
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Build backend
+        run: |
+          cd prep-appointments
+          cargo build --release
+
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_RESTART_CMD: ${{ secrets.DEPLOY_RESTART_CMD }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH_OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/deploy_key"
+
+          # Pull latest (for non-built files)
+          ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && git pull"
+
+          # Copy built frontend (vite outputs to prep-appointments/static/dist)
+          scp $SSH_OPTS -r prep-appointments/static/dist \
+            ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/prep-appointments/static/
+
+          # Copy built binary (run.sh expects target/release/prep-appointments)
+          ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p ${DEPLOY_PATH}/prep-appointments/target/release"
+          scp $SSH_OPTS prep-appointments/target/release/prep-appointments \
+            ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/prep-appointments/target/release/prep-appointments
+
+          # Restart
+          if [ -n "$DEPLOY_RESTART_CMD" ]; then
+            ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "$DEPLOY_RESTART_CMD"
+          else
+            ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} \
+              "cd ${DEPLOY_PATH}/prep-appointments && (pkill -f 'prep-appointments web' 2>/dev/null || true); sleep 1; nohup ./target/release/prep-appointments web 8080 >> /tmp/prep-appointments.log 2>&1 &"
+          fi
