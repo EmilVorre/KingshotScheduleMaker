@@ -5,12 +5,10 @@ mod feedback;
 pub mod forms;
 mod oauth;
 pub mod oauth_state;
-mod pages;
 mod persistence;
 mod schedule;
 mod state;
 
-use actix_files::Files;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::{cookie::Key, middleware, web, App, HttpServer};
 use std::collections::HashMap;
@@ -50,9 +48,6 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
                 secret_key.clone(),
             ))
             .wrap(middleware::Logger::default())
-            .service(Files::new("/static", "static").show_files_listing())
-            .service(Files::new("/assets", "static/dist/assets"))
-            .route("/", web::get().to(pages::spa_index))
             .route("/api/create-account", web::post().to(auth::create_account))
             .route("/api/login", web::post().to(auth::login_api))
             .route("/api/logout", web::post().to(auth::logout_api))
@@ -165,7 +160,6 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
                 web::resource("/{account_name}/{server}/api/form/submissions")
                     .route(web::get().to(forms::get_form_submissions)),
             )
-            .default_service(web::to(pages::spa_index))
     })
     .bind(("0.0.0.0", port))?
     .run()
