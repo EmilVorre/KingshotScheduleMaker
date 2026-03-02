@@ -53,6 +53,7 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    environment: production
     if: ${{ vars.DEPLOY_ON_RELEASE == 'true' }}
     steps:
       - name: Deploy to server
