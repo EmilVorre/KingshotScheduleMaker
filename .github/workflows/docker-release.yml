@@ -1,0 +1,80 @@
+# Build images on release, push to GHCR, deploy via SSH
+# Requires: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY, DEPLOY_PATH
+# Optional: DEPLOY_PORT (default 80), IMAGE_TAG (defaults to release tag)
+
+name: Docker Release
+
+on:
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/frontend:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/frontend:latest
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/backend:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: ${{ vars.DEPLOY_ON_RELEASE == 'true' }}
+    steps:
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH_OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/deploy_key"
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+          DEPLOY_PATH="${DEPLOY_PATH:-/opt/myapp}"
+          PORT="${DEPLOY_PORT:-80}"
+          ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && \
+            git pull && \
+            export IMAGE_TAG=${TAG} && \
+            export GITHUB_REPOSITORY=${REPO} && \
+            docker compose -f docker-compose.prod.yml pull && \
+            docker compose -f docker-compose.prod.yml up -d && \
+            docker image prune -f"

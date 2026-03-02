@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   build: {
-    outDir: '../prep-appointments/static/dist',
+    outDir: 'dist',
     emptyDirOnBuild: true,
   },
   server: {

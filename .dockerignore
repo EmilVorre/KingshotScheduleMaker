@@ -1,0 +1,25 @@
+# Git
+.git
+.gitignore
+
+# Dependencies and build artifacts
+frontend/node_modules
+frontend/dist
+prep-appointments/target
+prep-appointments/data
+
+# Secrets (never in image)
+.env
+.env.*
+!.env.example
+
+# Docs and dev
+*.md
+docs/
+.idea/
+.vscode/
+
+# Tests
+**/tests/
+**/*_test.rs
+**/test_*.rs

@@ -1,8 +1,12 @@
 # Deployment Guide
 
-Deploy with minimal manual steps: store secrets once in `.env`, then use a simple deploy flow.
+**Recommended:** Use [Docker deployment](DEPLOY-DOCKER.md) (nginx + Rust API, GHCR images, release-based).
 
-## One-time setup on the server
+**Legacy:** Manual or GitHub Actions deploy (single binary, push to main).
+
+---
+
+## One-time setup on the server (legacy)
 
 ### 1. Create `.env` (secrets live here, never in git)
 

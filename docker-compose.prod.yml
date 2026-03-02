@@ -1,0 +1,31 @@
+# Production compose - pulls from GHCR. Use on server with IMAGE_TAG in .env
+# Example .env: IMAGE_TAG=v1.0.0, plus OAUTH_*, BASE_URL, etc.
+
+services:
+  frontend:
+    image: ghcr.io/${GITHUB_REPOSITORY}/frontend:${IMAGE_TAG:-latest}
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - app
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/${GITHUB_REPOSITORY}/backend:${IMAGE_TAG:-latest}
+    env_file: .env
+    environment:
+      - PORT=8080
+    volumes:
+      - prep-data:/app/data
+    networks:
+      - app
+    restart: unless-stopped
+
+volumes:
+  prep-data:
+
+networks:
+  app:
+    driver: bridge
