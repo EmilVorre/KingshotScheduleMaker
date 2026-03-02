@@ -1,12 +1,11 @@
-# Deploy to server on push to main.
+# Legacy deploy (disabled) - uses docker-release.yml instead.
 # Add secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY, DEPLOY_PATH
 # Optional: DEPLOY_PORT (default 8080), DEPLOY_RESTART_CMD (e.g. "sudo systemctl restart prep-appointments")
 
 name: Deploy
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # Manual only - disabled for push
 
 jobs:
   deploy:
