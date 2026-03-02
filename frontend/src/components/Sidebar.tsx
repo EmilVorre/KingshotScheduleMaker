@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../api/client'
+import { ENABLE_GOOGLE_LOGIN } from '../config'
 import ProfileMenu from './ProfileMenu'
 
 const PREP_TABS = [
@@ -110,13 +111,15 @@ export default function Sidebar() {
                     <i className="fab fa-discord"></i>
                     Discord
                   </a>
-                  <a
-                    href="/api/auth/google"
-                    className="flex-1 flex items-center justify-center gap-1 px-2 py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-300"
-                  >
-                    <i className="fab fa-google text-red-500"></i>
-                    Google
-                  </a>
+                  {ENABLE_GOOGLE_LOGIN && (
+                    <a
+                      href="/api/auth/google"
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-2 bg-white hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-300"
+                    >
+                      <i className="fab fa-google text-red-500"></i>
+                      Google
+                    </a>
+                  )}
                 </div>
               </div>
             )}

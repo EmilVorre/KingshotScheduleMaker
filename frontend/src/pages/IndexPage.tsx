@@ -1,4 +1,5 @@
 import { useAuth } from '../context/AuthContext'
+import { ENABLE_GOOGLE_LOGIN } from '../config'
 
 export default function IndexPage() {
   const { isValid } = useAuth()
@@ -32,13 +33,15 @@ export default function IndexPage() {
                   <i className="fab fa-discord text-2xl"></i>
                   Discord
                 </a>
-                <a
-                  href="/api/auth/google"
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-white hover:bg-gray-100 text-gray-800 rounded-lg font-semibold text-lg transition-all border border-gray-300"
-                >
-                  <i className="fab fa-google text-2xl text-red-500"></i>
-                  Google
-                </a>
+                {ENABLE_GOOGLE_LOGIN && (
+                  <a
+                    href="/api/auth/google"
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-white hover:bg-gray-100 text-gray-800 rounded-lg font-semibold text-lg transition-all border border-gray-300"
+                  >
+                    <i className="fab fa-google text-2xl text-red-500"></i>
+                    Google
+                  </a>
+                )}
               </div>
               <p className="text-center text-gray-500 text-sm">New? Sign in to create an account</p>
             </div>

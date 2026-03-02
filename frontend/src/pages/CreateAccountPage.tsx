@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
+import { ENABLE_GOOGLE_LOGIN } from '../config'
 
 export default function CreateAccountPage() {
   const [creating, setCreating] = useState(false)
@@ -108,13 +109,15 @@ export default function CreateAccountPage() {
               <i className="fab fa-discord text-xl"></i>
               Discord
             </a>
-            <a
-              href="/api/auth/google"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white hover:bg-gray-100 text-gray-800 rounded-lg font-medium transition-all border border-gray-300"
-            >
-              <i className="fab fa-google text-xl text-red-500"></i>
-              Google
-            </a>
+            {ENABLE_GOOGLE_LOGIN && (
+              <a
+                href="/api/auth/google"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white hover:bg-gray-100 text-gray-800 rounded-lg font-medium transition-all border border-gray-300"
+              >
+                <i className="fab fa-google text-xl text-red-500"></i>
+                Google
+              </a>
+            )}
           </div>
         </div>
         <form onSubmit={handleCreateAccount} className="space-y-6">
