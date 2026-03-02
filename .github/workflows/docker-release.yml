@@ -20,6 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set image tags (GHCR requires lowercase)
+        id: vars
+        run: |
+          echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "tag=$(echo '${{ github.ref_name }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -37,8 +43,8 @@ jobs:
           file: frontend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/frontend:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}/frontend:latest
+            ghcr.io/${{ steps.vars.outputs.repo }}/frontend:${{ steps.vars.outputs.tag }}
+            ghcr.io/${{ steps.vars.outputs.repo }}/frontend:latest
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
@@ -47,8 +53,8 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/backend:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ steps.vars.outputs.repo }}/backend:${{ steps.vars.outputs.tag }}
+            ghcr.io/${{ steps.vars.outputs.repo }}/backend:latest
 
   deploy:
     needs: build-and-push
@@ -68,8 +74,8 @@ jobs:
           echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           SSH_OPTS="-o StrictHostKeyChecking=no -i ~/.ssh/deploy_key"
-          TAG="${{ github.ref_name }}"
-          REPO="${{ github.repository }}"
+          TAG=$(echo '${{ github.ref_name }}' | tr '[:upper:]' '[:lower:]')
+          REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
           DEPLOY_PATH="${DEPLOY_PATH:-/opt/myapp}"
           PORT="${DEPLOY_PORT:-80}"
           ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && \
