@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="g-dust" cx="0.5" cy="0.4" r="0.7">
+      <stop offset="0" stop-color="#facc15"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </radialGradient>
+  </defs>
+  <rect x="4" y="6" width="24" height="20" rx="6" fill="#020617"/>
+  <circle cx="16" cy="16" r="7" fill="url(#g-dust)" opacity="0.9"/>
+  <circle cx="12" cy="13" r="1.2" fill="#fefce8"/>
+  <circle cx="19" cy="12" r="0.9" fill="#fefce8"/>
+  <circle cx="18" cy="18" r="1.1" fill="#fefce8"/>
+  <circle cx="13" cy="19" r="0.8" fill="#fefce8"/>
+</svg>
+
