@@ -11,7 +11,7 @@ use crate::display::format_player_name;
 use crate::parser::{load_appointments, AppointmentEntry};
 use crate::schedule::types::ScheduledAppointment;
 use crate::schedule::{
-    calculate_time_slots, schedule_construction_day_with_locked, schedule_research_day,
+    calculate_time_slots, schedule_construction_day_with_locked,
     schedule_research_day_with_locked, schedule_troops_day, schedule_troops_day_with_locked,
     slot_to_time, DaySchedule,
 };
@@ -560,7 +560,7 @@ pub async fn get_schedule(
                     &entries,
                     &construction_schedule,
                     &HashSet::new(),
-                    link_construction_research_days,
+                    true,
                 );
                 let troops_schedule = schedule_troops_day(&entries);
 
@@ -1886,7 +1886,7 @@ pub async fn clear_schedule_api(
     let day_filter = payload.and_then(|p| p.day.clone());
 
     let key = schedule_key(&account_name, server_number);
-    let mut schedule_data = {
+    let schedule_data = {
         let schedules = state.schedules.lock().unwrap();
         schedules
             .get(&key)
