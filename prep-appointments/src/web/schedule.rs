@@ -11,9 +11,8 @@ use crate::display::format_player_name;
 use crate::parser::{load_appointments, AppointmentEntry};
 use crate::schedule::types::ScheduledAppointment;
 use crate::schedule::{
-    calculate_time_slots, schedule_construction_day_with_locked, schedule_research_day,
-    schedule_research_day_with_locked, schedule_troops_day, schedule_troops_day_with_locked,
-    slot_to_time, DaySchedule,
+    calculate_time_slots, schedule_construction_day_with_locked, schedule_research_day_with_locked,
+    schedule_troops_day, schedule_troops_day_with_locked, slot_to_time, DaySchedule,
 };
 
 use super::persistence::{
@@ -23,6 +22,31 @@ use super::state::{
     derive_scheduled_player_ids, get_scheduled_player_ids, AllianceStats, AppState,
     FormTimeSlotStats, ScheduleData, ScheduleResponse, ScheduleSlot, StatsResponse, TimeSlotStats,
 };
+
+fn day_slot_to_index(slot: Option<&str>) -> i32 {
+    match slot {
+        Some("monday") => 1,
+        Some("tuesday") => 2,
+        Some("thursday") => 4,
+        Some("friday_full") | Some("friday_sat") => 5,
+        _ => 0,
+    }
+}
+
+/// Whether Construction and Research days should be linked (last slot -> first slot)
+/// based on the logical day slots chosen in the form configuration.
+fn should_link_construction_research(config: &super::state::FormConfig) -> bool {
+    let c_idx = day_slot_to_index(config.construction_day_slot.as_deref());
+    let r_idx = day_slot_to_index(config.research_day_slot.as_deref());
+
+    // Legacy / missing values: preserve old behaviour (link enabled).
+    if c_idx == 0 || r_idx == 0 {
+        return true;
+    }
+
+    // Only link when Research is the very next day after Construction (e.g. Monday -> Tuesday).
+    r_idx - c_idx == 1
+}
 
 /// Stats endpoint
 pub async fn get_stats(
@@ -531,7 +555,12 @@ pub async fn get_schedule(
                     last_slot_override,
                     None,
                 );
-                let research_schedule = schedule_research_day(&entries, &construction_schedule);
+                let research_schedule = schedule_research_day_with_locked(
+                    &entries,
+                    &construction_schedule,
+                    &HashSet::new(),
+                    true,
+                );
                 let troops_schedule = schedule_troops_day(&entries);
 
                 let scheduled_ids: Vec<String> = {
@@ -708,24 +737,26 @@ pub async fn generate_schedule_api(
         })));
     }
 
-    let (construction_slots, research_slots, troops_slots) = if let Some(config) = &form_config {
-        (
-            Some(calculate_time_slots(
-                &config.construction_times.start_time,
-                config.construction_times.end_time.as_deref(),
-            )),
-            Some(calculate_time_slots(
-                &config.research_times.start_time,
-                config.research_times.end_time.as_deref(),
-            )),
-            Some(calculate_time_slots(
-                &config.troops_times.start_time,
-                config.troops_times.end_time.as_deref(),
-            )),
-        )
-    } else {
-        (None, None, None)
-    };
+    let (construction_slots, research_slots, troops_slots, link_construction_research_days) =
+        if let Some(config) = &form_config {
+            (
+                Some(calculate_time_slots(
+                    &config.construction_times.start_time,
+                    config.construction_times.end_time.as_deref(),
+                )),
+                Some(calculate_time_slots(
+                    &config.research_times.start_time,
+                    config.research_times.end_time.as_deref(),
+                )),
+                Some(calculate_time_slots(
+                    &config.troops_times.start_time,
+                    config.troops_times.end_time.as_deref(),
+                )),
+                should_link_construction_research(config),
+            )
+        } else {
+            (None, None, None, true)
+        };
 
     let entries = match load_appointments(
         &form_csv_path,
@@ -943,6 +974,7 @@ pub async fn generate_schedule_api(
                         unassigned: Vec::new(),
                     }),
                     &existing_research_slots,
+                    link_construction_research_days,
                 );
                 (None, Some(sched), None)
             }
@@ -1413,6 +1445,7 @@ pub async fn generate_schedule_api(
                 &research_entries_filtered,
                 &construction_schedule,
                 &research_predetermined_slots,
+                link_construction_research_days,
             );
             let mut troops_schedule = schedule_troops_day_with_locked(
                 &troops_entries_filtered,
@@ -1498,6 +1531,7 @@ pub async fn generate_schedule_api(
                 &entries_to_use,
                 &construction_schedule,
                 &existing_research_slots,
+                link_construction_research_days,
             );
             let troops_schedule =
                 schedule_troops_day_with_locked(&entries_to_use, &existing_troops_slots);
@@ -1514,6 +1548,7 @@ pub async fn generate_schedule_api(
             &entries_to_use,
             &construction_schedule,
             &existing_research_slots,
+            link_construction_research_days,
         );
         let troops_schedule =
             schedule_troops_day_with_locked(&entries_to_use, &existing_troops_slots);
@@ -1850,7 +1885,7 @@ pub async fn clear_schedule_api(
     let day_filter = payload.and_then(|p| p.day.clone());
 
     let key = schedule_key(&account_name, server_number);
-    let mut schedule_data = {
+    let schedule_data = {
         let schedules = state.schedules.lock().unwrap();
         schedules
             .get(&key)

@@ -257,6 +257,8 @@ pub async fn create_form(
             construction_times: body.construction_times.clone(),
             research_times: body.research_times.clone(),
             troops_times: body.troops_times.clone(),
+            construction_day_slot: body.construction_day_slot.clone(),
+            research_day_slot: body.research_day_slot.clone(),
             predetermined_slots: body.predetermined_slots.clone(),
             intro_text: body.intro_text.clone(),
             support_person_name: body.support_person_name.clone(),

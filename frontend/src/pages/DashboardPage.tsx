@@ -156,6 +156,21 @@ function getSubmissionValue(submission: Record<string, unknown>, header: string)
 
 const TAB_KEYS: Tab[] = ['profile', 'schedule', 'stats', 'create-form', 'current-form', 'csv-operations', 'generate-schedule']
 
+/** Day-slot options for Construction and Research. Each can be assigned to one slot only; the two Friday options are a pair. */
+export type BuildingResearchDaySlot = 'monday' | 'tuesday' | 'friday_full' | 'friday_sat'
+
+function daySlotToTimes(slot: BuildingResearchDaySlot): { start_time: string; end_time?: string } {
+  switch (slot) {
+    case 'friday_sat':
+      return { start_time: '10:00', end_time: undefined }
+    case 'monday':
+    case 'tuesday':
+    case 'friday_full':
+    default:
+      return { start_time: '00:00', end_time: undefined }
+  }
+}
+
 export default function DashboardPage() {
   const { accountName } = useParams<{ accountName: string }>()
   const { refresh: refreshAuth } = useAuth()
@@ -202,6 +217,8 @@ export default function DashboardPage() {
     alliances: [] as string[],
     include_non_of_above: true,
     construction_truegold_mode: 'truegold_unlocked' as string,
+    construction_day_slot: 'monday' as BuildingResearchDaySlot,
+    research_day_slot: 'tuesday' as BuildingResearchDaySlot,
   })
   const [creatingForm, setCreatingForm] = useState(false)
   const [configStatus, setConfigStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -468,6 +485,13 @@ export default function DashboardPage() {
       setConfigStatus({ type: 'error', message: 'Error: Kingdom ID is required' })
       return
     }
+    if (config.construction_day_slot === config.research_day_slot) {
+      setConfigStatus({
+        type: 'error',
+        message: 'Error: Construction and Research must be on different days. Please choose a different day for one of them.',
+      })
+      return
+    }
     setCreatingForm(true)
     setConfigStatus(null)
     setCreatedFormUrl(null)
@@ -478,9 +502,11 @@ export default function DashboardPage() {
       alliances,
       include_non_of_above: config.include_non_of_above,
       construction_truegold_mode: config.construction_truegold_mode,
-      construction_times: { start_time: '00:00', end_time: undefined },
-      research_times: { start_time: '00:00', end_time: undefined },
+      construction_times: daySlotToTimes(config.construction_day_slot),
+      research_times: daySlotToTimes(config.research_day_slot),
       troops_times: { start_time: '00:00', end_time: undefined },
+      construction_day_slot: config.construction_day_slot,
+      research_day_slot: config.research_day_slot,
       intro_text: STANDARD_INTRO_TEXT,
       support_person_name: config.support_person_name?.trim() || undefined,
     }
@@ -1416,6 +1442,86 @@ export default function DashboardPage() {
                       </label>
                     ))}
                   </div>
+                </div>
+
+                <div className="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    <i className="fas fa-calendar-day mr-2"></i>Construction &amp; Research Days
+                  </h3>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Choose which day slot is used for Construction and which for Research. Each option can only be used once. The two Friday options are paired (same day, different time windows).
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-orange-300 mb-2">Construction day</label>
+                      <select
+                        value={config.construction_day_slot}
+                        onChange={(e) =>
+                          setConfig((c) => ({
+                            ...c,
+                            construction_day_slot: e.target.value as BuildingResearchDaySlot,
+                          }))
+                        }
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/50 outline-none"
+                      >
+                        <option value="monday" disabled={config.research_day_slot === 'monday'}>
+                          Monday 00:00 – 24:00
+                          {config.research_day_slot === 'monday' ? ' (used for Research)' : ''}
+                        </option>
+                        <option value="tuesday" disabled={config.research_day_slot === 'tuesday'}>
+                          Tuesday 00:00 – 24:00
+                          {config.research_day_slot === 'tuesday' ? ' (used for Research)' : ''}
+                        </option>
+                        <optgroup label="Friday">
+                          <option value="friday_full" disabled={config.research_day_slot === 'friday_full'}>
+                            Friday 00:00 – 24:00
+                            {config.research_day_slot === 'friday_full' ? ' (used for Research)' : ''}
+                          </option>
+                          <option value="friday_sat" disabled={config.research_day_slot === 'friday_sat'}>
+                            Friday 10:00 – Saturday 10:00
+                            {config.research_day_slot === 'friday_sat' ? ' (used for Research)' : ''}
+                          </option>
+                        </optgroup>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-blue-300 mb-2">Research day</label>
+                      <select
+                        value={config.research_day_slot}
+                        onChange={(e) =>
+                          setConfig((c) => ({
+                            ...c,
+                            research_day_slot: e.target.value as BuildingResearchDaySlot,
+                          }))
+                        }
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
+                      >
+                        <option value="monday" disabled={config.construction_day_slot === 'monday'}>
+                          Monday 00:00 – 24:00
+                          {config.construction_day_slot === 'monday' ? ' (used for Construction)' : ''}
+                        </option>
+                        <option value="tuesday" disabled={config.construction_day_slot === 'tuesday'}>
+                          Tuesday 00:00 – 24:00
+                          {config.construction_day_slot === 'tuesday' ? ' (used for Construction)' : ''}
+                        </option>
+                        <optgroup label="Friday">
+                          <option value="friday_full" disabled={config.construction_day_slot === 'friday_full'}>
+                            Friday 00:00 – 24:00
+                            {config.construction_day_slot === 'friday_full' ? ' (used for Construction)' : ''}
+                          </option>
+                          <option value="friday_sat" disabled={config.construction_day_slot === 'friday_sat'}>
+                            Friday 10:00 – Saturday 10:00
+                            {config.construction_day_slot === 'friday_sat' ? ' (used for Construction)' : ''}
+                          </option>
+                        </optgroup>
+                      </select>
+                    </div>
+                  </div>
+                  {config.construction_day_slot === config.research_day_slot && (
+                    <p className="text-sm text-amber-400 mt-2">
+                      <i className="fas fa-exclamation-triangle mr-1"></i>Construction and Research must be on different days.
+                    </p>
+                  )}
                 </div>
 
                 <button

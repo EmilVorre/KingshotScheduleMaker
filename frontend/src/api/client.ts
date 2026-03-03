@@ -224,6 +224,9 @@ export interface CreateFormRequest {
   construction_times: { start_time: string; end_time?: string }
   research_times: { start_time: string; end_time?: string }
   troops_times: { start_time: string; end_time?: string }
+   // Logical day slots (e.g. 'monday', 'tuesday', 'friday_full', 'friday_sat') for display/translation
+  construction_day_slot?: string
+  research_day_slot?: string
   predetermined_slots?: PredeterminedSlot[]
   intro_text?: string
 }
@@ -269,6 +272,8 @@ export interface FormConfig {
   construction_times?: { start_time: string; end_time?: string | null }
   research_times?: { start_time: string; end_time?: string | null }
   troops_times?: { start_time: string; end_time?: string | null }
+  construction_day_slot?: string | null
+  research_day_slot?: string | null
   intro_text?: string
   support_person_name?: string
   kingdom_id?: string

@@ -141,6 +141,11 @@ pub struct FormConfig {
     pub construction_times: DayTimeConfig,
     pub research_times: DayTimeConfig,
     pub troops_times: DayTimeConfig,
+    /// Logical day slots for Construction / Research (e.g. \"monday\", \"tuesday\", \"friday_full\", \"friday_sat\")
+    #[serde(default)]
+    pub construction_day_slot: Option<String>,
+    #[serde(default)]
+    pub research_day_slot: Option<String>,
     #[serde(default)]
     pub predetermined_slots: Vec<PredeterminedSlot>,
     #[serde(default)]
@@ -170,6 +175,8 @@ impl Default for FormConfig {
                 start_time: "00:00".to_string(),
                 end_time: None,
             },
+            construction_day_slot: None,
+            research_day_slot: None,
             predetermined_slots: vec![],
             intro_text: None,
             support_person_name: None,
@@ -302,6 +309,11 @@ pub struct CreateFormRequest {
     pub construction_times: DayTimeConfig,
     pub research_times: DayTimeConfig,
     pub troops_times: DayTimeConfig,
+    /// Logical day slots selected when creating the form (optional, for display/translation)
+    #[serde(default)]
+    pub construction_day_slot: Option<String>,
+    #[serde(default)]
+    pub research_day_slot: Option<String>,
     #[serde(default)]
     pub predetermined_slots: Vec<PredeterminedSlot>,
     #[serde(default)]
