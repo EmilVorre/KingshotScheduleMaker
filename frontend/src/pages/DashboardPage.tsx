@@ -352,6 +352,10 @@ export default function DashboardPage() {
         include_non_of_above: (c as { include_non_of_above?: boolean }).include_non_of_above !== false,
         construction_truegold_mode:
           (c as { construction_truegold_mode?: string }).construction_truegold_mode ?? 'truegold_unlocked',
+        construction_day_slot:
+          (c as { construction_day_slot?: BuildingResearchDaySlot }).construction_day_slot ?? 'monday',
+        research_day_slot:
+          (c as { research_day_slot?: BuildingResearchDaySlot }).research_day_slot ?? 'tuesday',
       })
     }
   }, [accountName, serverNumber])
