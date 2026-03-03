@@ -11,9 +11,8 @@ use crate::display::format_player_name;
 use crate::parser::{load_appointments, AppointmentEntry};
 use crate::schedule::types::ScheduledAppointment;
 use crate::schedule::{
-    calculate_time_slots, schedule_construction_day_with_locked,
-    schedule_research_day_with_locked, schedule_troops_day, schedule_troops_day_with_locked,
-    slot_to_time, DaySchedule,
+    calculate_time_slots, schedule_construction_day_with_locked, schedule_research_day_with_locked,
+    schedule_troops_day, schedule_troops_day_with_locked, slot_to_time, DaySchedule,
 };
 
 use super::persistence::{
