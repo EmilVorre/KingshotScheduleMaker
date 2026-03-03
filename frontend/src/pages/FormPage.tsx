@@ -1,18 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import { api, FormConfig, FormSubmission, PlayerCard } from '../api/client'
-import { tForm, FormLang } from '../i18n/formTranslations'
+import { LANGUAGE_OPTIONS, type SupportedLanguage } from '../i18n'
 import { calculateTimeSlots } from '../utils/timeSlots'
-
-const LANG_OPTIONS: { value: FormLang; label: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'ko', label: '한국어' },
-  { value: 'zh', label: '中文' },
-  { value: 'ja', label: '日本語' },
-  { value: 'es', label: 'Español' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'fr', label: 'Français' },
-]
 
 const NON_OF_ABOVE = 'Non of the above'
 
@@ -49,7 +40,7 @@ export default function FormPage() {
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const [lang, setLang] = useState<FormLang>(() => (localStorage.getItem('form_language') as FormLang) || 'en')
+  const { t, i18n } = useTranslation()
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState('')
   const [playerCard, setPlayerCard] = useState<PlayerCard | null>(null)
@@ -72,8 +63,6 @@ export default function FormPage() {
     return calculateTimeSlots(tt?.start_time ?? '00:00', tt?.end_time ?? null)
   }, [config?.troops_times])
 
-  const t = useCallback((key: string, params?: Record<string, string | number>) => tForm(lang, key, params), [lang])
-
   const tgMode = config?.construction_truegold_mode ?? 'truegold_unlocked'
   const showConstructionTruegold = ['truegold_unlocked', 'war_academy_unlocked', 'tempered_truegold_unlocked'].includes(tgMode)
   const showConstructionTempered = tgMode === 'tempered_truegold_unlocked'
@@ -93,7 +82,7 @@ export default function FormPage() {
     setError(null)
     api.getFormConfig(code).then(({ ok, data, error: err }) => {
       if (ok && data) setConfig(data)
-      else setError(err || t('formNotFound'))
+      else setError(err || i18n.t('formNotFound'))
       setLoading(false)
     })
   }, [code])
@@ -246,9 +235,8 @@ export default function FormPage() {
     setLookupError('')
   }
 
-  const changeLang = (l: FormLang) => {
-    setLang(l)
-    localStorage.setItem('form_language', l)
+  const changeLang = (l: SupportedLanguage) => {
+    i18n.changeLanguage(l)
   }
 
   const displayIntroText = useMemo(() => {
@@ -331,11 +319,11 @@ export default function FormPage() {
 
       <div className="flex justify-end mb-4">
         <select
-          value={lang}
-          onChange={(e) => changeLang(e.target.value as FormLang)}
+          value={i18n.language}
+          onChange={(e) => changeLang(e.target.value as SupportedLanguage)}
           className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
         >
-          {LANG_OPTIONS.map((o) => (
+          {LANGUAGE_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
@@ -628,7 +616,7 @@ export default function FormPage() {
                         ) : (
                           <div className="space-y-2 bg-gray-900/50 p-4 rounded-lg">
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                              {getDayTagLabel(config?.construction_day_slot as string | null)}
+                              {getDayTagLabel((config?.construction_day_slot as string | undefined) ?? 'monday')}
                             </p>
                             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                               {constructionSlots.map((slot) => (
@@ -782,7 +770,7 @@ export default function FormPage() {
                         ) : (
                           <div className="space-y-2 bg-gray-900/50 p-4 rounded-lg">
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                              {getDayTagLabel(config?.research_day_slot as string | null)}
+                              {getDayTagLabel((config?.research_day_slot as string | undefined) ?? 'tuesday')}
                             </p>
                             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                               {researchSlots.map((slot) => (
