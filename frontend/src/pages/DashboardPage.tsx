@@ -1477,11 +1477,23 @@ export default function DashboardPage() {
                           {config.research_day_slot === 'tuesday' ? ' (used for Research)' : ''}
                         </option>
                         <optgroup label="Friday">
-                          <option value="friday_full" disabled={config.research_day_slot === 'friday_full'}>
+                          <option
+                            value="friday_full"
+                            disabled={
+                              config.research_day_slot === 'friday_full' ||
+                              config.research_day_slot === 'friday_sat'
+                            }
+                          >
                             Friday 00:00 – 24:00
                             {config.research_day_slot === 'friday_full' ? ' (used for Research)' : ''}
                           </option>
-                          <option value="friday_sat" disabled={config.research_day_slot === 'friday_sat'}>
+                          <option
+                            value="friday_sat"
+                            disabled={
+                              config.research_day_slot === 'friday_full' ||
+                              config.research_day_slot === 'friday_sat'
+                            }
+                          >
                             Friday 10:00 – Saturday 10:00
                             {config.research_day_slot === 'friday_sat' ? ' (used for Research)' : ''}
                           </option>
@@ -1509,11 +1521,23 @@ export default function DashboardPage() {
                           {config.construction_day_slot === 'tuesday' ? ' (used for Construction)' : ''}
                         </option>
                         <optgroup label="Friday">
-                          <option value="friday_full" disabled={config.construction_day_slot === 'friday_full'}>
+                          <option
+                            value="friday_full"
+                            disabled={
+                              config.construction_day_slot === 'friday_full' ||
+                              config.construction_day_slot === 'friday_sat'
+                            }
+                          >
                             Friday 00:00 – 24:00
                             {config.construction_day_slot === 'friday_full' ? ' (used for Construction)' : ''}
                           </option>
-                          <option value="friday_sat" disabled={config.construction_day_slot === 'friday_sat'}>
+                          <option
+                            value="friday_sat"
+                            disabled={
+                              config.construction_day_slot === 'friday_full' ||
+                              config.construction_day_slot === 'friday_sat'
+                            }
+                          >
                             Friday 10:00 – Saturday 10:00
                             {config.construction_day_slot === 'friday_sat' ? ' (used for Construction)' : ''}
                           </option>
@@ -1521,9 +1545,14 @@ export default function DashboardPage() {
                       </select>
                     </div>
                   </div>
-                  {config.construction_day_slot === config.research_day_slot && (
+                  {(config.construction_day_slot === config.research_day_slot ||
+                    ((config.construction_day_slot === 'friday_full' ||
+                      config.construction_day_slot === 'friday_sat') &&
+                      (config.research_day_slot === 'friday_full' ||
+                        config.research_day_slot === 'friday_sat'))) && (
                     <p className="text-sm text-amber-400 mt-2">
-                      <i className="fas fa-exclamation-triangle mr-1"></i>Construction and Research must be on different days.
+                      <i className="fas fa-exclamation-triangle mr-1"></i>Construction and Research must be on different
+                      days. The two Friday options count as the same day.
                     </p>
                   )}
                 </div>

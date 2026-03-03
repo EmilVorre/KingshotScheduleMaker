@@ -286,6 +286,19 @@ export default function FormPage() {
 
   const isFridaySatSlot = (slotId?: string | null) => slotId === 'friday_sat'
 
+  const getDayTagLabel = (slotId?: string | null) => {
+    if (!slotId) return ''
+    const key = `scheduleDay_${slotId}` as
+      | 'scheduleDay_monday'
+      | 'scheduleDay_tuesday'
+      | 'scheduleDay_thursday'
+      | 'scheduleDay_friday_full'
+      | 'scheduleDay_friday_sat'
+    const full = t(key)
+    const [dayWord] = full.split(' ')
+    return dayWord || full
+  }
+
   const splitFridaySaturday = (slots: Array<{ value: number; label: string }>) => {
     const friday: typeof slots = []
     const saturday: typeof slots = []
@@ -613,26 +626,31 @@ export default function FormPage() {
                             })()}
                           </div>
                         ) : (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 bg-gray-900/50 p-4 rounded-lg">
-                            {constructionSlots.map((slot) => (
-                              <label key={slot.value} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
-                                <input
-                                  type="checkbox"
-                                  checked={form.construction_time_slots.includes(slot.value)}
-                                  onChange={(e) => {
-                                    const v = slot.value
-                                    setForm((f) => ({
-                                      ...f,
-                                      construction_time_slots: e.target.checked
-                                        ? [...f.construction_time_slots, v].sort((a, b) => a - b)
-                                        : f.construction_time_slots.filter((x) => x !== v),
-                                    }))
-                                  }}
-                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-gray-300">{slot.label}</span>
-                              </label>
-                            ))}
+                          <div className="space-y-2 bg-gray-900/50 p-4 rounded-lg">
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                              {getDayTagLabel(config?.construction_day_slot as string | null)}
+                            </p>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                              {constructionSlots.map((slot) => (
+                                <label key={slot.value} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={form.construction_time_slots.includes(slot.value)}
+                                    onChange={(e) => {
+                                      const v = slot.value
+                                      setForm((f) => ({
+                                        ...f,
+                                        construction_time_slots: e.target.checked
+                                          ? [...f.construction_time_slots, v].sort((a, b) => a - b)
+                                          : f.construction_time_slots.filter((x) => x !== v),
+                                      }))
+                                    }}
+                                    className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-300">{slot.label}</span>
+                                </label>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {form.construction_time_slots.length < 5 && (
@@ -762,26 +780,31 @@ export default function FormPage() {
                             })()}
                           </div>
                         ) : (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 bg-gray-900/50 p-4 rounded-lg">
-                            {researchSlots.map((slot) => (
-                              <label key={slot.value} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
-                                <input
-                                  type="checkbox"
-                                  checked={form.research_time_slots.includes(slot.value)}
-                                  onChange={(e) => {
-                                    const v = slot.value
-                                    setForm((f) => ({
-                                      ...f,
-                                      research_time_slots: e.target.checked
-                                        ? [...f.research_time_slots, v].sort((a, b) => a - b)
-                                        : f.research_time_slots.filter((x) => x !== v),
-                                    }))
-                                  }}
-                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-gray-300">{slot.label}</span>
-                              </label>
-                            ))}
+                          <div className="space-y-2 bg-gray-900/50 p-4 rounded-lg">
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                              {getDayTagLabel(config?.research_day_slot as string | null)}
+                            </p>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                              {researchSlots.map((slot) => (
+                                <label key={slot.value} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={form.research_time_slots.includes(slot.value)}
+                                    onChange={(e) => {
+                                      const v = slot.value
+                                      setForm((f) => ({
+                                        ...f,
+                                        research_time_slots: e.target.checked
+                                          ? [...f.research_time_slots, v].sort((a, b) => a - b)
+                                          : f.research_time_slots.filter((x) => x !== v),
+                                      }))
+                                    }}
+                                    className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-300">{slot.label}</span>
+                                </label>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {form.research_time_slots.length < 5 && (
@@ -828,26 +851,31 @@ export default function FormPage() {
                       <div>
                         <label className="block text-sm font-semibold text-gray-300 mb-2">{t('troopsTimeSlotsLabel')} <span className="text-red-400">*</span></label>
                         <p className="text-xs text-gray-500 mb-4">{t('troopsTimeSlotsNote')}</p>
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 bg-gray-900/50 p-4 rounded-lg">
-                          {troopsSlots.map((slot) => (
-                            <label key={slot.value} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
-                              <input
-                                type="checkbox"
-                                checked={form.troops_time_slots.includes(slot.value)}
-                                onChange={(e) => {
-                                  const v = slot.value
-                                  setForm((f) => ({
-                                    ...f,
-                                    troops_time_slots: e.target.checked
-                                      ? [...f.troops_time_slots, v].sort((a, b) => a - b)
-                                      : f.troops_time_slots.filter((x) => x !== v),
-                                  }))
-                                }}
-                                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-gray-300">{slot.label}</span>
-                            </label>
-                          ))}
+                        <div className="space-y-2 bg-gray-900/50 p-4 rounded-lg">
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                            {getDayTagLabel('thursday')}
+                          </p>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                            {troopsSlots.map((slot) => (
+                              <label key={slot.value} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-700/50 p-2 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={form.troops_time_slots.includes(slot.value)}
+                                  onChange={(e) => {
+                                    const v = slot.value
+                                    setForm((f) => ({
+                                      ...f,
+                                      troops_time_slots: e.target.checked
+                                        ? [...f.troops_time_slots, v].sort((a, b) => a - b)
+                                        : f.troops_time_slots.filter((x) => x !== v),
+                                    }))
+                                  }}
+                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-300">{slot.label}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
                         {form.troops_time_slots.length < 5 && (
                           <p className="text-xs text-red-400 mt-2">{t('troopsTimeSlotsError', { count: form.troops_time_slots.length })}</p>
