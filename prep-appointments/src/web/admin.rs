@@ -8,7 +8,10 @@ use super::persistence::save_accounts;
 use super::state::AppState;
 
 /// Require admin session. Returns account_name if admin, Err otherwise.
-fn require_admin(session: &Session, state: &web::Data<AppState>) -> Result<String, HttpResponse> {
+pub fn require_admin(
+    session: &Session,
+    state: &web::Data<AppState>,
+) -> Result<String, HttpResponse> {
     let account_name: String = session
         .get("account_name")
         .map_err(|_| {

@@ -290,6 +290,11 @@ pub async fn oauth_callback(
             oauth_provider: Some(provider.to_string()),
             oauth_id: Some(oauth_id.clone()),
             admin: false,
+            alliance_access: false,
+            alliance_id: None,
+            alliance_tag: None,
+            alliance_name: None,
+            friend_code: Some(super::state::generate_friend_code()),
         };
         accounts.insert(account_name.clone(), account.clone());
         save_accounts(&state.data_dir, &accounts).map_err(|e| {

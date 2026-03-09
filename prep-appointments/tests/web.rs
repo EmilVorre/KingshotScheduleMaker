@@ -152,7 +152,7 @@ fn test_load_save_accounts_roundtrip() {
 
     let mut accounts = HashMap::new();
     accounts.insert(
-        "alice:1".to_string(),
+        "alice".to_string(),
         Account {
             account_name: "alice".to_string(),
             server_number: 1,
@@ -162,13 +162,18 @@ fn test_load_save_accounts_roundtrip() {
             oauth_provider: None,
             oauth_id: None,
             admin: false,
+            alliance_access: false,
+            alliance_id: None,
+            alliance_tag: None,
+            alliance_name: None,
+            friend_code: None,
         },
     );
 
     save_accounts(dir_str, &accounts).unwrap();
     let loaded = load_accounts(dir_str);
     assert_eq!(loaded.len(), 1);
-    assert_eq!(loaded.get("alice:1").unwrap().account_name, "alice");
+    assert_eq!(loaded.get("alice").unwrap().account_name, "alice");
 
     std::fs::remove_dir_all(&dir).ok();
 }

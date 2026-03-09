@@ -90,6 +90,31 @@ pub struct Account {
     /// Admin privileges: can access admin resources and manage other admins
     #[serde(default)]
     pub admin: bool,
+    /// Alliance access: can use Alliance Organisation tabs (approved via application)
+    #[serde(default)]
+    pub alliance_access: bool,
+    /// Internal alliance ID (6 alphanumeric), set when application is approved
+    #[serde(default)]
+    pub alliance_id: Option<String>,
+    /// Alliance tag from approved application
+    #[serde(default)]
+    pub alliance_tag: Option<String>,
+    /// Alliance name from approved application
+    #[serde(default)]
+    pub alliance_name: Option<String>,
+    /// 12-char alphanumeric friend code for sharing alliance access
+    #[serde(default)]
+    pub friend_code: Option<String>,
+}
+
+/// Generate a unique 12-character alphanumeric friend code
+pub fn generate_friend_code() -> String {
+    use rand::Rng;
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+    (0..12)
+        .map(|_| CHARS[rng.gen_range(0..CHARS.len())] as char)
+        .collect()
 }
 
 // ============ Form types ============

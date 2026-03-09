@@ -2,6 +2,7 @@
 
 pub mod display;
 pub mod form;
+pub mod giftcode_api;
 pub mod kingshot_api;
 pub mod parser;
 pub mod schedule;

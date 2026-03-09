@@ -10,8 +10,8 @@ use crate::schedule::{schedule_construction_day, schedule_research_day, schedule
 
 use super::persistence::{save_accounts, schedule_key};
 use super::state::{
-    Account, AppState, CreateAccountRequest, CreateAccountResponse, KingshotLookupRequest,
-    LoginRequest, ScheduleData, ServerInfo, UpdateProfileRequest,
+    generate_friend_code, Account, AppState, CreateAccountRequest, CreateAccountResponse,
+    KingshotLookupRequest, LoginRequest, ScheduleData, ServerInfo, UpdateProfileRequest,
 };
 
 /// Create account endpoint
@@ -63,6 +63,11 @@ pub async fn create_account(
         oauth_provider: None,
         oauth_id: None,
         admin: false,
+        alliance_access: false,
+        alliance_id: None,
+        alliance_tag: None,
+        alliance_name: None,
+        friend_code: Some(generate_friend_code()),
     };
 
     accounts.insert(account_name.clone(), account);
@@ -126,7 +131,7 @@ pub async fn account_login(
 /// CSV upload endpoint
 pub async fn account_upload(
     path: web::Path<(String, u32)>,
-    req: HttpRequest,
+    _req: HttpRequest,
     body: web::Bytes,
     session: Session,
     state: web::Data<AppState>,
@@ -282,12 +287,27 @@ pub async fn get_session_info(
         .map_err(|_| actix_web::error::ErrorInternalServerError("Failed to read session"))?;
 
     if let (Some(account_name), Some(server_number)) = (account_name, server_number) {
-        let (player_id, in_game_name, is_admin) = {
+        let (player_id, in_game_name, is_admin, alliance_access, friend_code) = {
             let accounts = state.accounts.lock().unwrap();
-            accounts
-                .get(&account_name)
-                .map(|a| (a.player_id.clone(), a.in_game_name.clone(), a.admin))
-                .unwrap_or((None, String::new(), false))
+            let acc = accounts.get(&account_name);
+            let (pid, ign, admin, aaccess) = acc
+                .map(|a| {
+                    (
+                        a.player_id.clone(),
+                        a.in_game_name.clone(),
+                        a.admin,
+                        a.alliance_access,
+                    )
+                })
+                .unwrap_or((None, String::new(), false, false));
+            let fc = acc.and_then(|a| a.friend_code.clone()).unwrap_or_default();
+            drop(accounts);
+            let invites = super::alliance_invites::load_invites(&state.data_dir);
+            let has_inv = invites.values().any(|i| {
+                i.to_friend_code.eq_ignore_ascii_case(&fc)
+                    && (i.status == "pending" || i.status == "accepted")
+            });
+            (pid, ign, admin, aaccess || has_inv, fc)
         };
         Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
@@ -295,7 +315,9 @@ pub async fn get_session_info(
             "server_number": server_number,
             "player_id": player_id,
             "in_game_name": in_game_name,
-            "is_admin": is_admin
+            "is_admin": is_admin,
+            "alliance_access": alliance_access,
+            "friend_code": friend_code
         })))
     } else {
         Ok(HttpResponse::Unauthorized().json(serde_json::json!({
@@ -533,6 +555,148 @@ pub async fn kingshot_lookup_profile(
         "server_number": server_number,
         "player_id": player_id
     })))
+}
+
+/// Dev-only: instant login as normal user. Only works when DEV_MODE=true.
+/// Creates "devuser" account if it doesn't exist (non-admin, no alliance access).
+pub async fn dev_login_user(session: Session, state: web::Data<AppState>) -> Result<HttpResponse> {
+    if std::env::var("DEV_MODE").as_deref() != Ok("true") {
+        return Ok(HttpResponse::NotFound().finish());
+    }
+
+    const DEV_ACCOUNT: &str = "devuser";
+    const DEV_SERVER: u32 = 140;
+
+    let mut accounts = state.accounts.lock().unwrap();
+    let account = if let Some(acc) = accounts.get(DEV_ACCOUNT) {
+        acc.clone()
+    } else {
+        let account = Account {
+            account_name: DEV_ACCOUNT.to_string(),
+            server_number: DEV_SERVER,
+            password: String::new(),
+            in_game_name: "Dev User".to_string(),
+            player_id: None,
+            oauth_provider: None,
+            oauth_id: None,
+            admin: false,
+            alliance_access: false,
+            alliance_id: None,
+            alliance_tag: None,
+            alliance_name: None,
+            friend_code: Some(generate_friend_code()),
+        };
+        accounts.insert(DEV_ACCOUNT.to_string(), account.clone());
+
+        let mut schedules = state.schedules.lock().unwrap();
+        schedules.insert(
+            schedule_key(DEV_ACCOUNT, DEV_SERVER),
+            ScheduleData {
+                construction_schedule: None,
+                research_schedule: None,
+                troops_schedule: None,
+                entries: None,
+                scheduled_player_ids: None,
+            },
+        );
+        drop(schedules);
+
+        save_accounts(&state.data_dir, &accounts).map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
+        account
+    };
+    drop(accounts);
+
+    session
+        .insert("account_name", &account.account_name)
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Session: {}", e)))?;
+    session
+        .insert("server_number", account.server_number)
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Session: {}", e)))?;
+
+    let redirect_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
+    let location = format!(
+        "{}/dashboard/{}",
+        redirect_url.trim_end_matches('/'),
+        account.account_name
+    );
+
+    Ok(HttpResponse::Found()
+        .append_header(("Location", location))
+        .finish())
+}
+
+/// Dev-only: instant login as test account. Only works when DEV_MODE=true.
+/// Creates "devtest" account if it doesn't exist, sets session, redirects to dashboard.
+pub async fn dev_login(session: Session, state: web::Data<AppState>) -> Result<HttpResponse> {
+    if std::env::var("DEV_MODE").as_deref() != Ok("true") {
+        return Ok(HttpResponse::NotFound().finish());
+    }
+
+    const DEV_ACCOUNT: &str = "devtest";
+    const DEV_SERVER: u32 = 1;
+
+    let mut accounts = state.accounts.lock().unwrap();
+    let account = if let Some(acc) = accounts.get(DEV_ACCOUNT) {
+        acc.clone()
+    } else {
+        let account = Account {
+            account_name: DEV_ACCOUNT.to_string(),
+            server_number: DEV_SERVER,
+            password: String::new(),
+            in_game_name: "Dev Tester".to_string(),
+            player_id: None,
+            oauth_provider: None,
+            oauth_id: None,
+            admin: true,
+            alliance_access: true,
+            alliance_id: None,
+            alliance_tag: None,
+            alliance_name: None,
+            friend_code: Some(generate_friend_code()),
+        };
+        accounts.insert(DEV_ACCOUNT.to_string(), account.clone());
+
+        let mut schedules = state.schedules.lock().unwrap();
+        schedules.insert(
+            schedule_key(DEV_ACCOUNT, DEV_SERVER),
+            ScheduleData {
+                construction_schedule: None,
+                research_schedule: None,
+                troops_schedule: None,
+                entries: None,
+                scheduled_player_ids: None,
+            },
+        );
+        drop(schedules);
+
+        save_accounts(&state.data_dir, &accounts).map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
+        account
+    };
+    drop(accounts);
+
+    session
+        .insert("account_name", &account.account_name)
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Session: {}", e)))?;
+    session
+        .insert("server_number", account.server_number)
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Session: {}", e)))?;
+
+    let redirect_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
+    let location = format!(
+        "{}/dashboard/{}",
+        redirect_url.trim_end_matches('/'),
+        account.account_name
+    );
+
+    Ok(HttpResponse::Found()
+        .append_header(("Location", location))
+        .finish())
 }
 
 /// Logout endpoint
