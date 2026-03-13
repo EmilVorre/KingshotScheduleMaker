@@ -39,7 +39,10 @@ pub fn load_invites(data_dir: &str) -> HashMap<String, AllianceInvite> {
     HashMap::new()
 }
 
-fn save_invites(data_dir: &str, invites: &HashMap<String, AllianceInvite>) -> std::io::Result<()> {
+pub fn save_invites(
+    data_dir: &str,
+    invites: &HashMap<String, AllianceInvite>,
+) -> std::io::Result<()> {
     std::fs::create_dir_all(data_dir)?;
     let content = serde_json::to_string_pretty(invites)?;
     fs::write(invites_path(data_dir), content)?;

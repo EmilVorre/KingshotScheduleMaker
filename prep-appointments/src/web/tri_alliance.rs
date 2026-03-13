@@ -13,13 +13,18 @@ use super::state::AppState;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Legion {
     pub name: String,
+    #[serde(default)]
     pub member_ids: Vec<String>,
+    #[serde(default)]
+    pub filler_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LegionAttendance {
     pub attended: Vec<String>,
     pub absent: Vec<String>,
+    #[serde(default)]
+    pub filler: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,10 +50,12 @@ fn default_legions() -> Vec<Legion> {
         Legion {
             name: "Legion 1".to_string(),
             member_ids: vec![],
+            filler_ids: vec![],
         },
         Legion {
             name: "Legion 2".to_string(),
             member_ids: vec![],
+            filler_ids: vec![],
         },
     ]
 }
@@ -221,10 +228,14 @@ pub async fn set_tri_alliance(
         legion
             .member_ids
             .retain(|id| id.chars().all(|c| c.is_ascii_digit()));
+        legion
+            .filler_ids
+            .retain(|id| id.chars().all(|c| c.is_ascii_digit()));
     }
     let mut seen = std::collections::HashSet::new();
     for legion in &mut legions {
         legion.member_ids.retain(|id| seen.insert(id.clone()));
+        legion.filler_ids.retain(|id| seen.insert(id.clone()));
     }
 
     let mut data = load_tri_alliance(
@@ -257,8 +268,12 @@ pub struct AddAttendanceRequest {
     pub label: Option<String>,
     pub legion_1_attended: Vec<String>,
     pub legion_1_absent: Vec<String>,
+    #[serde(default)]
+    pub legion_1_filler: Vec<String>,
     pub legion_2_attended: Vec<String>,
     pub legion_2_absent: Vec<String>,
+    #[serde(default)]
+    pub legion_2_filler: Vec<String>,
 }
 
 /// POST /{account}/{server}/api/alliances/{slug}/tri-alliance/attendance - Add attendance record (alliance-scoped)
@@ -294,10 +309,12 @@ pub async fn add_attendance(
         legion_1: LegionAttendance {
             attended: body.legion_1_attended.clone(),
             absent: body.legion_1_absent.clone(),
+            filler: body.legion_1_filler.clone(),
         },
         legion_2: LegionAttendance {
             attended: body.legion_2_attended.clone(),
             absent: body.legion_2_absent.clone(),
+            filler: body.legion_2_filler.clone(),
         },
     };
 
@@ -370,10 +387,12 @@ pub async fn update_attendance(
         legion_1: LegionAttendance {
             attended: body.legion_1_attended.clone(),
             absent: body.legion_1_absent.clone(),
+            filler: body.legion_1_filler.clone(),
         },
         legion_2: LegionAttendance {
             attended: body.legion_2_attended.clone(),
             absent: body.legion_2_absent.clone(),
+            filler: body.legion_2_filler.clone(),
         },
     };
 

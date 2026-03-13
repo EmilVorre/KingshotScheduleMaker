@@ -371,14 +371,50 @@ pub async fn get_stats(
     Ok(HttpResponse::Ok().json(stats_response))
 }
 
-/// Schedule endpoint
+/// Public schedule by form code (no auth). Resolves form code to account+server, then loads schedule.
+pub async fn get_schedule_by_form_code(
+    path: web::Path<(String, String, String)>,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse> {
+    let (account_name, form_code, day_str) = path.into_inner();
+    let account_name = account_name.to_lowercase();
+
+    let (account_name, server_number) = {
+        let forms = state.forms.lock().unwrap();
+        let form = forms.get(&form_code).cloned();
+        drop(forms);
+        match form {
+            Some(f) if f.account_name.to_lowercase() == account_name => {
+                (f.account_name.to_lowercase(), f.server_number)
+            }
+            _ => {
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "error": "Form not found or account mismatch"
+                })))
+            }
+        }
+    };
+
+    get_schedule_inner(&state, &account_name, server_number, &day_str).await
+}
+
+/// Schedule endpoint (account+server, used by dashboard)
 pub async fn get_schedule(
     path: web::Path<(String, u32, String)>,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse> {
     let (account_name, server_number, day_str) = path.into_inner();
     let account_name = account_name.to_lowercase();
-    let key = schedule_key(&account_name, server_number);
+    get_schedule_inner(&state, &account_name, server_number, &day_str).await
+}
+
+async fn get_schedule_inner(
+    state: &web::Data<AppState>,
+    account_name: &str,
+    server_number: u32,
+    day_str: &str,
+) -> Result<HttpResponse> {
+    let key = schedule_key(account_name, server_number);
 
     if let Some(schedule_data) = load_schedule(&state.data_dir, &account_name, server_number) {
         let mut schedules = state.schedules.lock().unwrap();
@@ -392,7 +428,7 @@ pub async fn get_schedule(
                 .map(|f| f.config.clone())
         };
 
-        let schedule = match day_str.as_str() {
+        let schedule = match day_str {
             "construction" => schedule_data.construction_schedule.clone(),
             "research" => schedule_data.research_schedule.clone(),
             "troops" => schedule_data.troops_schedule.clone(),
@@ -404,7 +440,7 @@ pub async fn get_schedule(
         };
 
         if let Some(schedule) = schedule {
-            let time_slots: Vec<(u8, String)> = match (day_str.as_str(), form_config.as_ref()) {
+            let time_slots: Vec<(u8, String)> = match (day_str, form_config.as_ref()) {
                 ("construction", Some(config)) => calculate_time_slots(
                     &config.construction_times.start_time,
                     config.construction_times.end_time.as_deref(),
@@ -437,7 +473,7 @@ pub async fn get_schedule(
                 }
             }
 
-            let day_name = match day_str.as_str() {
+            let day_name = match day_str {
                 "construction" => "Construction Day",
                 "research" => "Research Day",
                 "troops" => "Troops Training Day",
@@ -458,7 +494,7 @@ pub async fn get_schedule(
             .map(|f| f.config.clone())
     };
 
-    let time_slots: Vec<(u8, String)> = match (day_str.as_str(), form_config.as_ref()) {
+    let time_slots: Vec<(u8, String)> = match (day_str, form_config.as_ref()) {
         ("construction", Some(config)) => calculate_time_slots(
             &config.construction_times.start_time,
             config.construction_times.end_time.as_deref(),
@@ -474,7 +510,7 @@ pub async fn get_schedule(
         _ => (1..=49).map(|slot| (slot, slot_to_time(slot))).collect(),
     };
 
-    let day_name = match day_str.as_str() {
+    let day_name = match day_str {
         "construction" => "Construction Day",
         "research" => "Research Day",
         "troops" => "Troops Training Day",
@@ -486,7 +522,7 @@ pub async fn get_schedule(
     let schedule_opt = {
         let schedules = state.schedules.lock().unwrap();
         if let Some(schedule_data) = schedules.get(&key) {
-            match day_str.as_str() {
+            match day_str {
                 "construction" => schedule_data.construction_schedule.as_ref().cloned(),
                 "research" => schedule_data.research_schedule.as_ref().cloned(),
                 "troops" => schedule_data.troops_schedule.as_ref().cloned(),
@@ -597,7 +633,7 @@ pub async fn get_schedule(
                     eprintln!("Warning: Failed to save schedule to disk: {}", e);
                 }
 
-                match day_str.as_str() {
+                match day_str {
                     "construction" => construction_schedule,
                     "research" => research_schedule,
                     "troops" => troops_schedule,
@@ -1698,7 +1734,7 @@ pub async fn update_schedule_slot(
             .map(|f| f.config.clone())
     };
 
-    let time_slots: Vec<(u8, String)> = match (day_str.as_str(), form_config.as_ref()) {
+    let time_slots: Vec<(u8, String)> = match (day_str.as_ref(), form_config.as_ref()) {
         ("construction", Some(config)) => calculate_time_slots(
             &config.construction_times.start_time,
             config.construction_times.end_time.as_deref(),
@@ -1728,7 +1764,7 @@ pub async fn update_schedule_slot(
 
     let slot = slot_num.unwrap();
 
-    let day_schedule = match day_str.as_str() {
+    let day_schedule = match day_str.as_ref() {
         "construction" => {
             if schedule_data.construction_schedule.is_none() {
                 schedule_data.construction_schedule = Some(DaySchedule {

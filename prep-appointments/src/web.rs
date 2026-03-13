@@ -1,7 +1,7 @@
 mod admin;
 mod alliance_application;
-mod alliance_invites;
-mod alliances;
+pub mod alliance_invites;
+pub mod alliances;
 mod auth;
 mod avatar;
 mod feedback;
@@ -11,10 +11,10 @@ mod giftcode_recipients;
 mod oauth;
 pub mod oauth_state;
 mod persistence;
-mod schedule;
+pub mod schedule;
 mod state;
-mod swordland;
-mod tri_alliance;
+pub mod swordland;
+pub mod tri_alliance;
 
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::{cookie::Key, middleware, web, App, HttpServer};
@@ -86,6 +86,10 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
             .route(
                 "/api/generate-schedule",
                 web::post().to(schedule::generate_schedule_api),
+            )
+            .route(
+                "/api/public-schedule/{account_name}/{form_code}/{day}",
+                web::get().to(schedule::get_schedule_by_form_code),
             )
             .route("/api/servers", web::get().to(auth::list_servers))
             .route("/api/admin/accounts", web::get().to(admin::list_accounts))
