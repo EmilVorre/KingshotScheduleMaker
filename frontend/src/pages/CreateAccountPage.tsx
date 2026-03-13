@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
-import { ENABLE_GOOGLE_LOGIN } from '../config'
+import { ENABLE_GOOGLE_LOGIN, IS_DEV } from '../config'
 
 export default function CreateAccountPage() {
   const [creating, setCreating] = useState(false)
@@ -101,6 +101,24 @@ export default function CreateAccountPage() {
       <div className="bg-gray-800 rounded-lg shadow-xl p-8 border border-gray-700">
         <div className="mb-8 space-y-3">
           <p className="text-sm font-medium text-gray-400">Or create with:</p>
+          {IS_DEV && (
+            <div className="flex gap-2 mb-3">
+              <a
+                href="/api/dev-login"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-all"
+              >
+                <i className="fas fa-bolt"></i>
+                Dev: Admin (devtest)
+              </a>
+              <a
+                href="/api/dev-login-user"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-amber-700 hover:bg-amber-600 text-white rounded-lg font-medium transition-all"
+              >
+                <i className="fas fa-user"></i>
+                Dev: User (devuser)
+              </a>
+            </div>
+          )}
           <div className="flex gap-3">
             <a
               href="/api/auth/discord"

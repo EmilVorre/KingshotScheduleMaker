@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../api/client'
-import { ENABLE_GOOGLE_LOGIN } from '../config'
+import { ENABLE_GOOGLE_LOGIN, IS_DEV } from '../config'
 import ProfileMenu from './ProfileMenu'
 
 const PREP_TABS = [
@@ -16,13 +16,14 @@ const PREP_TABS = [
 ] as const
 
 export default function Sidebar() {
-  const { accountName, serverNumber, playerId, inGameName, isAdmin, isValid, refresh } = useAuth()
+  const { accountName, serverNumber, playerId, inGameName, isAdmin, allianceAccess, isValid, refresh } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [showLogin, setShowLogin] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [prepExpanded, setPrepExpanded] = useState(true)
+  const [allianceExpanded, setAllianceExpanded] = useState(true)
   const [adminExpanded, setAdminExpanded] = useState(true)
 
   const isOnDashboard = location.pathname.startsWith('/dashboard/') && accountName
@@ -103,6 +104,26 @@ export default function Sidebar() {
             </button>
             {showLogin && !collapsed && (
               <div className="mt-3 space-y-2">
+                {IS_DEV && (
+                  <div className="flex gap-1 mb-2">
+                    <a
+                      href="/api/dev-login"
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-medium"
+                      title="Admin"
+                    >
+                      <i className="fas fa-bolt"></i>
+                      Admin
+                    </a>
+                    <a
+                      href="/api/dev-login-user"
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-2 bg-amber-700 hover:bg-amber-600 text-white rounded-lg text-sm font-medium"
+                      title="Normal user"
+                    >
+                      <i className="fas fa-user"></i>
+                      User
+                    </a>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <a
                     href="/api/auth/discord"
@@ -184,6 +205,92 @@ export default function Sidebar() {
                   </span>
                   <i className="fas fa-chevron-right text-xs opacity-60"></i>
                 </Link>
+                <Link
+                  to="/admin-alliance-applications"
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                    location.pathname === '/admin-alliance-applications'
+                      ? 'bg-amber-600/90 text-white'
+                      : 'text-gray-400 hover:bg-gray-800/80 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <i className="fas fa-file-signature w-4"></i>
+                    Alliance Applications
+                  </span>
+                  <i className="fas fa-chevron-right text-xs opacity-60"></i>
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Alliance Organisation - same level as Prep */}
+        {!collapsed && (
+          <div className="mt-4 px-4 mb-4">
+            <button
+              onClick={() => setAllianceExpanded((e) => !e)}
+              className="flex items-center gap-2 w-full text-left text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 hover:text-gray-400 transition-colors py-1 rounded"
+            >
+              <i className={`fas fa-chevron-down text-xs transition-transform duration-200 ${allianceExpanded ? '' : '-rotate-90'}`}></i>
+              Alliance Organisation
+            </button>
+            {allianceExpanded && (
+              <div className="mt-0.5 space-y-0.5">
+                {!allianceAccess && (
+                  <Link
+                    to={accountName ? `/dashboard/${accountName}?tab=alliance-application` : '/'}
+                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                      isOnDashboard && currentTab === 'alliance-application'
+                        ? 'bg-indigo-600/90 text-white'
+                        : 'text-gray-400 hover:bg-gray-800/80 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <i className="fas fa-file-signature w-4"></i>
+                      Alliance Application
+                    </span>
+                    <i className="fas fa-chevron-right text-xs opacity-60"></i>
+                  </Link>
+                )}
+                {[
+                  { key: 'alliance-organisation', label: 'Alliance Organisation', icon: 'fa-sitemap' },
+                  { key: 'giftcode-automation', label: 'Giftcode Automation', icon: 'fa-gift' },
+                  { key: 'swordland', label: 'Swordland', icon: 'fa-landmark' },
+                  { key: 'tri-alliance', label: 'Tri Alliance', icon: 'fa-users-cog' },
+                ].map((tab) => {
+                  const canUse = allianceAccess && isValid && accountName
+                  const isActive = isOnDashboard && currentTab === tab.key
+                  const tabContent = (
+                    <span className="flex items-center justify-between gap-2 flex-1">
+                      <span className="flex items-center gap-2">
+                        <i className={`fas ${tab.icon} w-4`}></i>
+                        {tab.label}
+                      </span>
+                      <i className="fas fa-chevron-right text-xs opacity-60"></i>
+                    </span>
+                  )
+                  return canUse ? (
+                    <Link
+                      key={tab.key}
+                      to={accountName ? `/dashboard/${accountName}?tab=${tab.key}` : '/'}
+                      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                        isActive
+                          ? 'bg-indigo-600/90 text-white'
+                          : 'text-gray-400 hover:bg-gray-800/80 hover:text-white'
+                      }`}
+                    >
+                      {tabContent}
+                    </Link>
+                  ) : (
+                    <span
+                      key={tab.key}
+                      className="flex items-center px-3 py-2 rounded-lg text-sm text-gray-500 cursor-not-allowed opacity-70"
+                      title="Requires approved alliance access"
+                    >
+                      {tabContent}
+                    </span>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -272,6 +379,54 @@ export default function Sidebar() {
         {/* When collapsed, show icon-only links */}
         {collapsed && (
           <div className="mt-2 space-y-0.5">
+            {isValid && accountName && (
+              <>
+                {!allianceAccess && (
+                  <Link
+                    to={`/dashboard/${accountName}?tab=alliance-application`}
+                    className={`flex justify-center py-2 rounded-lg mx-2 transition-all ${
+                      isOnDashboard && currentTab === 'alliance-application'
+                        ? 'bg-indigo-600/90 text-white'
+                        : 'text-gray-400 hover:bg-gray-800/80 hover:text-white'
+                    }`}
+                    title="Alliance Application"
+                  >
+                    <i className="fas fa-file-signature w-5"></i>
+                  </Link>
+                )}
+                {[
+                  { key: 'alliance-organisation', label: 'Alliance Organisation', icon: 'fa-sitemap' },
+                  { key: 'giftcode-automation', label: 'Giftcode Automation', icon: 'fa-gift' },
+                  { key: 'swordland', label: 'Swordland', icon: 'fa-landmark' },
+                  { key: 'tri-alliance', label: 'Tri Alliance', icon: 'fa-users-cog' },
+                ].map((tab) => {
+                  const canUse = allianceAccess
+                  const isActive = isOnDashboard && currentTab === tab.key
+                  return canUse ? (
+                    <Link
+                      key={tab.key}
+                      to={`/dashboard/${accountName}?tab=${tab.key}`}
+                      className={`flex justify-center py-2 rounded-lg mx-2 transition-all ${
+                        isActive
+                          ? 'bg-indigo-600/90 text-white'
+                          : 'text-gray-400 hover:bg-gray-800/80 hover:text-white'
+                      }`}
+                      title={tab.label}
+                    >
+                      <i className={`fas ${tab.icon} w-5`}></i>
+                    </Link>
+                  ) : (
+                    <span
+                      key={tab.key}
+                      className="flex justify-center py-2 rounded-lg mx-2 text-gray-500 cursor-not-allowed opacity-70"
+                      title={`${tab.label} (requires approved alliance access)`}
+                    >
+                      <i className={`fas ${tab.icon} w-5`}></i>
+                    </span>
+                  )
+                })}
+              </>
+            )}
             {PREP_TABS.map((tab) => {
               const href = tab.key === 'info' ? '/info' : (accountName ? tab.href(accountName) : '/')
               const isActive = tab.key === 'info'

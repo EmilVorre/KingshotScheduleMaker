@@ -1,5 +1,5 @@
 import { useAuth } from '../context/AuthContext'
-import { ENABLE_GOOGLE_LOGIN } from '../config'
+import { ENABLE_GOOGLE_LOGIN, IS_DEV } from '../config'
 
 export default function IndexPage() {
   const { isValid } = useAuth()
@@ -25,7 +25,26 @@ export default function IndexPage() {
           {!isValid && (
             <div className="flex flex-col gap-4 max-w-md mx-auto">
               <p className="text-sm font-medium text-gray-400 text-center">Sign in with</p>
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
+                {IS_DEV && (
+                  <div className="flex gap-2">
+                    <a
+                      href="/api/dev-login"
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-semibold text-sm border border-amber-500"
+                    >
+                      <i className="fas fa-bolt"></i>
+                      Dev: Admin (devtest)
+                    </a>
+                    <a
+                      href="/api/dev-login-user"
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-amber-700 hover:bg-amber-600 text-white rounded-lg font-semibold text-sm border border-amber-600"
+                    >
+                      <i className="fas fa-user"></i>
+                      Dev: User (devuser)
+                    </a>
+                  </div>
+                )}
+                <div className="flex gap-3">
                 <a
                   href="/api/auth/discord"
                   className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-lg font-semibold text-lg transition-all"
@@ -42,6 +61,7 @@ export default function IndexPage() {
                     Google
                   </a>
                 )}
+                </div>
               </div>
               <p className="text-center text-gray-500 text-sm">New? Sign in to create an account</p>
             </div>

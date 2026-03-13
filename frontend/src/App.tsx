@@ -11,6 +11,7 @@ import AdminPage from './pages/AdminPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminResourcesPage from './pages/AdminResourcesPage'
 import AdminFeedbackPage from './pages/AdminFeedbackPage'
+import AdminAllianceApplicationsPage from './pages/AdminAllianceApplicationsPage'
 import FormPage from './pages/FormPage'
 import FormStatsPage from './pages/FormStatsPage'
 
@@ -25,8 +26,9 @@ function App() {
         <Route path="view/:accountName/:server" element={<ViewSchedulePage />} />
         <Route path="dashboard/:accountName" element={<DashboardPage />} />
         <Route path="admin-resources" element={<AdminResourcesPage />} />
+        <Route path="admin-alliance-applications" element={<AdminAllianceApplicationsPage />} />
         <Route path="admin-feedback" element={<AdminFeedbackPage />} />
-        <Route path=":accountName/:server" element={<SchedulesPage />} />
+        <Route path=":accountName/:formId" element={<SchedulesPage />} />
         <Route path=":accountName/:server/stats" element={<StatsPage />} />
         <Route path=":accountName/:server/admin" element={<AdminPage />} />
       </Route>

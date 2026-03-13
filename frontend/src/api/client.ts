@@ -47,6 +47,8 @@ export const api = {
       player_id?: string
       in_game_name?: string
       is_admin?: boolean
+      alliance_access?: boolean
+      friend_code?: string
     }>('/api/session'),
 
   listAdminAccounts: () =>
@@ -100,6 +102,9 @@ export const api = {
 
   getSchedule: (account: string, server: number, day: string) =>
     apiFetch<Schedule>(`/${account}/${server}/api/schedule/${day}`),
+
+  getScheduleByFormCode: (account: string, formCode: string, day: string) =>
+    apiFetch<Schedule>(`/api/public-schedule/${encodeURIComponent(account)}/${encodeURIComponent(formCode)}/${day}`),
 
   updateScheduleSlot: (account: string, server: number, day: string, time: string, player: string) =>
     apiFetch<{ success?: boolean }>(`/${account}/${server}/api/schedule/${day}/slot`, {
@@ -158,6 +163,263 @@ export const api = {
   getFormSubmissions: (account: string, server: number) =>
     apiFetch<{ submissions?: Record<string, unknown>[] }>(`/${account}/${server}/api/form/submissions`),
 
+  listAlliances: (account: string, server: number) =>
+    apiFetch<{
+      alliances?: Array<{
+        name: string
+        slug: string
+        players: AlliancePlayer[]
+        owner_account: string
+        owner_server: number
+        is_owner: boolean
+      }>
+    }>(`/${account}/${server}/api/alliances`),
+
+  getFriendCode: (account: string, server: number) =>
+    apiFetch<{ success?: boolean; friend_code?: string }>(`/${account}/${server}/api/friend-code`),
+
+  listAllianceInvites: (account: string, server: number) =>
+    apiFetch<{
+      success?: boolean
+      sent?: Array<{ id: string; type: string; to_friend_code: string; to_account: string; alliance_name: string; status: string; created_at: string }>
+      received?: Array<{ id: string; type: string; from_account: string; alliance_name: string; status: string; created_at: string }>
+    }>(`/${account}/${server}/api/alliance-invites`),
+
+  createAllianceInvite: (account: string, server: number, friendCode: string) =>
+    apiFetch<{ success?: boolean; error?: string }>(`/${account}/${server}/api/alliance-invites`, {
+      method: 'POST',
+      body: JSON.stringify({ friend_code: friendCode }),
+    }),
+
+  acceptAllianceInvite: (account: string, server: number, inviteId: string) =>
+    apiFetch<{ success?: boolean; error?: string }>(`/${account}/${server}/api/alliance-invites/${inviteId}/accept`, {
+      method: 'POST',
+    }),
+
+  rejectAllianceInvite: (account: string, server: number, inviteId: string) =>
+    apiFetch<{ success?: boolean; error?: string }>(`/${account}/${server}/api/alliance-invites/${inviteId}/reject`, {
+      method: 'POST',
+    }),
+
+  revokeAllianceInvite: (account: string, server: number, inviteId: string) =>
+    apiFetch<{ success?: boolean; error?: string }>(`/${account}/${server}/api/alliance-invites/${inviteId}/revoke`, {
+      method: 'POST',
+    }),
+
+  addAllianceMember: (account: string, server: number, allianceName: string, playerId: string) =>
+    apiFetch<{ success?: boolean; player?: AlliancePlayer }>(`/${account}/${server}/api/alliance-members`, {
+      method: 'POST',
+      body: JSON.stringify({ alliance_name: allianceName, player_id: playerId }),
+    }),
+
+  removeAllianceMember: (account: string, server: number, allianceSlug: string, playerId: string) =>
+    apiFetch<{ success?: boolean }>(
+      `/${account}/${server}/api/alliance-members/${encodeURIComponent(allianceSlug)}/${encodeURIComponent(playerId)}`,
+      { method: 'DELETE' }
+    ),
+
+  refreshAllianceNames: (account: string, server: number, allianceSlug: string) =>
+    apiFetch<{ success?: boolean; updated?: number; total?: number; error?: string }>(
+      `/${account}/${server}/api/alliances/${encodeURIComponent(allianceSlug)}/refresh-names`,
+      { method: 'POST' }
+    ),
+
+  getSwordland: (ownerAccount: string, ownerServer: number, allianceSlug: string) =>
+    apiFetch<{
+      success?: boolean
+      legions?: Array<{ name: string; member_ids: string[]; filler_ids?: string[] }>
+      attendance_records?: Array<{
+        id: string
+        date: string
+        label?: string
+        legion_1: { attended: string[]; absent: string[]; filler?: string[] }
+        legion_2: { attended: string[]; absent: string[]; filler?: string[] }
+      }>
+    }>(`/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/swordland`),
+
+  setSwordlandLegions: (
+    ownerAccount: string,
+    ownerServer: number,
+    allianceSlug: string,
+    legions: Array<{ name: string; member_ids: string[]; filler_ids?: string[] }>
+  ) =>
+    apiFetch<{ success?: boolean; legions?: Array<{ name: string; member_ids: string[] }> }>(
+      `/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/swordland`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ legions }),
+      }
+    ),
+
+  addSwordlandAttendance: (
+    ownerAccount: string,
+    ownerServer: number,
+    allianceSlug: string,
+    data: {
+      date: string
+      label?: string
+      legion_1_attended: string[]
+      legion_1_absent: string[]
+      legion_1_filler?: string[]
+      legion_2_attended: string[]
+      legion_2_absent: string[]
+      legion_2_filler?: string[]
+    }
+  ) =>
+    apiFetch<{
+      success?: boolean
+      record?: {
+        id: string
+        date: string
+        label?: string
+        legion_1: { attended: string[]; absent: string[] }
+        legion_2: { attended: string[]; absent: string[] }
+      }
+    }>(`/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/swordland/attendance`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateSwordlandAttendance: (
+    ownerAccount: string,
+    ownerServer: number,
+    allianceSlug: string,
+    recordId: string,
+    data: {
+      date: string
+      label?: string
+      legion_1_attended: string[]
+      legion_1_absent: string[]
+      legion_1_filler?: string[]
+      legion_2_attended: string[]
+      legion_2_absent: string[]
+      legion_2_filler?: string[]
+    }
+  ) =>
+    apiFetch<{
+      success?: boolean
+      record?: {
+        id: string
+        date: string
+        label?: string
+        legion_1: { attended: string[]; absent: string[] }
+        legion_2: { attended: string[]; absent: string[] }
+      }
+    }>(`/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/swordland/attendance/${recordId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  getTriAlliance: (ownerAccount: string, ownerServer: number, allianceSlug: string) =>
+    apiFetch<{
+      success?: boolean
+      legions?: Array<{ name: string; member_ids: string[]; filler_ids?: string[] }>
+      attendance_records?: Array<{
+        id: string
+        date: string
+        label?: string
+        legion_1: { attended: string[]; absent: string[]; filler?: string[] }
+        legion_2: { attended: string[]; absent: string[]; filler?: string[] }
+      }>
+    }>(`/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/tri-alliance`),
+
+  setTriAllianceLegions: (
+    ownerAccount: string,
+    ownerServer: number,
+    allianceSlug: string,
+    legions: Array<{ name: string; member_ids: string[]; filler_ids?: string[] }>
+  ) =>
+    apiFetch<{ success?: boolean; legions?: Array<{ name: string; member_ids: string[] }> }>(
+      `/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/tri-alliance`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ legions }),
+      }
+    ),
+
+  addTriAllianceAttendance: (
+    ownerAccount: string,
+    ownerServer: number,
+    allianceSlug: string,
+    data: {
+      date: string
+      label?: string
+      legion_1_attended: string[]
+      legion_1_absent: string[]
+      legion_1_filler?: string[]
+      legion_2_attended: string[]
+      legion_2_absent: string[]
+      legion_2_filler?: string[]
+    }
+  ) =>
+    apiFetch<{
+      success?: boolean
+      record?: {
+        id: string
+        date: string
+        label?: string
+        legion_1: { attended: string[]; absent: string[] }
+        legion_2: { attended: string[]; absent: string[] }
+      }
+    }>(`/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/tri-alliance/attendance`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateTriAllianceAttendance: (
+    ownerAccount: string,
+    ownerServer: number,
+    allianceSlug: string,
+    recordId: string,
+    data: {
+      date: string
+      label?: string
+      legion_1_attended: string[]
+      legion_1_absent: string[]
+      legion_1_filler?: string[]
+      legion_2_attended: string[]
+      legion_2_absent: string[]
+      legion_2_filler?: string[]
+    }
+  ) =>
+    apiFetch<{
+      success?: boolean
+      record?: {
+        id: string
+        date: string
+        label?: string
+        legion_1: { attended: string[]; absent: string[] }
+        legion_2: { attended: string[]; absent: string[] }
+      }
+    }>(`/${ownerAccount}/${ownerServer}/api/alliances/${encodeURIComponent(allianceSlug)}/tri-alliance/attendance/${recordId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  getGiftcodeRecipients: (account: string, server: number) =>
+    apiFetch<{ success?: boolean; player_ids?: string[] }>(`/${account}/${server}/api/giftcode-recipients`),
+
+  setGiftcodeRecipients: (account: string, server: number, playerIds: string[]) =>
+    apiFetch<{ success?: boolean; player_ids?: string[] }>(`/${account}/${server}/api/giftcode-recipients`, {
+      method: 'PUT',
+      body: JSON.stringify({ player_ids: playerIds }),
+    }),
+
+  redeemGiftcode: (account: string, server: number, giftcode: string) =>
+    apiFetch<{
+      success?: boolean
+      results?: Array<{ player_id: string; status: string; message: string }>
+    }>(`/${account}/${server}/api/redeem-giftcode`, {
+      method: 'POST',
+      body: JSON.stringify({ giftcode: giftcode.trim() }),
+    }),
+
+  fetchGiftcodes: (account: string, server: number) =>
+    apiFetch<{
+      success?: boolean
+      codes?: Array<{ code: string; date: string }>
+    }>(`/${account}/${server}/api/fetch-giftcodes`),
+
   downloadFormCsv: (account: string, server: number) =>
     fetch(`/${account}/${server}/api/form/download-csv`, { credentials: 'include' }),
 
@@ -200,6 +462,53 @@ export const api = {
     apiFetch<{ success?: boolean }>(`/api/admin/feedback/${encodeURIComponent(id)}/archive`, {
       method: 'POST',
     }),
+
+  getMyAllianceApplication: () =>
+    apiFetch<{ success?: boolean; application?: AllianceApplication }>('/api/alliance-application'),
+
+  submitAllianceApplication: (data: {
+    alliance_tag: string
+    alliance_name: string
+    contact_player_id: string
+    server_number: number
+  }) =>
+    apiFetch<{ success?: boolean; error?: string }>('/api/alliance-application', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  listAllianceApplications: () =>
+    apiFetch<{ success?: boolean; applications?: AllianceApplication[] }>('/api/admin/alliance-applications'),
+
+  approveAllianceApplication: (id: string) =>
+    apiFetch<{ success?: boolean }>(`/api/admin/alliance-applications/${encodeURIComponent(id)}/approve`, {
+      method: 'POST',
+    }),
+
+  rejectAllianceApplication: (id: string) =>
+    apiFetch<{ success?: boolean }>(`/api/admin/alliance-applications/${encodeURIComponent(id)}/reject`, {
+      method: 'POST',
+    }),
+}
+
+export interface AllianceApplication {
+  id: string
+  account_name: string
+  alliance_tag: string
+  alliance_name: string
+  contact_player_id: string
+  server_number: number
+  status: 'pending' | 'approved' | 'rejected'
+  submitted_at: string
+}
+
+export interface AlliancePlayer {
+  player_id: string
+  name: string
+  castle_level?: string
+  kingdom?: string
+  avatar_image?: string
+  added_at: string
 }
 
 export interface AccountStats {

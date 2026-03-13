@@ -9,24 +9,24 @@ const DAYS = [
 ] as const
 
 export default function SchedulesPage() {
-  const { accountName, server } = useParams<{ accountName: string; server: string }>()
+  const { accountName, formId } = useParams<{ accountName: string; formId: string }>()
   const [currentDay, setCurrentDay] = useState<(typeof DAYS)[number]['key']>('construction')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [schedule, setSchedule] = useState<Schedule | null>(null)
 
   useEffect(() => {
-    if (!accountName || !server) return
+    if (!accountName || !formId) return
     setLoading(true)
     setError(null)
-    api.getSchedule(accountName, parseInt(server, 10), currentDay).then(({ ok, data, error: err }) => {
+    api.getScheduleByFormCode(accountName, formId, currentDay).then(({ ok, data, error: err }) => {
       if (ok && data) setSchedule(data)
       else setError(err || 'Failed to load schedule')
       setLoading(false)
     })
-  }, [accountName, server, currentDay])
+  }, [accountName, formId, currentDay])
 
-  if (!accountName || !server) {
+  if (!accountName || !formId) {
     return (
       <div className="container mx-auto px-4 py-8">
         <p className="text-red-400">Invalid URL</p>

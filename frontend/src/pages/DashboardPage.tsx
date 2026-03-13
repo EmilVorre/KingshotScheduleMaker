@@ -1,179 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   api,
   type AccountStats,
+  type AlliancePlayer,
   type CreateFormRequest,
   type CurrentFormInfo,
   type PredeterminedSlot,
   type Schedule,
 } from '../api/client'
-
-const STANDARD_INTRO_TEXT =
-  'Fill out this form to apply for Chief Minister (CM) and Noble Advisor (NA) appointments.\n\nSchedule:\n- Construction Day (Monday) [CM]\n- Research Day (Tuesday) [CM]\n- Troops Training Day (Thursday) [NA]\n\nRequirements:\n\n- Form must be filled out in order to be considered for an appointment during SvS preparation week. \n- Form must be filled out by THE SUNDAY OF MATCHMAKING.\n- Form filled out after the deadline will be added to the "Late" submission wait list.\n- Rally leaders and rally leader substitutes may be given priority (if necessary).\n- Verification of items, speedups, and resources may be requested (eg. during situations where the score is very close in points and to make sure our state wins by ensuring appointments go to players who can maximize points).\n\n\nFor more information:\n- Contact form support: #140 [COB]Vor and /or the current Minister of Justice if you have questions on filling out this form or changes to your form submission!'
-
-const SUBMISSION_HEADERS = [
-  'Timestamp',
-  'Name',
-  'Alliance',
-  'Construction speedups',
-  'Truegold',
-  'want Construction?',
-  'Construction times',
-  'Research Speedups',
-  'Truegold Dust',
-  'want Research?',
-  'Research times',
-  'Troop Speedups',
-  'Want troops?',
-  'Troop times',
-]
-
-const SCHEDULE_DAYS = {
-  construction: {
-    name: 'Construction Day',
-    icon: 'fas fa-hammer',
-    buttonClass: 'bg-orange-600 hover:bg-orange-700 text-white',
-    ringClass: 'ring-4 ring-orange-400',
-  },
-  research: {
-    name: 'Research Day',
-    icon: 'fas fa-flask',
-    buttonClass: 'bg-blue-600 hover:bg-blue-700 text-white',
-    ringClass: 'ring-4 ring-blue-400',
-  },
-  troops: {
-    name: 'Troops Training Day',
-    icon: 'fas fa-users',
-    buttonClass: 'bg-green-600 hover:bg-green-700 text-white',
-    ringClass: 'ring-4 ring-green-400',
-  },
-} as const
-
-type ScheduleDayKey = keyof typeof SCHEDULE_DAYS
-type Tab = 'profile' | 'schedule' | 'stats' | 'create-form' | 'current-form' | 'csv-operations' | 'generate-schedule'
+import {
+  TabProfile,
+  TabGiftcodeAutomation,
+  TabSwordland,
+  TabTriAlliance,
+  STANDARD_INTRO_TEXT,
+  SUBMISSION_HEADERS,
+  SCHEDULE_DAYS,
+  TAB_KEYS,
+  ALLIANCE_LOCKED_TABS,
+  type Tab,
+  type ScheduleDayKey,
+} from './dashboard'
+import {
+  sortTimeSlots,
+  getSubmissionValue,
+  getTotal,
+  formatDate,
+  copyToClipboard,
+  daySlotToTimes,
+  type BuildingResearchDaySlot,
+} from './dashboard/utils'
 
 interface ExtendedPredeterminedSlot extends PredeterminedSlot {
   lookingUp?: boolean
   lookupError?: string | null
 }
 
-function parseTimeToMinutes(timeStr: string): number {
-  const parts = timeStr.split(':')
-  if (parts.length !== 2) return 0
-  const hours = parseInt(parts[0], 10) || 0
-  const minutes = parseInt(parts[1], 10) || 0
-  return hours * 60 + minutes
-}
-
-function sortTimeSlots(
-  timeSlotMap: Record<string, { requests: number }>,
-  startTime: string
-): Record<string, { requests: number }> {
-  const entries = Object.entries(timeSlotMap)
-  const startMinutes = parseTimeToMinutes(startTime)
-  entries.sort((a, b) => {
-    const minutesA = parseTimeToMinutes(a[0])
-    const minutesB = parseTimeToMinutes(b[0])
-    const adjustedA = minutesA < startMinutes ? minutesA + 24 * 60 : minutesA
-    const adjustedB = minutesB < startMinutes ? minutesB + 24 * 60 : minutesB
-    return adjustedA - adjustedB
-  })
-  return Object.fromEntries(entries)
-}
-
-function getSubmissionValue(submission: Record<string, unknown>, header: string): string {
-  if (!submission || typeof submission !== 'object') return ''
-  const keys = Object.keys(submission)
-  const findKey = (patterns: string[]) => {
-    for (const pattern of patterns) {
-      const normalizedPattern = pattern.toLowerCase().replace(/\s+/g, ' ').trim()
-      const found = keys.find((k) => {
-        const normalizedKey = k
-          .toLowerCase()
-          .replace(/\s+/g, ' ')
-          .replace(/\n/g, ' ')
-          .trim()
-        return normalizedKey.includes(normalizedPattern)
-      })
-      if (found) return found
-    }
-    return null
-  }
-  const columnMap: Record<string, string | null> = {
-    Timestamp: 'timestamp',
-    Name: findKey(['character name']),
-    Alliance: findKey(['alliance do you belong']),
-    'Construction speedups': findKey([
-      'speedups do you plan to use on construction day',
-      'construction day',
-      'speedups',
-      'construction',
-    ]),
-    Truegold: findKey(['how much truegold do you plan', 'truegold', 'plan to', 'spend']),
-    'want Construction?': findKey(['do you want a construction day appointment']),
-    'Construction times': findKey([
-      'times are you available for your construction day appointment',
-      'construction day appointment',
-      'utc time',
-      'construction',
-    ]),
-    'Research Speedups': findKey([
-      'speedups do you plan to use on research day',
-      'research day',
-      'speedups',
-      'research',
-    ]),
-    'Truegold Dust': findKey(['how much truegold dust do you plan', 'truegold dust']),
-    'want Research?': findKey(['do you want a research day appointment']),
-    'Research times': findKey([
-      'times are you available for your research day appointment',
-      'research day appointment',
-      'utc time',
-      'research',
-    ]),
-    'Troop Speedups': findKey([
-      'speedups do you plan to use on troops training day',
-      'troops training day',
-      'speedups',
-      'troops',
-    ]),
-    'Want troops?': findKey(['do you want a troops training day appointment']),
-    'Troop times': findKey([
-      'times are you available for your troops training day appointment',
-      'troops training day appointment',
-      'utc time',
-      'troops',
-    ]),
-  }
-  const columnKey = columnMap[header]
-  if (columnKey && submission[columnKey] !== undefined) {
-    return String(submission[columnKey])
-  }
-  return String(submission[header] ?? '')
-}
-
-const TAB_KEYS: Tab[] = ['profile', 'schedule', 'stats', 'create-form', 'current-form', 'csv-operations', 'generate-schedule']
-
-/** Day-slot options for Construction and Research. Each can be assigned to one slot only; the two Friday options are a pair. */
-export type BuildingResearchDaySlot = 'monday' | 'tuesday' | 'friday_full' | 'friday_sat'
-
-function daySlotToTimes(slot: BuildingResearchDaySlot): { start_time: string; end_time?: string } {
-  switch (slot) {
-    case 'friday_sat':
-      return { start_time: '10:00', end_time: undefined }
-    case 'monday':
-    case 'tuesday':
-    case 'friday_full':
-    default:
-      return { start_time: '00:00', end_time: undefined }
-  }
-}
-
 export default function DashboardPage() {
   const { accountName } = useParams<{ accountName: string }>()
-  const { refresh: refreshAuth } = useAuth()
+  const { refresh: refreshAuth, allianceAccess, friendCode } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as Tab | null
@@ -235,6 +102,7 @@ export default function DashboardPage() {
   const [loadingOldForms, setLoadingOldForms] = useState(false)
   const [reopeningForm, setReopeningForm] = useState(false)
   const [clearScheduleLoading, setClearScheduleLoading] = useState<string | null>(null)
+  const [scheduleUrlCopied, setScheduleUrlCopied] = useState(false)
 
   // CSV Operations tab
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -249,6 +117,49 @@ export default function DashboardPage() {
     type: 'success' | 'error'
     message: string
   } | null>(null)
+
+  // Alliance Organisation tab
+  const [alliances, setAlliances] = useState<
+    Array<{ name: string; slug: string; players: AlliancePlayer[]; owner_account: string; owner_server: number; is_owner: boolean }>
+  >([])
+  const [loadingAlliances, setLoadingAlliances] = useState(false)
+  const [alliancesError, setAlliancesError] = useState<string | null>(null)
+  const [addPlayerIdBySlug, setAddPlayerIdBySlug] = useState<Record<string, string>>({})
+  const [addingPlayerSlug, setAddingPlayerSlug] = useState<string | null>(null)
+  const [addPlayerError, setAddPlayerError] = useState<string | null>(null)
+  const addPlayerInputRef = useRef<HTMLInputElement>(null)
+  const [removeInputBySlug, setRemoveInputBySlug] = useState<Record<string, string>>({})
+  const [removingPlayerSlug, setRemovingPlayerSlug] = useState<string | null>(null)
+  const [removePlayerError, setRemovePlayerError] = useState<string | null>(null)
+  const [refreshingAllianceSlug, setRefreshingAllianceSlug] = useState<string | null>(null)
+  const [refreshNamesError, setRefreshNamesError] = useState<string | null>(null)
+  const [inviteFriendCode, setInviteFriendCode] = useState('')
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteSending, setInviteSending] = useState(false)
+  const [allianceInvites, setAllianceInvites] = useState<{
+    sent: Array<{ id: string; to_friend_code: string; to_account: string; alliance_name: string; status: string }>
+    received: Array<{ id: string; from_account: string; alliance_name: string; status: string }>
+  }>({ sent: [], received: [] })
+
+  // Alliance Application tab
+  const [allianceApp, setAllianceApp] = useState<{
+    alliance_tag: string
+    alliance_name: string
+    contact_player_id: string
+    server_number: number
+  }>({ alliance_tag: '', alliance_name: '', contact_player_id: '', server_number: 0 })
+  const [myApplication, setMyApplication] = useState<{
+    id: string
+    status: string
+    submitted_at: string
+    alliance_tag: string
+    alliance_name: string
+    contact_player_id: string
+    server_number: number
+  } | null>(null)
+  const [loadingMyApplication, setLoadingMyApplication] = useState(false)
+  const [submittingApplication, setSubmittingApplication] = useState(false)
+  const [applicationError, setApplicationError] = useState<string | null>(null)
 
   const loadSession = useCallback(async () => {
     const { ok, data } = await api.getSession()
@@ -271,6 +182,24 @@ export default function DashboardPage() {
   useEffect(() => {
     loadSession()
   }, [loadSession])
+
+  // Redirect to alliance-application when user without alliance_access tries to access locked tabs
+  useEffect(() => {
+    if (
+      accountName &&
+      !allianceAccess &&
+      ALLIANCE_LOCKED_TABS.includes(activeTab)
+    ) {
+      setSearchParams({ tab: 'alliance-application' })
+    }
+  }, [accountName, allianceAccess, activeTab, setSearchParams])
+
+  // Redirect to alliance-organisation when user with alliance_access tries to access alliance-application (tab hidden for them)
+  useEffect(() => {
+    if (accountName && allianceAccess && activeTab === 'alliance-application') {
+      setSearchParams({ tab: 'alliance-organisation' })
+    }
+  }, [accountName, allianceAccess, activeTab, setSearchParams])
 
   const loadSchedule = useCallback(
     async (day: ScheduleDayKey) => {
@@ -393,6 +322,54 @@ export default function DashboardPage() {
     }
   }, [activeTab, loadOldForms])
 
+  const loadAlliances = useCallback(async () => {
+    if (!accountName || !serverNumber) return
+    setLoadingAlliances(true)
+    setAlliancesError(null)
+    const { ok, data, error } = await api.listAlliances(accountName, serverNumber)
+    setLoadingAlliances(false)
+    if (ok && data?.alliances) setAlliances(data.alliances)
+    else setAlliancesError(error ?? 'Failed to load alliances')
+  }, [accountName, serverNumber])
+
+  const loadAllianceInvites = useCallback(async () => {
+    if (!accountName || !serverNumber) return
+    const { ok, data } = await api.listAllianceInvites(accountName, serverNumber)
+    if (ok && data) setAllianceInvites({ sent: data.sent ?? [], received: data.received ?? [] })
+  }, [accountName, serverNumber])
+
+  const loadFriendCode = useCallback(async () => {
+    if (!accountName || !serverNumber) return
+    await api.getFriendCode(accountName, serverNumber)
+    refreshAuth()
+  }, [accountName, serverNumber, refreshAuth])
+
+  useEffect(() => {
+    if (activeTab === 'alliance-organisation') {
+      loadAlliances()
+      loadAllianceInvites()
+      loadFriendCode()
+    }
+  }, [activeTab, loadAlliances, loadAllianceInvites, loadFriendCode])
+
+  const loadMyAllianceApplication = useCallback(async () => {
+    setLoadingMyApplication(true)
+    setApplicationError(null)
+    const { ok, data } = await api.getMyAllianceApplication()
+    setLoadingMyApplication(false)
+    if (ok && data?.application) {
+      setMyApplication(data.application)
+    } else {
+      setMyApplication(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'alliance-application') {
+      loadMyAllianceApplication()
+    }
+  }, [activeTab, loadMyAllianceApplication])
+
   async function handleReopenForm(archiveName: string) {
     if (!accountName || !serverNumber) return
     setReopeningForm(true)
@@ -451,14 +428,6 @@ export default function DashboardPage() {
     } else {
       alert('Error: ' + (error ?? 'Failed to update slot'))
     }
-  }
-
-  function getTotal(data: {
-    construction_requests: number
-    research_requests: number
-    troops_requests: number
-  }) {
-    return data.construction_requests + data.research_requests + data.troops_requests
   }
 
   const sortedAlliances = stats?.alliance_counts
@@ -647,29 +616,6 @@ export default function DashboardPage() {
     }
   }
 
-  function copyToClipboard(text: string, inputId?: string) {
-    const fullUrl = text.startsWith('/') ? `${window.location.origin}${text}` : text
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(fullUrl)
-    } else if (inputId) {
-      const input = document.getElementById(inputId) as HTMLInputElement
-      if (input) {
-        input.value = fullUrl
-        input.select()
-        document.execCommand('copy')
-      }
-    }
-  }
-
-  function formatDate(dateString?: string) {
-    if (!dateString) return 'Unknown'
-    try {
-      return new Date(dateString).toLocaleString()
-    } catch {
-      return dateString
-    }
-  }
-
   if (sessionValid === null) {
     return (
       <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[50vh]">
@@ -684,175 +630,30 @@ export default function DashboardPage() {
         <div className="min-h-[200px]">
           {/* Profile Tab */}
           {activeTab === 'profile' && (
-            <div className="max-w-2xl mx-auto">
-              {/* Profile header */}
-              <div className="flex items-start gap-6 mb-8">
-                <div className="w-20 h-20 rounded-full bg-purple-600 flex items-center justify-center text-white font-semibold text-2xl flex-shrink-0 overflow-hidden relative">
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    {(inGameName || accountName) ? (inGameName || accountName)!.charAt(0).toUpperCase() : '?'}
-                  </span>
-                  {playerId && (
-                    <img
-                      key={playerId}
-                      src={`/api/avatar/${playerId}`}
-                      alt=""
-                      className="w-full h-full object-cover absolute inset-0 z-10"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none'
-                      }}
-                    />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold text-white mb-1">
-                    {inGameName || (accountName ? accountName.charAt(0).toUpperCase() + accountName.slice(1) : 'Account')}
-                  </h2>
-                  <p className="text-gray-400 text-sm mb-4">Schedule Maker account</p>
-                </div>
-              </div>
-
-              {/* Editable profile fields */}
-              <div className="space-y-4 mb-8">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Account name</label>
-                  <input
-                    type="text"
-                    value={profileEdit.account_name}
-                    onChange={(e) => setProfileEdit((p) => ({ ...p, account_name: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
-                    placeholder="Account name (used in URL)"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Server</label>
-                  <input
-                    type="number"
-                    value={profileEdit.server_number}
-                    onChange={(e) => setProfileEdit((p) => ({ ...p, server_number: e.target.value }))}
-                    min={1}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
-                    placeholder="Server number"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">In-game name</label>
-                  <input
-                    type="text"
-                    value={profileEdit.in_game_name}
-                    onChange={(e) => setProfileEdit((p) => ({ ...p, in_game_name: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
-                    placeholder="Your Kingshot character name"
-                  />
-                </div>
-                <button
-                  onClick={async () => {
-                    setProfileSaving(true)
-                    setProfileError(null)
-                    const { ok, data, error } = await api.updateProfile({
-                      account_name: profileEdit.account_name.trim() || undefined,
-                      server_number: profileEdit.server_number ? parseInt(profileEdit.server_number, 10) : undefined,
-                      in_game_name: profileEdit.in_game_name.trim() || undefined,
-                    })
-                    setProfileSaving(false)
-                    if (ok && data?.success) {
-                      setServerNumber(data.server_number ?? serverNumber)
-                      setInGameName(data.in_game_name ?? null)
-                      setProfileEdit((p) => ({
-                        ...p,
-                        account_name: data.account_name ?? p.account_name,
-                        server_number: String(data.server_number ?? p.server_number),
-                        in_game_name: data.in_game_name ?? p.in_game_name,
-                      }))
-                      await refreshAuth()
-                      if (data.account_name && data.account_name !== accountName) {
-                        navigate(`/dashboard/${data.account_name}?tab=profile`, { replace: true })
-                      }
-                    } else {
-                      setProfileError((data as { error?: string })?.error || error || 'Failed to update')
-                    }
-                  }}
-                  disabled={profileSaving}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                >
-                  {profileSaving ? <i className="fas fa-spinner fa-spin mr-2"></i> : null}
-                  Save changes
-                </button>
-                {profileError && <p className="text-red-400 text-sm">{profileError}</p>}
-              </div>
-
-              {/* Kingshot ID lookup */}
-              <div className="bg-gray-700/50 rounded-xl p-6 border border-gray-600 mb-8">
-                <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Kingshot ID</h3>
-                <p className="text-gray-400 text-sm mb-3">
-                  Enter your Kingshot player ID to auto-update name, server, and profile picture from the game.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={kingshotIdInput}
-                    onChange={(e) => setKingshotIdInput(e.target.value)}
-                    placeholder="Enter Kingshot player ID"
-                    className="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
-                  />
-                  <button
-                    onClick={async () => {
-                      if (!kingshotIdInput.trim()) return
-                      setKingshotLookingUp(true)
-                      setKingshotError(null)
-                      const { ok, data, error } = await api.kingshotLookup(kingshotIdInput.trim())
-                      setKingshotLookingUp(false)
-                      if (ok && data?.success) {
-                        setInGameName(data.in_game_name ?? null)
-                        setServerNumber(data.server_number ?? null)
-                        setPlayerId(data.player_id ?? null)
-                        setProfileEdit((p) => ({
-                          ...p,
-                          in_game_name: data.in_game_name ?? p.in_game_name,
-                          server_number: String(data.server_number ?? p.server_number),
-                        }))
-                        await refreshAuth()
-                      } else {
-                        setKingshotError((data as { error?: string })?.error || error || 'Lookup failed')
-                      }
-                    }}
-                    disabled={kingshotLookingUp}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-medium"
-                  >
-                    {kingshotLookingUp ? <i className="fas fa-spinner fa-spin mr-2"></i> : null}
-                    Confirm
-                  </button>
-                </div>
-                {kingshotError && <p className="text-red-400 text-sm mt-2">{kingshotError}</p>}
-                {playerId && <p className="text-gray-500 text-sm mt-2">Current ID: {playerId}</p>}
-              </div>
-
-              {/* Quick actions / Linked schedule */}
-              <div className="bg-gray-700/50 rounded-xl p-6 border border-gray-600">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">Your Schedule</h3>
-                  {accountName && serverNumber != null && (
-                    <span className="text-xs text-green-400 font-medium">Active</span>
-                  )}
-                </div>
-                {accountName && serverNumber != null ? (
-                  <div className="flex items-center justify-between gap-4 p-4 bg-gray-800/50 rounded-lg border border-gray-600">
-                    <div>
-                      <p className="font-semibold text-white">{accountName}</p>
-                      <p className="text-sm text-gray-400">Server {serverNumber}</p>
-                    </div>
-                    <Link
-                      to={`/${accountName}/${serverNumber}`}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-                    >
-                      <i className="fas fa-external-link-alt"></i>
-                      Open
-                    </Link>
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-sm">No schedule linked</p>
-                )}
-              </div>
-            </div>
+            <TabProfile
+              accountName={accountName ?? null}
+              serverNumber={serverNumber}
+              playerId={playerId}
+              inGameName={inGameName}
+              friendCode={friendCode ?? null}
+              profileEdit={profileEdit}
+              profileSaving={profileSaving}
+              profileError={profileError}
+              kingshotIdInput={kingshotIdInput}
+              kingshotLookingUp={kingshotLookingUp}
+              kingshotError={kingshotError}
+              setProfileEdit={setProfileEdit}
+              setProfileSaving={setProfileSaving}
+              setProfileError={setProfileError}
+              setKingshotIdInput={setKingshotIdInput}
+              setKingshotLookingUp={setKingshotLookingUp}
+              setKingshotError={setKingshotError}
+              setServerNumber={setServerNumber}
+              setInGameName={setInGameName}
+              setPlayerId={setPlayerId}
+              refreshAuth={refreshAuth}
+              navigate={navigate}
+            />
           )}
 
           {/* Schedule Tab */}
@@ -868,6 +669,26 @@ export default function DashboardPage() {
 
               <div className="bg-gray-800 rounded-xl shadow-xl p-6 mb-6 border border-gray-700">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">View schedule</p>
+                {accountName && currentForm?.code && (
+                  <div className="flex flex-wrap items-center gap-2 mb-4 p-3 bg-gray-900/50 rounded-lg">
+                    <span className="text-sm text-gray-400">Public schedule:</span>
+                    <code className="text-blue-400 font-mono text-sm flex-1 min-w-0 truncate">
+                      /{accountName}/{currentForm.code}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        copyToClipboard(`/${accountName}/${currentForm.code}`)
+                        setScheduleUrlCopied(true)
+                        setTimeout(() => setScheduleUrlCopied(false), 2000)
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shrink-0"
+                    >
+                      <i className={`fas ${scheduleUrlCopied ? 'fa-check' : 'fa-copy'}`}></i>
+                      {scheduleUrlCopied ? 'Copied!' : 'Copy URL'}
+                    </button>
+                  </div>
+                )}
                 <div className="flex flex-col sm:flex-row gap-2 mb-4">
                   {(Object.keys(SCHEDULE_DAYS) as ScheduleDayKey[]).map((key) => (
                     <button
@@ -1006,6 +827,613 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Alliance Application Tab */}
+          {activeTab === 'alliance-application' && (
+            <div>
+              <div className="text-center mb-8">
+                <div className="inline-block bg-indigo-900/50 rounded-full p-4 mb-4">
+                  <i className="fas fa-file-signature text-indigo-400 text-3xl"></i>
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-2">Alliance Application</h2>
+                <p className="text-gray-400">
+                  Apply for access to alliance organisation tools on this site.
+                </p>
+              </div>
+
+              <div className="bg-amber-900/30 border border-amber-600/50 rounded-lg p-4 mb-8">
+                <p className="text-amber-200 text-sm">
+                  <i className="fas fa-info-circle mr-2"></i>
+                  This site is currently in development. To ensure stable performance and stay within our resource and external API limits, we ask alliances to apply before using these features. Approved applications will receive full access to the Alliance Organisation tools.
+                </p>
+              </div>
+
+              {loadingMyApplication && (
+                <div className="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                  <i className="fas fa-spinner fa-spin text-4xl text-indigo-400 mb-4"></i>
+                  <p className="text-gray-400">Loading application status...</p>
+                </div>
+              )}
+
+              {!loadingMyApplication && myApplication && (
+                <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 mb-8">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <i className="fas fa-clipboard-check text-indigo-400"></i>
+                    Your Application Status
+                  </h3>
+                  <div className="flex flex-wrap gap-4 items-center">
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        myApplication.status === 'approved'
+                          ? 'bg-green-900/50 text-green-300'
+                          : myApplication.status === 'rejected'
+                            ? 'bg-red-900/50 text-red-300'
+                            : 'bg-amber-900/50 text-amber-300'
+                      }`}
+                    >
+                      {myApplication.status.charAt(0).toUpperCase() + myApplication.status.slice(1)}
+                    </span>
+                    <span className="text-gray-400 text-sm">
+                      Submitted: {new Date(myApplication.submitted_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="mt-4 text-gray-300 text-sm space-y-1">
+                    <p><strong>Alliance:</strong> [{myApplication.alliance_tag}] {myApplication.alliance_name}</p>
+                    <p><strong>Contact:</strong> {myApplication.contact_player_id} · Server {myApplication.server_number}</p>
+                  </div>
+                  {myApplication.status === 'approved' && (
+                    <p className="mt-4 text-green-400 text-sm">
+                      <i className="fas fa-check-circle mr-1"></i>
+                      You have full access to Alliance Organisation tools.
+                    </p>
+                  )}
+                  {myApplication.status === 'rejected' && (
+                    <p className="mt-4 text-amber-400 text-sm">
+                      Your application was not approved. You may contact support if you have questions.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!loadingMyApplication && (!myApplication || myApplication.status === 'rejected') && (
+                <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+                    <i className="fas fa-edit text-indigo-400 mr-2"></i>
+                    Submit Application
+                  </h3>
+                  <div className="space-y-4 max-w-xl">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Alliance Tag</label>
+                      <input
+                        type="text"
+                        value={allianceApp.alliance_tag}
+                        onChange={(e) => {
+                          setAllianceApp((a) => ({ ...a, alliance_tag: e.target.value }))
+                          setApplicationError(null)
+                        }}
+                        placeholder="e.g. COB"
+                        maxLength={16}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Alliance Name</label>
+                      <input
+                        type="text"
+                        value={allianceApp.alliance_name}
+                        onChange={(e) => {
+                          setAllianceApp((a) => ({ ...a, alliance_name: e.target.value }))
+                          setApplicationError(null)
+                        }}
+                        placeholder="e.g. Slaughterhouse"
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Contact Person In-Game ID</label>
+                      <input
+                        type="text"
+                        value={allianceApp.contact_player_id}
+                        onChange={(e) => {
+                          setAllianceApp((a) => ({
+                            ...a,
+                            contact_player_id: e.target.value.replace(/\D/g, ''),
+                          }))
+                          setApplicationError(null)
+                        }}
+                        placeholder="Numeric player ID"
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Server Number</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={allianceApp.server_number || serverNumber || ''}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10)
+                          setAllianceApp((a) => ({ ...a, server_number: isNaN(v) ? 0 : v }))
+                          setApplicationError(null)
+                        }}
+                        placeholder="e.g. 140"
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setSubmittingApplication(true)
+                        setApplicationError(null)
+                        const { ok, error } = await api.submitAllianceApplication({
+                          alliance_tag: allianceApp.alliance_tag.trim(),
+                          alliance_name: allianceApp.alliance_name.trim(),
+                          contact_player_id: allianceApp.contact_player_id.trim(),
+                          server_number: allianceApp.server_number || serverNumber || 1,
+                        })
+                        setSubmittingApplication(false)
+                        if (ok) {
+                          await refreshAuth()
+                          loadMyAllianceApplication()
+                        } else {
+                          setApplicationError(error ?? 'Failed to submit application')
+                        }
+                      }}
+                      disabled={
+                        submittingApplication ||
+                        !allianceApp.alliance_tag.trim() ||
+                        !allianceApp.alliance_name.trim() ||
+                        !allianceApp.contact_player_id.trim()
+                      }
+                      className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all"
+                    >
+                      {submittingApplication ? (
+                        <>
+                          <i className="fas fa-spinner fa-spin mr-2"></i>Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-paper-plane mr-2"></i>Submit Application
+                        </>
+                      )}
+                    </button>
+                    {applicationError && (
+                      <p className="text-red-400 text-sm">
+                        <i className="fas fa-exclamation-circle mr-1"></i>
+                        {applicationError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Alliance Organisation Tab */}
+          {activeTab === 'alliance-organisation' && (
+            <div>
+              <div className="text-center mb-8">
+                <div className="inline-block bg-indigo-900/50 rounded-full p-4 mb-4">
+                  <i className="fas fa-sitemap text-indigo-400 text-3xl"></i>
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-2">Alliance Organisation</h2>
+                <p className="text-gray-400">
+                  Add and remove players from alliance lists. Enter a player ID to add; use ID or name to remove.
+                </p>
+              </div>
+
+              {/* Friend code & invite box */}
+              <div className="mb-6 p-4 bg-gray-800/80 rounded-lg border border-gray-700">
+                <div className="flex flex-wrap gap-4 items-start">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Your friend code</label>
+                    <div className="flex items-center gap-2">
+                      <code className="px-3 py-2 bg-gray-700 rounded font-mono text-indigo-300">
+                        {friendCode || 'Loading...'}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => friendCode && navigator.clipboard.writeText(friendCode)}
+                        className="text-gray-400 hover:text-white"
+                        title="Copy"
+                      >
+                        <i className="fas fa-copy"></i>
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Share this so others can invite you to edit their alliance</p>
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Invite admins by friend code {alliances.some((a) => a.is_owner) ? '(only alliance owner)' : '(need your own alliance)'}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={inviteFriendCode}
+                        onChange={(e) => {
+                          setInviteFriendCode(e.target.value.replace(/\s/g, '').slice(0, 12))
+                          setInviteError(null)
+                        }}
+                        placeholder="12-character code"
+                        maxLength={12}
+                        disabled={!alliances.some((a) => a.is_owner)}
+                        className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white font-mono placeholder-gray-500 disabled:opacity-50"
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!accountName || !serverNumber || !inviteFriendCode.trim()) return
+                          setInviteSending(true)
+                          setInviteError(null)
+                          const { ok, error } = await api.createAllianceInvite(
+                            accountName,
+                            serverNumber,
+                            inviteFriendCode.trim()
+                          )
+                          setInviteSending(false)
+                          if (ok) {
+                            setInviteFriendCode('')
+                            loadAllianceInvites()
+                          } else {
+                            setInviteError(error ?? 'Failed to send invite')
+                          }
+                        }}
+                        disabled={inviteSending || inviteFriendCode.trim().length !== 12 || !alliances.some((a) => a.is_owner)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded font-medium"
+                      >
+                        {inviteSending ? <i className="fas fa-spinner fa-spin"></i> : 'Invite'}
+                      </button>
+                    </div>
+                    {inviteError && <p className="text-red-400 text-sm mt-1">{inviteError}</p>}
+                  </div>
+                </div>
+                {allianceInvites.received.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-700">
+                    <p className="text-sm font-medium text-gray-300 mb-2">Pending invites (accept to gain edit access)</p>
+                    <div className="space-y-2">
+                      {allianceInvites.received.map((inv) => (
+                        <div
+                          key={inv.id}
+                          className="flex items-center justify-between py-2 px-3 bg-gray-700/50 rounded"
+                        >
+                          <span className="text-gray-300">
+                            {inv.from_account} invited you to <strong>{inv.alliance_name}</strong>
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                if (!accountName || !serverNumber) return
+                                const { ok } = await api.acceptAllianceInvite(accountName, serverNumber, inv.id)
+                                if (ok) {
+                                  loadAllianceInvites()
+                                  loadAlliances()
+                                  refreshAuth()
+                                }
+                              }}
+                              className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-sm"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!accountName || !serverNumber) return
+                                const { ok } = await api.rejectAllianceInvite(accountName, serverNumber, inv.id)
+                                if (ok) loadAllianceInvites()
+                              }}
+                              className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-sm"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {alliances.some((a) => a.is_owner) && allianceInvites.sent.filter((i) => i.status === 'accepted').length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-700">
+                    <p className="text-sm font-medium text-gray-300 mb-2">
+                      Alliance admins <span className="text-gray-500 font-normal">(only you can invite or remove)</span>
+                    </p>
+                    <div className="space-y-2">
+                      {allianceInvites.sent
+                        .filter((i) => i.status === 'accepted')
+                        .map((inv) => (
+                          <div
+                            key={inv.id}
+                            className="flex items-center justify-between py-2 px-3 bg-gray-700/50 rounded"
+                          >
+                            <span className="text-gray-300">
+                              {inv.to_account || inv.to_friend_code}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                if (!accountName || !serverNumber) return
+                                const { ok } = await api.revokeAllianceInvite(accountName, serverNumber, inv.id)
+                                if (ok) {
+                                  loadAllianceInvites()
+                                  loadAlliances()
+                                }
+                              }}
+                              className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {addPlayerError && (
+                <div className="mb-4 p-4 bg-red-900/50 border-l-4 border-red-500 text-red-200 rounded-lg">
+                  <i className="fas fa-exclamation-circle mr-2"></i>
+                  {addPlayerError}
+                </div>
+              )}
+              {removePlayerError && (
+                <div className="mb-4 p-4 bg-red-900/50 border-l-4 border-red-500 text-red-200 rounded-lg">
+                  <i className="fas fa-exclamation-circle mr-2"></i>
+                  {removePlayerError}
+                </div>
+              )}
+              {refreshNamesError && (
+                <div className="mb-4 p-4 bg-red-900/50 border-l-4 border-red-500 text-red-200 rounded-lg">
+                  <i className="fas fa-exclamation-circle mr-2"></i>
+                  {refreshNamesError}
+                </div>
+              )}
+
+              {loadingAlliances && (
+                <div className="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                  <i className="fas fa-spinner fa-spin text-4xl text-indigo-400 mb-4"></i>
+                  <p className="text-gray-400">Loading alliances...</p>
+                </div>
+              )}
+
+              {!loadingAlliances && alliancesError && (
+                <div className="bg-red-900/50 border-l-4 border-red-500 text-red-200 p-4 rounded-lg">
+                  <i className="fas fa-exclamation-circle mr-2"></i>
+                  {alliancesError}
+                </div>
+              )}
+
+              {!loadingAlliances && !alliancesError && alliances.length === 0 && (
+                <div className="bg-gray-800 rounded-lg shadow-xl p-12 text-center border border-gray-700">
+                  <i className="fas fa-users text-4xl text-gray-500 mb-4"></i>
+                  <p className="text-xl text-gray-400 mb-2">No alliance assigned</p>
+                  <p className="text-gray-500 text-sm">
+                    Your alliance information is loaded from your approved application. If you believe this is an error, please contact support.
+                  </p>
+                </div>
+              )}
+
+              {!loadingAlliances && !alliancesError && alliances.length > 0 && (
+                <div className="space-y-6">
+                  {alliances.map((alliance) => {
+                    const allianceKey = `${alliance.owner_account}:${alliance.owner_server}:${alliance.slug}`
+                    return (
+                    <div
+                      key={allianceKey}
+                      className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700"
+                    >
+                      <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <i className="fas fa-flag text-indigo-400"></i>
+                        {alliance.name}
+                        {!alliance.is_owner && (
+                          <span className="text-xs bg-gray-600 text-gray-300 px-2 py-0.5 rounded">Shared with you</span>
+                        )}
+                        <span className="text-indigo-300 font-normal text-sm">
+                          ({alliance.players.length} player{alliance.players.length !== 1 ? 's' : ''})
+                        </span>
+                        <button
+                          onClick={async () => {
+                            setRefreshingAllianceSlug(allianceKey)
+                            setRefreshNamesError(null)
+                            const { ok, error } = await api.refreshAllianceNames(
+                              alliance.owner_account,
+                              alliance.owner_server,
+                              alliance.slug
+                            )
+                            setRefreshingAllianceSlug(null)
+                            if (ok) {
+                              loadAlliances()
+                            } else {
+                              setRefreshNamesError(error ?? 'Failed to refresh names')
+                            }
+                          }}
+                          disabled={refreshingAllianceSlug !== null || alliance.players.length === 0}
+                          className="ml-auto px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium"
+                          title="Refetch names, castle levels, and avatars from the game API"
+                        >
+                          {refreshingAllianceSlug === allianceKey ? (
+                            <>
+                              <i className="fas fa-spinner fa-spin mr-2"></i>Refreshing...
+                            </>
+                          ) : (
+                            <>
+                              <i className="fas fa-sync-alt mr-2"></i>Refresh names
+                            </>
+                          )}
+                        </button>
+                      </h4>
+                      {alliance.players.length > 0 && (
+                        <p className="text-amber-200/80 text-xs mb-3 -mt-2">
+                          <i className="fas fa-info-circle mr-1"></i>
+                          Refreshing names fetches updated data for each player from the game. This may take a few minutes for large alliances.
+                        </p>
+                      )}
+
+                      {/* Add player - Player ID only */}
+                      <div className="flex flex-wrap gap-2 items-end mb-4">
+                        <div className="flex-1 min-w-[160px]">
+                          <label className="block text-sm font-medium text-gray-300 mb-1">Add player (ID)</label>
+                          <input
+                            ref={addPlayerInputRef}
+                            type="text"
+                            value={addPlayerIdBySlug[allianceKey] ?? ''}
+                            onChange={(e) => {
+                              setAddPlayerIdBySlug((prev) => ({
+                                ...prev,
+                                [allianceKey]: e.target.value.replace(/\D/g, ''),
+                              }))
+                              setAddPlayerError(null)
+                            }}
+                            onKeyDown={async (e) => {
+                              if (e.key !== 'Enter') return
+                              const playerId = (addPlayerIdBySlug[allianceKey] ?? '').trim()
+                              if (!playerId) return
+                              e.preventDefault()
+                              setAddingPlayerSlug(allianceKey)
+                              setAddPlayerError(null)
+                              const { ok, error } = await api.addAllianceMember(
+                                alliance.owner_account,
+                                alliance.owner_server,
+                                alliance.name,
+                                playerId
+                              )
+                              setAddingPlayerSlug(null)
+                              if (ok) {
+                                setAddPlayerIdBySlug((prev) => ({ ...prev, [allianceKey]: '' }))
+                                loadAlliances()
+                                addPlayerInputRef.current?.focus()
+                              } else {
+                                setAddPlayerError(error ?? 'Failed to add player')
+                              }
+                            }}
+                            placeholder="Player ID"
+                            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-indigo-500 outline-none"
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const playerId = (addPlayerIdBySlug[allianceKey] ?? '').trim()
+                            if (!playerId) return
+                            setAddingPlayerSlug(allianceKey)
+                            setAddPlayerError(null)
+                            const { ok, error } = await api.addAllianceMember(
+                              alliance.owner_account,
+                              alliance.owner_server,
+                              alliance.name,
+                              playerId
+                            )
+                            setAddingPlayerSlug(null)
+                            if (ok) {
+                              setAddPlayerIdBySlug((prev) => ({ ...prev, [allianceKey]: '' }))
+                              loadAlliances()
+                              addPlayerInputRef.current?.focus()
+                            } else {
+                              setAddPlayerError(error ?? 'Failed to add player')
+                            }
+                          }}
+                          disabled={addingPlayerSlug !== null || !(addPlayerIdBySlug[allianceKey] ?? '').trim()}
+                          className="w-[130px] shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all"
+                        >
+                          {addingPlayerSlug === allianceKey ? (
+                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                          ) : (
+                            <i className="fas fa-plus mr-2"></i>
+                          )}
+                          Add
+                        </button>
+                      </div>
+
+                      {/* Remove player - ID or name */}
+                      <div className="flex flex-wrap gap-2 items-end mb-4">
+                        <div className="flex-1 min-w-[160px]">
+                          <label className="block text-sm font-medium text-gray-300 mb-1">Remove player (ID or name)</label>
+                          <input
+                            type="text"
+                            value={removeInputBySlug[allianceKey] ?? ''}
+                            onChange={(e) => {
+                              setRemoveInputBySlug((prev) => ({ ...prev, [allianceKey]: e.target.value }))
+                              setRemovePlayerError(null)
+                            }}
+                            placeholder="Player ID or name"
+                            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-indigo-500 outline-none"
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const input = (removeInputBySlug[allianceKey] ?? '').trim()
+                            if (!input) return
+                            setRemovingPlayerSlug(allianceKey)
+                            setRemovePlayerError(null)
+                            const { ok, error } = await api.removeAllianceMember(
+                              alliance.owner_account,
+                              alliance.owner_server,
+                              alliance.slug,
+                              input
+                            )
+                            setRemovingPlayerSlug(null)
+                            if (ok) {
+                              setRemoveInputBySlug((prev) => ({ ...prev, [allianceKey]: '' }))
+                              loadAlliances()
+                            } else {
+                              setRemovePlayerError(error ?? 'Failed to remove player')
+                            }
+                          }}
+                          disabled={removingPlayerSlug !== null || !(removeInputBySlug[allianceKey] ?? '').trim()}
+                          className="w-[130px] shrink-0 px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all"
+                        >
+                          {removingPlayerSlug === allianceKey ? (
+                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                          ) : (
+                            <i className="fas fa-minus mr-2"></i>
+                          )}
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        {[...alliance.players]
+                          .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+                          .map((player) => (
+                          <div
+                            key={player.player_id}
+                            className="flex items-center gap-3 px-4 py-2 bg-gray-700/50 rounded-lg border border-gray-600 hover:border-indigo-500/50 transition-all"
+                          >
+                            {player.avatar_image ? (
+                              <img
+                                src={player.avatar_image}
+                                alt=""
+                                className="w-10 h-10 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold">
+                                {player.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium text-white">{player.name}</p>
+                              <p className="text-xs text-gray-400">
+                                ID: {player.player_id}
+                                {player.castle_level && ` · ${player.castle_level}`}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )})}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Giftcode Automation Tab */}
+          {activeTab === 'giftcode-automation' && (
+            <TabGiftcodeAutomation accountName={accountName ?? null} serverNumber={serverNumber} />
+          )}
+
+          {/* Swordland Tab */}
+          {activeTab === 'swordland' && (
+            <TabSwordland accountName={accountName ?? null} serverNumber={serverNumber} />
+          )}
+
+          {/* Tri Alliance Tab */}
+          {activeTab === 'tri-alliance' && (
+            <TabTriAlliance accountName={accountName ?? null} serverNumber={serverNumber} />
           )}
 
           {/* Statistics Tab */}
