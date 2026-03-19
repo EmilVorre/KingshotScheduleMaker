@@ -185,16 +185,16 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
                     .route(web::get().to(schedule::get_stats)),
             )
             .service(
-                web::resource("/{account_name}/{server}/api/schedule/{day}")
-                    .route(web::get().to(schedule::get_schedule)),
+                web::resource("/{account_name}/{server}/api/schedule/clear")
+                    .route(web::post().to(schedule::clear_schedule_api)),
             )
             .service(
                 web::resource("/{account_name}/{server}/api/schedule/{day}/slot")
                     .route(web::put().to(schedule::update_schedule_slot)),
             )
             .service(
-                web::resource("/{account_name}/{server}/api/schedule/clear")
-                    .route(web::post().to(schedule::clear_schedule_api)),
+                web::resource("/{account_name}/{server}/api/schedule/{day}")
+                    .route(web::get().to(schedule::get_schedule)),
             )
             .service(
                 web::resource("/{account_name}/{server}/api/form/submissions")
