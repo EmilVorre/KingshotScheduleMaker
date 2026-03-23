@@ -910,18 +910,31 @@ pub async fn generate_schedule_api(
                         }
                     }
                 }
-                let mut e: Vec<_> = entries
+                let existing_construction_ids: HashSet<String> = existing_appointments
+                    .0
+                    .as_ref()
+                    .map(|s| {
+                        s.appointments
+                            .values()
+                            .map(|a| a.player_id.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let mut e: Vec<_> = entries_to_use
                     .iter()
                     .filter(|e| {
                         e.wants_construction
                             && !e.construction_available_slots.is_empty()
                             && !in_other.contains(&e.player_id)
+                            && !existing_construction_ids.contains(&e.player_id)
                     })
                     .cloned()
                     .collect();
                 if let Some(ref r) = existing_appointments.1 {
                     if let Some(r1) = r.appointments.get(&1) {
-                        if !e.iter().any(|x| x.player_id == r1.player_id) {
+                        if !existing_construction_ids.contains(&r1.player_id)
+                            && !e.iter().any(|x| x.player_id == r1.player_id)
+                        {
                             if let Some(entry) =
                                 entries.iter().find(|x| x.player_id == r1.player_id)
                             {
@@ -945,18 +958,31 @@ pub async fn generate_schedule_api(
                     }
                 }
                 let last_slot = last_slot_override.unwrap_or(49);
-                let mut e: Vec<_> = entries
+                let existing_research_ids: HashSet<String> = existing_appointments
+                    .1
+                    .as_ref()
+                    .map(|s| {
+                        s.appointments
+                            .values()
+                            .map(|a| a.player_id.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let mut e: Vec<_> = entries_to_use
                     .iter()
                     .filter(|e| {
                         e.wants_research
                             && !e.research_available_slots.is_empty()
                             && !in_other.contains(&e.player_id)
+                            && !existing_research_ids.contains(&e.player_id)
                     })
                     .cloned()
                     .collect();
                 if let Some(ref c) = existing_appointments.0 {
                     if let Some(clast) = c.appointments.get(&last_slot) {
-                        if !e.iter().any(|x| x.player_id == clast.player_id) {
+                        if !existing_research_ids.contains(&clast.player_id)
+                            && !e.iter().any(|x| x.player_id == clast.player_id)
+                        {
                             if let Some(entry) =
                                 entries.iter().find(|x| x.player_id == clast.player_id)
                             {
@@ -979,7 +1005,7 @@ pub async fn generate_schedule_api(
                         }
                     }
                 }
-                entries
+                entries_to_use
                     .iter()
                     .filter(|e| {
                         e.wants_troops
