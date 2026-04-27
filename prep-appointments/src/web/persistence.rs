@@ -37,6 +37,12 @@ fn storage_backend() -> &'static StorageBackend {
     })
 }
 
+/// Returns true when the backend is configured to use Postgres. Useful for
+/// caches that want to write-through so state survives a pod restart.
+pub fn is_postgres_backend() -> bool {
+    matches!(storage_backend(), StorageBackend::Postgres { .. })
+}
+
 /// Run sync postgres work (connect + callback + client drop) without nesting Tokio
 /// runtimes. Wrapping only `Client::connect` is not enough: query errors / `Drop` can
 /// still panic on Actix worker threads (`connection.rs` / nested `block_on`).
