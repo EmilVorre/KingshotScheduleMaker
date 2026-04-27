@@ -16,7 +16,7 @@ spec:
       containers:
         - name: backend
           image: ghcr.io/emilvorre/kingshotschedulemaker/backend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           envFrom:

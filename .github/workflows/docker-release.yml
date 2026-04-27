@@ -1,4 +1,4 @@
-# Build images on release and push to GHCR.
+# Build images on release (or manually) and push to GHCR.
 # Deployment is handled by a separate Kubernetes workflow.
 
 name: Build And Publish Images
@@ -6,6 +6,12 @@ name: Build And Publish Images
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag to publish (in addition to :latest). Defaults to short commit SHA."
+        required: false
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -22,8 +28,19 @@ jobs:
       - name: Set image tags (GHCR requires lowercase)
         id: vars
         run: |
-          echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          echo "tag=$(echo '${{ github.ref_name }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag_input='${{ github.event.inputs.image_tag }}'
+            if [ -z "${tag_input}" ]; then
+              tag_input="$(git rev-parse --short HEAD)"
+            fi
+            tag=$(echo "${tag_input}" | tr '[:upper:]' '[:lower:]')
+          else
+            tag=$(echo '${{ github.ref_name }}' | tr '[:upper:]' '[:lower:]')
+          fi
+          echo "repo=${repo}" >> $GITHUB_OUTPUT
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
