@@ -8,21 +8,15 @@ on:
         required: true
         default: latest
       run_migration_job:
-        description: "Apply JSON->Postgres migration Job"
+        description: "Apply JSON->Postgres migration Job (true/false)"
         required: true
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
+        default: false
+        type: boolean
       migration_dry_run:
         description: "Migration job DRY_RUN value"
         required: true
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
+        default: true
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
@@ -59,6 +53,8 @@ jobs:
         run: |
           echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           echo "tag=$(echo '${{ github.event.inputs.image_tag }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "run_migration=$(echo '${{ github.event.inputs.run_migration_job }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "migration_dry_run=$(echo '${{ github.event.inputs.migration_dry_run }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Apply base manifests
         run: |
@@ -79,11 +75,11 @@ jobs:
           kubectl -n "${NAMESPACE}" rollout status deployment/frontend --timeout=300s
 
       - name: Apply migration job (optional)
-        if: ${{ github.event.inputs.run_migration_job == 'true' }}
+        if: ${{ steps.vars.outputs.run_migration == 'true' }}
         run: |
           set -euo pipefail
           BACKEND_IMAGE="${REGISTRY}/${{ steps.vars.outputs.repo }}/backend:${{ steps.vars.outputs.tag }}"
-          DRY_RUN_VALUE="${{ github.event.inputs.migration_dry_run }}"
+          DRY_RUN_VALUE="${{ steps.vars.outputs.migration_dry_run }}"
           sed -e "s#ghcr.io/your-org/kingshot-backend:latest#${BACKEND_IMAGE}#g" \
               -e "s#value: \"false\"#value: \"${DRY_RUN_VALUE}\"#g" \
               k8s/migration-job.yaml > /tmp/migration-job.yaml
