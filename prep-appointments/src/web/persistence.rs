@@ -43,23 +43,37 @@ pub fn is_postgres_backend() -> bool {
     matches!(storage_backend(), StorageBackend::Postgres { .. })
 }
 
-/// Run sync postgres work (connect + callback + client drop) without nesting Tokio
-/// runtimes. Wrapping only `Client::connect` is not enough: query errors / `Drop` can
-/// still panic on Actix worker threads (`connection.rs` / nested `block_on`).
+/// Run sync postgres work (connect + callback + client drop) on a fresh OS thread
+/// that has no Tokio runtime attached. This avoids two failure modes:
+///
+/// - `Cannot start a runtime from within a runtime` panic from the inner
+///   tokio-postgres runtime (or its `Client::drop`) when called from inside any
+///   Tokio runtime context.
+/// - `can call blocking only when running on the multi-threaded runtime` panic
+///   from `tokio::task::block_in_place`, since Actix-web workers each run on a
+///   `current_thread` runtime.
+///
+/// `std::thread::scope` lets the spawned worker borrow non-`'static` data, so
+/// existing call sites that pass `&str` / `&T` keep working unchanged.
 fn with_pg_client<R, F>(database_url: &str, f: F) -> Result<R, Box<dyn std::error::Error>>
 where
     F: FnOnce(&mut Client) -> Result<R, Box<dyn std::error::Error>> + Send,
     R: Send,
 {
     let url = database_url.to_string();
-    if tokio::runtime::Handle::try_current().is_ok() {
-        tokio::task::block_in_place(move || {
-            let mut client = Client::connect(&url, NoTls)?;
-            f(&mut client)
-        })
-    } else {
-        let mut client = Client::connect(&url, NoTls)?;
-        f(&mut client)
+    let join_result = std::thread::scope(|scope| {
+        scope
+            .spawn(move || -> Result<R, String> {
+                let mut client = Client::connect(&url, NoTls).map_err(|e| e.to_string())?;
+                f(&mut client).map_err(|e| e.to_string())
+            })
+            .join()
+    });
+
+    match join_result {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(msg)) => Err(msg.into()),
+        Err(_) => Err("postgres worker thread panicked".into()),
     }
 }
 
