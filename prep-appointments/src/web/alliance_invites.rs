@@ -22,8 +22,7 @@ pub struct AllianceInvite {
 }
 
 pub fn load_invites(data_dir: &str) -> HashMap<String, AllianceInvite> {
-    load_domain_doc(data_dir, "alliance_invites", "all")
-        .unwrap_or_default()
+    load_domain_doc(data_dir, "alliance_invites", "all").unwrap_or_default()
 }
 
 pub fn save_invites(

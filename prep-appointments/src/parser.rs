@@ -2,8 +2,8 @@ use csv::Reader;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use crate::form::submission::FormSubmission;
+use serde::{Deserialize, Serialize};
 
 /// Check if a player has already submitted to a form (by reading the submissions CSV).
 pub fn has_player_submitted<P: AsRef<Path>>(csv_path: P, player_id: &str) -> bool {

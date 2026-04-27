@@ -21,8 +21,8 @@ struct Counts {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = env::var("MIGRATE_DATA_DIR").unwrap_or_else(|_| "data".to_string());
-    let database_url = env::var("DATABASE_URL")
-        .map_err(|_| "DATABASE_URL is required for migration script")?;
+    let database_url =
+        env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is required for migration script")?;
     let dry_run = env::var("DRY_RUN")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -403,7 +403,10 @@ fn gather_csv_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), Box<dyn s
     Ok(())
 }
 
-fn gather_json_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+fn gather_json_files(
+    path: &Path,
+    out: &mut Vec<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error>> {
     if !path.exists() {
         return Ok(());
     }

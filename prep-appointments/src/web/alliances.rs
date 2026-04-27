@@ -55,7 +55,12 @@ struct AllianceFile {
     players: Vec<AlliancePlayer>,
 }
 
-fn load_alliance_file(data_dir: &str, account: &str, server: u32, slug: &str) -> Option<AllianceFile> {
+fn load_alliance_file(
+    data_dir: &str,
+    account: &str,
+    server: u32,
+    slug: &str,
+) -> Option<AllianceFile> {
     let key = alliance_doc_key(account, server, slug);
     load_domain_doc(data_dir, "alliances", &key)
 }
@@ -101,13 +106,12 @@ pub async fn list_alliances(
 
     if !alliance_name.is_empty() {
         let slug = alliance_to_slug(&alliance_name);
-        let (players, file_alliance_id) = if let Some(f) =
-            load_alliance_file(&state.data_dir, &session_account, server, &slug)
-        {
-            (f.players, f.alliance_id)
-        } else {
-            (vec![], None)
-        };
+        let (players, file_alliance_id) =
+            if let Some(f) = load_alliance_file(&state.data_dir, &session_account, server, &slug) {
+                (f.players, f.alliance_id)
+            } else {
+                (vec![], None)
+            };
         let aid = file_alliance_id.unwrap_or_else(|| alliance_id.clone());
         alliances.push(serde_json::json!({
             "name": alliance_name,
@@ -130,8 +134,8 @@ pub async fn list_alliances(
             inv.from_server,
             &inv.alliance_slug,
         )
-                .map(|f| (f.players, f.alliance_id))
-            .unwrap_or_else(|| (vec![], None));
+        .map(|f| (f.players, f.alliance_id))
+        .unwrap_or_else(|| (vec![], None));
         if players.is_empty() && file_alliance_id.is_none() {
             continue;
         }
@@ -180,7 +184,7 @@ pub async fn add_player(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
 
-    let (session_account, _) =
+    let (_session_account, _) =
         match auth_check_for_alliance_edit(&session, &state, &url_account, server) {
             Ok(v) => v,
             Err(resp) => return Ok(resp),
@@ -229,13 +233,12 @@ pub async fn add_player(
         }
     };
 
-    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &slug).unwrap_or(
-        AllianceFile {
+    let mut data =
+        load_alliance_file(&state.data_dir, &url_account, server, &slug).unwrap_or(AllianceFile {
             alliance_name: alliance_name.clone(),
             alliance_id: Some(alliance_id.clone()),
             players: vec![],
-        },
-    );
+        });
 
     if data.alliance_id.is_none() {
         data.alliance_id = Some(alliance_id);
@@ -341,9 +344,9 @@ pub async fn remove_player(
         let key = alliance_doc_key(&url_account, server, &alliance_slug);
         delete_domain_doc(&state.data_dir, "alliances", &key).ok();
     } else {
-        save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-        })?;
+        save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(
+            |e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)),
+        )?;
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -403,9 +406,9 @@ pub async fn refresh_names(
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(
+        |e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)),
+    )?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,

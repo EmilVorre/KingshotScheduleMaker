@@ -22,8 +22,7 @@ pub struct AllianceApplication {
 }
 
 fn load_applications(data_dir: &str) -> HashMap<String, AllianceApplication> {
-    load_domain_doc(data_dir, "alliance_applications", "all")
-        .unwrap_or_default()
+    load_domain_doc(data_dir, "alliance_applications", "all").unwrap_or_default()
 }
 
 fn save_applications(

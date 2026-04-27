@@ -120,7 +120,7 @@ pub async fn get_stats(
     let mut research_start_time: Option<String> = None;
     let mut troops_start_time: Option<String> = None;
 
-    let (form_code, form_config, form_entries) =
+    let (form_code, _form_config, form_entries) =
         load_entries_for_current_form(&state, &account_name, server_number);
     if form_code.is_some() && !form_entries.is_empty() {
         let form_config = {
@@ -300,6 +300,7 @@ pub async fn get_stats(
                             });
                     slot_stats.troops_requests += 1;
                 }
+            }
         }
     } else {
         let schedules = state.schedules.lock().unwrap();
@@ -583,66 +584,66 @@ async fn get_schedule_inner(
                     (None, None, None)
                 };
 
-                let last_slot_override = construction_slots
-                    .as_ref()
-                    .and_then(|slots| slots.iter().map(|(s, _)| *s).max());
-                let construction_schedule = schedule_construction_day_with_locked(
-                    &entries,
-                    &HashSet::new(),
-                    last_slot_override,
-                    None,
-                );
-                let research_schedule = schedule_research_day_with_locked(
-                    &entries,
-                    &construction_schedule,
-                    &HashSet::new(),
-                    true,
-                );
-                let troops_schedule = schedule_troops_day(&entries);
+            let last_slot_override = construction_slots
+                .as_ref()
+                .and_then(|slots| slots.iter().map(|(s, _)| *s).max());
+            let construction_schedule = schedule_construction_day_with_locked(
+                &entries,
+                &HashSet::new(),
+                last_slot_override,
+                None,
+            );
+            let research_schedule = schedule_research_day_with_locked(
+                &entries,
+                &construction_schedule,
+                &HashSet::new(),
+                true,
+            );
+            let troops_schedule = schedule_troops_day(&entries);
 
-                let scheduled_ids: Vec<String> = {
-                    let mut ids = HashSet::new();
-                    for appt in construction_schedule.appointments.values() {
-                        ids.insert(appt.player_id.clone());
-                    }
-                    for appt in research_schedule.appointments.values() {
-                        ids.insert(appt.player_id.clone());
-                    }
-                    for appt in troops_schedule.appointments.values() {
-                        ids.insert(appt.player_id.clone());
-                    }
-                    ids.into_iter().collect()
-                };
-                let schedule_data = ScheduleData {
-                    construction_schedule: Some(construction_schedule.clone()),
-                    research_schedule: Some(research_schedule.clone()),
-                    troops_schedule: Some(troops_schedule.clone()),
-                    entries: Some(entries.clone()),
-                    scheduled_player_ids: Some(scheduled_ids),
-                };
-
-                let mut schedules = state.schedules.lock().unwrap();
-                schedules.insert(key.clone(), schedule_data.clone());
-                drop(schedules);
-
-                if let Err(e) = save_schedule(
-                    &state.data_dir,
-                    &account_name,
-                    server_number,
-                    &schedule_data,
-                ) {
-                    eprintln!("Warning: Failed to save schedule to disk: {}", e);
+            let scheduled_ids: Vec<String> = {
+                let mut ids = HashSet::new();
+                for appt in construction_schedule.appointments.values() {
+                    ids.insert(appt.player_id.clone());
                 }
-
-                match day_str {
-                    "construction" => construction_schedule,
-                    "research" => research_schedule,
-                    "troops" => troops_schedule,
-                    _ => {
-                        return Ok(HttpResponse::BadRequest()
-                            .json(serde_json::json!({"error": "Invalid day"})))
-                    }
+                for appt in research_schedule.appointments.values() {
+                    ids.insert(appt.player_id.clone());
                 }
+                for appt in troops_schedule.appointments.values() {
+                    ids.insert(appt.player_id.clone());
+                }
+                ids.into_iter().collect()
+            };
+            let schedule_data = ScheduleData {
+                construction_schedule: Some(construction_schedule.clone()),
+                research_schedule: Some(research_schedule.clone()),
+                troops_schedule: Some(troops_schedule.clone()),
+                entries: Some(entries.clone()),
+                scheduled_player_ids: Some(scheduled_ids),
+            };
+
+            let mut schedules = state.schedules.lock().unwrap();
+            schedules.insert(key.clone(), schedule_data.clone());
+            drop(schedules);
+
+            if let Err(e) = save_schedule(
+                &state.data_dir,
+                &account_name,
+                server_number,
+                &schedule_data,
+            ) {
+                eprintln!("Warning: Failed to save schedule to disk: {}", e);
+            }
+
+            match day_str {
+                "construction" => construction_schedule,
+                "research" => research_schedule,
+                "troops" => troops_schedule,
+                _ => {
+                    return Ok(HttpResponse::BadRequest()
+                        .json(serde_json::json!({"error": "Invalid day"})))
+                }
+            }
         } else {
             DaySchedule {
                 appointments: HashMap::new(),

@@ -9,9 +9,9 @@ use crate::kingshot_api;
 use crate::parser::load_appointments_from_submissions;
 
 use super::persistence::{
-    archive_old_forms, generate_form_code, get_current_form, list_old_forms, reopen_old_form,
-    save_current_forms, save_form, save_form_submission, has_player_submission,
-    load_form_submissions, count_form_submissions,
+    archive_old_forms, count_form_submissions, generate_form_code, get_current_form,
+    has_player_submission, list_old_forms, load_form_submissions, reopen_old_form,
+    save_current_forms, save_form, save_form_submission,
 };
 use super::state::{
     AppState, CreateFormRequest, FormConfig, FormData, FormStatsResponse, FormTimeSlotStats,
@@ -956,7 +956,9 @@ pub async fn download_form_csv(
             "additional_notes",
             "suggestions",
         ])
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("CSV write failed: {}", e)))?;
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("CSV write failed: {}", e))
+        })?;
     for s in submissions {
         writer
             .write_record([
@@ -970,24 +972,39 @@ pub async fn download_form_csv(
                 s.construction_speedups.unwrap_or(0).to_string(),
                 s.construction_truegold.unwrap_or(0).to_string(),
                 s.construction_tempered_truegold.unwrap_or(0).to_string(),
-                s.construction_time_slots.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","),
+                s.construction_time_slots
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
                 s.wants_research.to_string(),
                 s.research_speedups.unwrap_or(0).to_string(),
                 s.research_truegold_dust.unwrap_or(0).to_string(),
-                s.research_time_slots.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","),
+                s.research_time_slots
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
                 s.wants_troops.to_string(),
                 s.troops_speedups.unwrap_or(0).to_string(),
-                s.troops_time_slots.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","),
+                s.troops_time_slots
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
                 s.additional_notes.unwrap_or_default(),
                 s.suggestions.unwrap_or_default(),
             ])
-            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("CSV write failed: {}", e)))?;
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("CSV write failed: {}", e))
+            })?;
     }
-    let bytes = writer
-        .into_inner()
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("CSV finalize failed: {}", e)))?;
-    let csv_content = String::from_utf8(bytes)
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("CSV encoding failed: {}", e)))?;
+    let bytes = writer.into_inner().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("CSV finalize failed: {}", e))
+    })?;
+    let csv_content = String::from_utf8(bytes).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("CSV encoding failed: {}", e))
+    })?;
     let filename = format!(
         "{}_submissions_{}.csv",
         form.code,

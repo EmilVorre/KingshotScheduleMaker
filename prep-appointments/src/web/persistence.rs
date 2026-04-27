@@ -7,8 +7,8 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use super::state::{Account, FormData, ScheduleData, StatsResponse};
-use postgres::{Client, NoTls};
 use crate::form::submission::FormSubmission;
+use postgres::{Client, NoTls};
 
 #[derive(Clone, Debug)]
 enum StorageBackend {
@@ -193,7 +193,8 @@ pub fn save_statistics(
     stats: &StatsResponse,
 ) -> std::io::Result<()> {
     if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_save_statistics(database_url, account_name, server_number, stats).map_err(io_other);
+        return pg_save_statistics(database_url, account_name, server_number, stats)
+            .map_err(io_other);
     }
     let stats_dir = format!("{}/statistics/{}", data_dir, account_name);
     std::fs::create_dir_all(&stats_dir)?;
@@ -608,11 +609,12 @@ pub fn list_domain_docs<T: serde::de::DeserializeOwned>(
     key_prefix: Option<&str>,
 ) -> Vec<(String, T)> {
     match storage_backend() {
-        StorageBackend::Postgres { database_url } => pg_list_domain_docs(database_url, domain, key_prefix)
-            .unwrap_or_else(|e| {
+        StorageBackend::Postgres { database_url } => {
+            pg_list_domain_docs(database_url, domain, key_prefix).unwrap_or_else(|e| {
                 eprintln!("Failed to list domain docs from postgres ({domain}): {e}");
                 Vec::new()
-            }),
+            })
+        }
         StorageBackend::Json => list_domain_docs_json(data_dir, domain, key_prefix),
     }
 }
@@ -643,7 +645,9 @@ pub fn load_form_submissions(data_dir: &str, form_code: &str) -> Vec<FormSubmiss
                 Vec::new()
             })
         }
-        StorageBackend::Json => load_domain_doc(data_dir, "form_submissions", form_code).unwrap_or_default(),
+        StorageBackend::Json => {
+            load_domain_doc(data_dir, "form_submissions", form_code).unwrap_or_default()
+        }
     }
 }
 
@@ -673,7 +677,9 @@ fn from_json_value<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, se
     serde_json::from_value(value)
 }
 
-fn pg_load_accounts(database_url: &str) -> Result<HashMap<String, Account>, Box<dyn std::error::Error>> {
+fn pg_load_accounts(
+    database_url: &str,
+) -> Result<HashMap<String, Account>, Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let mut map = HashMap::new();
     for row in client.query("SELECT account_key, payload FROM accounts", &[])? {
@@ -685,7 +691,10 @@ fn pg_load_accounts(database_url: &str) -> Result<HashMap<String, Account>, Box<
     Ok(map)
 }
 
-fn pg_save_accounts(database_url: &str, accounts: &HashMap<String, Account>) -> Result<(), Box<dyn std::error::Error>> {
+fn pg_save_accounts(
+    database_url: &str,
+    accounts: &HashMap<String, Account>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let mut tx = client.transaction()?;
     tx.execute("DELETE FROM accounts", &[])?;
@@ -700,7 +709,9 @@ fn pg_save_accounts(database_url: &str, accounts: &HashMap<String, Account>) -> 
     Ok(())
 }
 
-fn pg_load_current_forms(database_url: &str) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+fn pg_load_current_forms(
+    database_url: &str,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let mut map = HashMap::new();
     for row in client.query("SELECT schedule_key, form_code FROM current_forms_map", &[])? {
@@ -709,7 +720,10 @@ fn pg_load_current_forms(database_url: &str) -> Result<HashMap<String, String>, 
     Ok(map)
 }
 
-fn pg_save_current_forms(database_url: &str, current_forms: &HashMap<String, String>) -> Result<(), Box<dyn std::error::Error>> {
+fn pg_save_current_forms(
+    database_url: &str,
+    current_forms: &HashMap<String, String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let mut tx = client.transaction()?;
     tx.execute("DELETE FROM current_forms_map", &[])?;
@@ -787,10 +801,15 @@ fn pg_load_statistics(
     Ok(None)
 }
 
-fn pg_load_forms(database_url: &str) -> Result<HashMap<String, FormData>, Box<dyn std::error::Error>> {
+fn pg_load_forms(
+    database_url: &str,
+) -> Result<HashMap<String, FormData>, Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let mut map = HashMap::new();
-    for row in client.query("SELECT code, payload FROM forms WHERE archived = FALSE", &[])? {
+    for row in client.query(
+        "SELECT code, payload FROM forms WHERE archived = FALSE",
+        &[],
+    )? {
         let code: String = row.get(0);
         let payload: Value = row.get(1);
         let form: FormData = from_json_value(payload)?;
@@ -799,7 +818,10 @@ fn pg_load_forms(database_url: &str) -> Result<HashMap<String, FormData>, Box<dy
     Ok(map)
 }
 
-fn pg_save_form(database_url: &str, form_data: &FormData) -> Result<(), Box<dyn std::error::Error>> {
+fn pg_save_form(
+    database_url: &str,
+    form_data: &FormData,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let payload = json_value(form_data)?;
     client.execute(
@@ -817,7 +839,11 @@ fn pg_save_form(database_url: &str, form_data: &FormData) -> Result<(), Box<dyn 
     Ok(())
 }
 
-fn pg_archive_old_forms(database_url: &str, account_name: &str, server_number: u32) -> Result<(), Box<dyn std::error::Error>> {
+fn pg_archive_old_forms(
+    database_url: &str,
+    account_name: &str,
+    server_number: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
     client.execute(
@@ -861,7 +887,10 @@ fn pg_load_feedback(database_url: &str) -> Result<Vec<FeedbackEntry>, Box<dyn st
     Ok(entries)
 }
 
-fn pg_save_feedback(database_url: &str, feedback: &[FeedbackEntry]) -> Result<(), Box<dyn std::error::Error>> {
+fn pg_save_feedback(
+    database_url: &str,
+    feedback: &[FeedbackEntry],
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = pg_connect(database_url)?;
     let mut tx = client.transaction()?;
     tx.execute("DELETE FROM feedback", &[])?;
@@ -915,7 +944,11 @@ fn load_domain_map_json(data_dir: &str, domain: &str) -> HashMap<String, Value> 
     HashMap::new()
 }
 
-fn save_domain_map_json(data_dir: &str, domain: &str, map: &HashMap<String, Value>) -> std::io::Result<()> {
+fn save_domain_map_json(
+    data_dir: &str,
+    domain: &str,
+    map: &HashMap<String, Value>,
+) -> std::io::Result<()> {
     std::fs::create_dir_all(data_dir)?;
     let path = domain_store_path(data_dir, domain);
     let content = serde_json::to_string_pretty(map)?;
