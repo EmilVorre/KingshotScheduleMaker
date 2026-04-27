@@ -38,7 +38,13 @@ fn storage_backend() -> &'static StorageBackend {
 }
 
 fn pg_connect(database_url: &str) -> Result<Client, postgres::Error> {
-    Client::connect(database_url, NoTls)
+    // Sync `postgres` uses `block_on` internally; calling it on a Tokio worker
+    // (Actix / #[tokio::main]) panics. `block_in_place` runs the connect on the
+    // blocking pool. Outside a runtime (CLI, migration binary), connect directly.
+    match tokio::runtime::Handle::try_current() {
+        Ok(_) => tokio::task::block_in_place(|| Client::connect(database_url, NoTls)),
+        Err(_) => Client::connect(database_url, NoTls),
+    }
 }
 
 /// Returns the schedule key for an account/server
