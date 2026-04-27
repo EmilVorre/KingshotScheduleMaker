@@ -37,13 +37,23 @@ fn storage_backend() -> &'static StorageBackend {
     })
 }
 
-fn pg_connect(database_url: &str) -> Result<Client, postgres::Error> {
-    // Sync `postgres` uses `block_on` internally; calling it on a Tokio worker
-    // (Actix / #[tokio::main]) panics. `block_in_place` runs the connect on the
-    // blocking pool. Outside a runtime (CLI, migration binary), connect directly.
-    match tokio::runtime::Handle::try_current() {
-        Ok(_) => tokio::task::block_in_place(|| Client::connect(database_url, NoTls)),
-        Err(_) => Client::connect(database_url, NoTls),
+/// Run sync postgres work (connect + callback + client drop) without nesting Tokio
+/// runtimes. Wrapping only `Client::connect` is not enough: query errors / `Drop` can
+/// still panic on Actix worker threads (`connection.rs` / nested `block_on`).
+fn with_pg_client<R, F>(database_url: &str, f: F) -> Result<R, Box<dyn std::error::Error>>
+where
+    F: FnOnce(&mut Client) -> Result<R, Box<dyn std::error::Error>> + Send,
+    R: Send,
+{
+    let url = database_url.to_string();
+    if tokio::runtime::Handle::try_current().is_ok() {
+        tokio::task::block_in_place(move || {
+            let mut client = Client::connect(&url, NoTls)?;
+            f(&mut client)
+        })
+    } else {
+        let mut client = Client::connect(&url, NoTls)?;
+        f(&mut client)
     }
 }
 
@@ -570,7 +580,7 @@ pub fn reopen_old_form(
     Ok(form_data)
 }
 
-pub fn load_domain_doc<T: serde::de::DeserializeOwned>(
+pub fn load_domain_doc<T: serde::de::DeserializeOwned + Send>(
     data_dir: &str,
     domain: &str,
     doc_key: &str,
@@ -586,7 +596,7 @@ pub fn load_domain_doc<T: serde::de::DeserializeOwned>(
     }
 }
 
-pub fn save_domain_doc<T: serde::Serialize>(
+pub fn save_domain_doc<T: serde::Serialize + Send + Sync>(
     data_dir: &str,
     domain: &str,
     doc_key: &str,
@@ -609,7 +619,7 @@ pub fn delete_domain_doc(data_dir: &str, domain: &str, doc_key: &str) -> std::io
     }
 }
 
-pub fn list_domain_docs<T: serde::de::DeserializeOwned>(
+pub fn list_domain_docs<T: serde::de::DeserializeOwned + Send>(
     data_dir: &str,
     domain: &str,
     key_prefix: Option<&str>,
@@ -686,61 +696,65 @@ fn from_json_value<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, se
 fn pg_load_accounts(
     database_url: &str,
 ) -> Result<HashMap<String, Account>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut map = HashMap::new();
-    for row in client.query("SELECT account_key, payload FROM accounts", &[])? {
-        let key: String = row.get(0);
-        let payload: Value = row.get(1);
-        let account: Account = from_json_value(payload)?;
-        map.insert(key, account);
-    }
-    Ok(map)
+    with_pg_client(database_url, |client| {
+        let mut map = HashMap::new();
+        for row in client.query("SELECT account_key, payload FROM accounts", &[])? {
+            let key: String = row.get(0);
+            let payload: Value = row.get(1);
+            let account: Account = from_json_value(payload)?;
+            map.insert(key, account);
+        }
+        Ok(map)
+    })
 }
 
 fn pg_save_accounts(
     database_url: &str,
     accounts: &HashMap<String, Account>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut tx = client.transaction()?;
-    tx.execute("DELETE FROM accounts", &[])?;
-    for (k, v) in accounts {
-        let payload = json_value(v)?;
-        tx.execute(
-            "INSERT INTO accounts (account_key, payload) VALUES ($1, $2)",
-            &[k, &payload],
-        )?;
-    }
-    tx.commit()?;
-    Ok(())
+    with_pg_client(database_url, |client| {
+        let mut tx = client.transaction()?;
+        tx.execute("DELETE FROM accounts", &[])?;
+        for (k, v) in accounts {
+            let payload = json_value(v)?;
+            tx.execute(
+                "INSERT INTO accounts (account_key, payload) VALUES ($1, $2)",
+                &[k, &payload],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    })
 }
 
 fn pg_load_current_forms(
     database_url: &str,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut map = HashMap::new();
-    for row in client.query("SELECT schedule_key, form_code FROM current_forms_map", &[])? {
-        map.insert(row.get(0), row.get(1));
-    }
-    Ok(map)
+    with_pg_client(database_url, |client| {
+        let mut map = HashMap::new();
+        for row in client.query("SELECT schedule_key, form_code FROM current_forms_map", &[])? {
+            map.insert(row.get(0), row.get(1));
+        }
+        Ok(map)
+    })
 }
 
 fn pg_save_current_forms(
     database_url: &str,
     current_forms: &HashMap<String, String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut tx = client.transaction()?;
-    tx.execute("DELETE FROM current_forms_map", &[])?;
-    for (k, v) in current_forms {
-        tx.execute(
-            "INSERT INTO current_forms_map (schedule_key, form_code) VALUES ($1, $2)",
-            &[k, v],
-        )?;
-    }
-    tx.commit()?;
-    Ok(())
+    with_pg_client(database_url, |client| {
+        let mut tx = client.transaction()?;
+        tx.execute("DELETE FROM current_forms_map", &[])?;
+        for (k, v) in current_forms {
+            tx.execute(
+                "INSERT INTO current_forms_map (schedule_key, form_code) VALUES ($1, $2)",
+                &[k, v],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    })
 }
 
 fn pg_save_schedule(
@@ -749,14 +763,15 @@ fn pg_save_schedule(
     server_number: u32,
     schedule_data: &ScheduleData,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let payload = json_value(schedule_data)?;
-    client.execute(
-        "INSERT INTO schedules (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
+    with_pg_client(database_url, |client| {
+        let payload = json_value(schedule_data)?;
+        client.execute(
+            "INSERT INTO schedules (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
          ON CONFLICT (account_name, server_number) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-        &[&account_name, &(server_number as i32), &payload],
-    )?;
-    Ok(())
+            &[&account_name, &(server_number as i32), &payload],
+        )?;
+        Ok(())
+    })
 }
 
 fn pg_load_schedule(
@@ -764,15 +779,16 @@ fn pg_load_schedule(
     account_name: &str,
     server_number: u32,
 ) -> Result<Option<ScheduleData>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    if let Some(row) = client.query_opt(
-        "SELECT payload FROM schedules WHERE account_name = $1 AND server_number = $2",
-        &[&account_name, &(server_number as i32)],
-    )? {
-        let payload: Value = row.get(0);
-        return Ok(Some(from_json_value(payload)?));
-    }
-    Ok(None)
+    with_pg_client(database_url, |client| {
+        if let Some(row) = client.query_opt(
+            "SELECT payload FROM schedules WHERE account_name = $1 AND server_number = $2",
+            &[&account_name, &(server_number as i32)],
+        )? {
+            let payload: Value = row.get(0);
+            return Ok(Some(from_json_value(payload)?));
+        }
+        Ok(None)
+    })
 }
 
 fn pg_save_statistics(
@@ -781,14 +797,15 @@ fn pg_save_statistics(
     server_number: u32,
     stats: &StatsResponse,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let payload = json_value(stats)?;
-    client.execute(
-        "INSERT INTO statistics (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
+    with_pg_client(database_url, |client| {
+        let payload = json_value(stats)?;
+        client.execute(
+            "INSERT INTO statistics (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
          ON CONFLICT (account_name, server_number) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-        &[&account_name, &(server_number as i32), &payload],
-    )?;
-    Ok(())
+            &[&account_name, &(server_number as i32), &payload],
+        )?;
+        Ok(())
+    })
 }
 
 fn pg_load_statistics(
@@ -796,42 +813,44 @@ fn pg_load_statistics(
     account_name: &str,
     server_number: u32,
 ) -> Result<Option<StatsResponse>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    if let Some(row) = client.query_opt(
-        "SELECT payload FROM statistics WHERE account_name = $1 AND server_number = $2",
-        &[&account_name, &(server_number as i32)],
-    )? {
-        let payload: Value = row.get(0);
-        return Ok(Some(from_json_value(payload)?));
-    }
-    Ok(None)
+    with_pg_client(database_url, |client| {
+        if let Some(row) = client.query_opt(
+            "SELECT payload FROM statistics WHERE account_name = $1 AND server_number = $2",
+            &[&account_name, &(server_number as i32)],
+        )? {
+            let payload: Value = row.get(0);
+            return Ok(Some(from_json_value(payload)?));
+        }
+        Ok(None)
+    })
 }
 
 fn pg_load_forms(
     database_url: &str,
 ) -> Result<HashMap<String, FormData>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut map = HashMap::new();
-    for row in client.query(
-        "SELECT code, payload FROM forms WHERE archived = FALSE",
-        &[],
-    )? {
-        let code: String = row.get(0);
-        let payload: Value = row.get(1);
-        let form: FormData = from_json_value(payload)?;
-        map.insert(code, form);
-    }
-    Ok(map)
+    with_pg_client(database_url, |client| {
+        let mut map = HashMap::new();
+        for row in client.query(
+            "SELECT code, payload FROM forms WHERE archived = FALSE",
+            &[],
+        )? {
+            let code: String = row.get(0);
+            let payload: Value = row.get(1);
+            let form: FormData = from_json_value(payload)?;
+            map.insert(code, form);
+        }
+        Ok(map)
+    })
 }
 
 fn pg_save_form(
     database_url: &str,
     form_data: &FormData,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let payload = json_value(form_data)?;
-    client.execute(
-        "INSERT INTO forms (code, account_name, server_number, archived, archive_name, payload, updated_at)
+    with_pg_client(database_url, |client| {
+        let payload = json_value(form_data)?;
+        client.execute(
+            "INSERT INTO forms (code, account_name, server_number, archived, archive_name, payload, updated_at)
          VALUES ($1, $2, $3, FALSE, NULL, $4, NOW())
          ON CONFLICT (code) DO UPDATE SET
            account_name = EXCLUDED.account_name,
@@ -840,9 +859,15 @@ fn pg_save_form(
            archive_name = NULL,
            payload = EXCLUDED.payload,
            updated_at = NOW()",
-        &[&form_data.code, &form_data.account_name, &(form_data.server_number as i32), &payload],
-    )?;
-    Ok(())
+            &[
+                &form_data.code,
+                &form_data.account_name,
+                &(form_data.server_number as i32),
+                &payload,
+            ],
+        )?;
+        Ok(())
+    })
 }
 
 fn pg_archive_old_forms(
@@ -850,15 +875,16 @@ fn pg_archive_old_forms(
     account_name: &str,
     server_number: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    client.execute(
-        "UPDATE forms
+    with_pg_client(database_url, |client| {
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+        client.execute(
+            "UPDATE forms
          SET archived = TRUE, archive_name = CONCAT(code, '_', $3), updated_at = NOW()
          WHERE account_name = $1 AND server_number = $2 AND archived = FALSE",
-        &[&account_name, &(server_number as i32), &timestamp],
-    )?;
-    Ok(())
+            &[&account_name, &(server_number as i32), &timestamp],
+        )?;
+        Ok(())
+    })
 }
 
 fn pg_list_old_forms(
@@ -866,49 +892,52 @@ fn pg_list_old_forms(
     account_name: &str,
     server_number: u32,
 ) -> Result<Vec<(String, FormData)>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut out = Vec::new();
-    for row in client.query(
-        "SELECT archive_name, payload FROM forms
+    with_pg_client(database_url, |client| {
+        let mut out = Vec::new();
+        for row in client.query(
+            "SELECT archive_name, payload FROM forms
          WHERE account_name = $1 AND server_number = $2 AND archived = TRUE
          ORDER BY updated_at DESC",
-        &[&account_name, &(server_number as i32)],
-    )? {
-        let archive_name: Option<String> = row.get(0);
-        let payload: Value = row.get(1);
-        let form: FormData = from_json_value(payload)?;
-        out.push((archive_name.unwrap_or_else(|| form.code.clone()), form));
-    }
-    Ok(out)
+            &[&account_name, &(server_number as i32)],
+        )? {
+            let archive_name: Option<String> = row.get(0);
+            let payload: Value = row.get(1);
+            let form: FormData = from_json_value(payload)?;
+            out.push((archive_name.unwrap_or_else(|| form.code.clone()), form));
+        }
+        Ok(out)
+    })
 }
 
 fn pg_load_feedback(database_url: &str) -> Result<Vec<FeedbackEntry>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut entries = Vec::new();
-    for row in client.query("SELECT payload FROM feedback ORDER BY created_at DESC", &[])? {
-        let payload: Value = row.get(0);
-        let entry: FeedbackEntry = from_json_value(payload)?;
-        entries.push(entry);
-    }
-    Ok(entries)
+    with_pg_client(database_url, |client| {
+        let mut entries = Vec::new();
+        for row in client.query("SELECT payload FROM feedback ORDER BY created_at DESC", &[])? {
+            let payload: Value = row.get(0);
+            let entry: FeedbackEntry = from_json_value(payload)?;
+            entries.push(entry);
+        }
+        Ok(entries)
+    })
 }
 
 fn pg_save_feedback(
     database_url: &str,
     feedback: &[FeedbackEntry],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut tx = client.transaction()?;
-    tx.execute("DELETE FROM feedback", &[])?;
-    for entry in feedback {
-        let payload = json_value(entry)?;
-        tx.execute(
-            "INSERT INTO feedback (id, created_at, payload) VALUES ($1, $2, $3)",
-            &[&entry.id, &entry.created_at, &payload],
-        )?;
-    }
-    tx.commit()?;
-    Ok(())
+    with_pg_client(database_url, |client| {
+        let mut tx = client.transaction()?;
+        tx.execute("DELETE FROM feedback", &[])?;
+        for entry in feedback {
+            let payload = json_value(entry)?;
+            tx.execute(
+                "INSERT INTO feedback (id, created_at, payload) VALUES ($1, $2, $3)",
+                &[&entry.id, &entry.created_at, &payload],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    })
 }
 
 fn pg_reopen_old_form(
@@ -917,21 +946,22 @@ fn pg_reopen_old_form(
     server_number: u32,
     archive_name: &str,
 ) -> Result<FormData, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let row = client.query_opt(
-        "SELECT payload FROM forms WHERE archive_name = $1 AND account_name = $2 AND server_number = $3",
-        &[&archive_name, &account_name, &(server_number as i32)],
-    )?;
-    let Some(row) = row else {
-        return Err(format!("Archived form not found: {archive_name}").into());
-    };
-    let payload: Value = row.get(0);
-    let form_data: FormData = from_json_value(payload)?;
-    client.execute(
-        "UPDATE forms SET archived = FALSE, archive_name = NULL, updated_at = NOW() WHERE code = $1",
-        &[&form_data.code],
-    )?;
-    Ok(form_data)
+    with_pg_client(database_url, |client| {
+        let row = client.query_opt(
+            "SELECT payload FROM forms WHERE archive_name = $1 AND account_name = $2 AND server_number = $3",
+            &[&archive_name, &account_name, &(server_number as i32)],
+        )?;
+        let Some(row) = row else {
+            return Err(format!("Archived form not found: {archive_name}").into());
+        };
+        let payload: Value = row.get(0);
+        let form_data: FormData = from_json_value(payload)?;
+        client.execute(
+            "UPDATE forms SET archived = FALSE, archive_name = NULL, updated_at = NOW() WHERE code = $1",
+            &[&form_data.code],
+        )?;
+        Ok(form_data)
+    })
 }
 
 fn domain_store_path(data_dir: &str, domain: &str) -> String {
@@ -1004,36 +1034,38 @@ fn list_domain_docs_json<T: serde::de::DeserializeOwned>(
         .collect()
 }
 
-fn pg_load_domain_doc<T: serde::de::DeserializeOwned>(
+fn pg_load_domain_doc<T: serde::de::DeserializeOwned + Send>(
     database_url: &str,
     domain: &str,
     doc_key: &str,
 ) -> Result<Option<T>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    if let Some(row) = client.query_opt(
-        "SELECT payload FROM domain_documents WHERE domain = $1 AND doc_key = $2",
-        &[&domain, &doc_key],
-    )? {
-        let payload: Value = row.get(0);
-        return Ok(Some(serde_json::from_value(payload)?));
-    }
-    Ok(None)
+    with_pg_client(database_url, |client| {
+        if let Some(row) = client.query_opt(
+            "SELECT payload FROM domain_documents WHERE domain = $1 AND doc_key = $2",
+            &[&domain, &doc_key],
+        )? {
+            let payload: Value = row.get(0);
+            return Ok(Some(serde_json::from_value(payload)?));
+        }
+        Ok(None)
+    })
 }
 
-fn pg_save_domain_doc<T: serde::Serialize>(
+fn pg_save_domain_doc<T: serde::Serialize + Send + Sync>(
     database_url: &str,
     domain: &str,
     doc_key: &str,
     value: &T,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let payload = serde_json::to_value(value)?;
-    client.execute(
-        "INSERT INTO domain_documents (domain, doc_key, payload, updated_at) VALUES ($1, $2, $3, NOW())
+    with_pg_client(database_url, |client| {
+        let payload = serde_json::to_value(value)?;
+        client.execute(
+            "INSERT INTO domain_documents (domain, doc_key, payload, updated_at) VALUES ($1, $2, $3, NOW())
          ON CONFLICT (domain, doc_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-        &[&domain, &doc_key, &payload],
-    )?;
-    Ok(())
+            &[&domain, &doc_key, &payload],
+        )?;
+        Ok(())
+    })
 }
 
 fn pg_delete_domain_doc(
@@ -1041,40 +1073,42 @@ fn pg_delete_domain_doc(
     domain: &str,
     doc_key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    client.execute(
-        "DELETE FROM domain_documents WHERE domain = $1 AND doc_key = $2",
-        &[&domain, &doc_key],
-    )?;
-    Ok(())
+    with_pg_client(database_url, |client| {
+        client.execute(
+            "DELETE FROM domain_documents WHERE domain = $1 AND doc_key = $2",
+            &[&domain, &doc_key],
+        )?;
+        Ok(())
+    })
 }
 
-fn pg_list_domain_docs<T: serde::de::DeserializeOwned>(
+fn pg_list_domain_docs<T: serde::de::DeserializeOwned + Send>(
     database_url: &str,
     domain: &str,
     key_prefix: Option<&str>,
 ) -> Result<Vec<(String, T)>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut out = Vec::new();
-    let rows = if let Some(prefix) = key_prefix {
-        let like_pattern = format!("{prefix}%");
-        client.query(
-            "SELECT doc_key, payload FROM domain_documents WHERE domain = $1 AND doc_key LIKE $2",
-            &[&domain, &like_pattern],
-        )?
-    } else {
-        client.query(
-            "SELECT doc_key, payload FROM domain_documents WHERE domain = $1",
-            &[&domain],
-        )?
-    };
-    for row in rows {
-        let key: String = row.get(0);
-        let payload: Value = row.get(1);
-        let decoded: T = serde_json::from_value(payload)?;
-        out.push((key, decoded));
-    }
-    Ok(out)
+    with_pg_client(database_url, |client| {
+        let mut out = Vec::new();
+        let rows = if let Some(prefix) = key_prefix {
+            let like_pattern = format!("{prefix}%");
+            client.query(
+                "SELECT doc_key, payload FROM domain_documents WHERE domain = $1 AND doc_key LIKE $2",
+                &[&domain, &like_pattern],
+            )?
+        } else {
+            client.query(
+                "SELECT doc_key, payload FROM domain_documents WHERE domain = $1",
+                &[&domain],
+            )?
+        };
+        for row in rows {
+            let key: String = row.get(0);
+            let payload: Value = row.get(1);
+            let decoded: T = serde_json::from_value(payload)?;
+            out.push((key, decoded));
+        }
+        Ok(out)
+    })
 }
 
 fn pg_save_form_submission(
@@ -1082,28 +1116,30 @@ fn pg_save_form_submission(
     form_code: &str,
     submission: &FormSubmission,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let payload = serde_json::to_value(submission)?;
-    client.execute(
-        "INSERT INTO form_submissions (form_code, player_id, row_data) VALUES ($1, $2, $3)",
-        &[&form_code, &submission.player_id, &payload],
-    )?;
-    Ok(())
+    with_pg_client(database_url, |client| {
+        let payload = serde_json::to_value(submission)?;
+        client.execute(
+            "INSERT INTO form_submissions (form_code, player_id, row_data) VALUES ($1, $2, $3)",
+            &[&form_code, &submission.player_id, &payload],
+        )?;
+        Ok(())
+    })
 }
 
 fn pg_load_form_submissions(
     database_url: &str,
     form_code: &str,
 ) -> Result<Vec<FormSubmission>, Box<dyn std::error::Error>> {
-    let mut client = pg_connect(database_url)?;
-    let mut out = Vec::new();
-    for row in client.query(
-        "SELECT row_data FROM form_submissions WHERE form_code = $1 ORDER BY id ASC",
-        &[&form_code],
-    )? {
-        let payload: Value = row.get(0);
-        let submission: FormSubmission = serde_json::from_value(payload)?;
-        out.push(submission);
-    }
-    Ok(out)
+    with_pg_client(database_url, |client| {
+        let mut out = Vec::new();
+        for row in client.query(
+            "SELECT row_data FROM form_submissions WHERE form_code = $1 ORDER BY id ASC",
+            &[&form_code],
+        )? {
+            let payload: Value = row.get(0);
+            let submission: FormSubmission = serde_json::from_value(payload)?;
+            out.push(submission);
+        }
+        Ok(out)
+    })
 }
