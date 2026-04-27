@@ -14,16 +14,20 @@ This directory contains baseline manifests for deploying Kingshot on a single-no
 
 ## HTTPS (Let's Encrypt + cert-manager, k3s Traefik)
 
+**GitHub Actions:** The **Deploy To Kubernetes** workflow installs cert-manager if missing, applies the ClusterIssuer when the **`ACME_EMAIL`** repository secret is set (Let’s Encrypt account email), then applies manifests including `ingress.yaml`. Set **`ACME_EMAIL`** under *Settings → Secrets and variables → Actions*.
+
+**Manual (or to debug):**
+
 1. **DNS:** Point your hostname (e.g. `ks.example.com`) at the cluster node’s public IP.
 
-2. **Install cert-manager** (once per cluster; pick a [current release](https://github.com/cert-manager/cert-manager/releases)):
+2. **Install cert-manager** (once per cluster; pick a [current release](https://github.com/cert-manager/cert-manager/releases)) — skipped if already installed:
 
    ```bash
    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml
    kubectl -n cert-manager rollout status deploy/cert-manager --timeout=120s
    ```
 
-3. **ClusterIssuer:** Edit `email:` in `cert-manager-letsencrypt-clusterissuer.yaml`, then:
+3. **ClusterIssuer:** Set `ACME_EMAIL` in GitHub for the workflow, **or** edit `email:` in `cert-manager-letsencrypt-clusterissuer.yaml` and run:
 
    ```bash
    kubectl apply -f k8s/cert-manager-letsencrypt-clusterissuer.yaml
