@@ -8,7 +8,8 @@ use prep_appointments::form::FormSubmissionRequest;
 use prep_appointments::schedule::types::ScheduledAppointment;
 use prep_appointments::schedule::DaySchedule;
 use prep_appointments::web::{
-    forms, oauth_state, save_schedule, schedule, AppState, FormConfig, FormData, ScheduleData,
+    forms, load_form_submissions, oauth_state, save_schedule, schedule, AppState, FormConfig,
+    FormData, ScheduleData,
 };
 
 fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
@@ -125,9 +126,14 @@ async fn test_submit_form_by_code_success() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let csv_path =
-        std::path::Path::new(&data_dir).join("current_forms/TESTCODE123_submissions.csv");
-    assert!(csv_path.exists(), "CSV file should be created");
+    let submissions = load_form_submissions(&data_dir, "TESTCODE123");
+    assert_eq!(
+        submissions.len(),
+        1,
+        "One submission should be persisted for the form"
+    );
+    assert_eq!(submissions[0].player_id, "12345678");
+    assert_eq!(submissions[0].character_name, "TestPlayer");
     std::fs::remove_dir_all(&dir).ok();
 }
 
