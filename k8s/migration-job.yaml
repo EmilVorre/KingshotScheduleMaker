@@ -9,7 +9,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrator
-          image: ghcr.io/your-org/kingshot-backend:latest
+          image: ghcr.io/emilvorre/kingshotschedulemaker/backend:latest
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:

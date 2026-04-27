@@ -80,7 +80,7 @@ jobs:
           set -euo pipefail
           BACKEND_IMAGE="${REGISTRY}/${{ steps.vars.outputs.repo }}/backend:${{ steps.vars.outputs.tag }}"
           DRY_RUN_VALUE="${{ steps.vars.outputs.migration_dry_run }}"
-          sed -e "s#ghcr.io/your-org/kingshot-backend:latest#${BACKEND_IMAGE}#g" \
+          sed -e "s#ghcr.io/emilvorre/kingshotschedulemaker/backend:latest#${BACKEND_IMAGE}#g" \
               -e "s#value: \"false\"#value: \"${DRY_RUN_VALUE}\"#g" \
               k8s/migration-job.yaml > /tmp/migration-job.yaml
           kubectl -n "${NAMESPACE}" delete job json-to-pg-migration --ignore-not-found=true
