@@ -1,0 +1,93 @@
+name: Deploy To Kubernetes
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (release tag or latest)"
+        required: true
+        default: latest
+      run_migration_job:
+        description: "Apply JSON->Postgres migration Job"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      migration_dry_run:
+        description: "Migration job DRY_RUN value"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: kingshot
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KUBE_CONFIG}" ]; then
+            echo "KUBE_CONFIG secret is required"
+            exit 1
+          fi
+          mkdir -p "${HOME}/.kube"
+          printf '%s\n' "${KUBE_CONFIG}" > "${HOME}/.kube/config"
+          chmod 600 "${HOME}/.kube/config"
+          kubectl cluster-info
+
+      - name: Resolve image names
+        id: vars
+        run: |
+          echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "tag=$(echo '${{ github.event.inputs.image_tag }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Apply base manifests
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/backend.yaml
+          kubectl apply -f k8s/frontend.yaml
+          kubectl apply -f k8s/ingress.yaml
+
+      - name: Update deployment images
+        run: |
+          set -euo pipefail
+          kubectl -n "${NAMESPACE}" set image deployment/backend \
+            backend="${REGISTRY}/${{ steps.vars.outputs.repo }}/backend:${{ steps.vars.outputs.tag }}"
+          kubectl -n "${NAMESPACE}" set image deployment/frontend \
+            frontend="${REGISTRY}/${{ steps.vars.outputs.repo }}/frontend:${{ steps.vars.outputs.tag }}"
+          kubectl -n "${NAMESPACE}" rollout status deployment/backend --timeout=300s
+          kubectl -n "${NAMESPACE}" rollout status deployment/frontend --timeout=300s
+
+      - name: Apply migration job (optional)
+        if: ${{ github.event.inputs.run_migration_job == 'true' }}
+        run: |
+          set -euo pipefail
+          BACKEND_IMAGE="${REGISTRY}/${{ steps.vars.outputs.repo }}/backend:${{ steps.vars.outputs.tag }}"
+          DRY_RUN_VALUE="${{ github.event.inputs.migration_dry_run }}"
+          sed -e "s#ghcr.io/your-org/kingshot-backend:latest#${BACKEND_IMAGE}#g" \
+              -e "s#value: \"false\"#value: \"${DRY_RUN_VALUE}\"#g" \
+              k8s/migration-job.yaml > /tmp/migration-job.yaml
+          kubectl -n "${NAMESPACE}" delete job json-to-pg-migration --ignore-not-found=true
+          kubectl apply -f /tmp/migration-job.yaml
+          kubectl -n "${NAMESPACE}" wait --for=condition=complete --timeout=1800s job/json-to-pg-migration
+          kubectl -n "${NAMESPACE}" logs job/json-to-pg-migration

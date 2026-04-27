@@ -1,8 +1,7 @@
-# Build images on release, push to GHCR, deploy via SSH
-# Requires: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY, DEPLOY_PATH
-# Optional: DEPLOY_PORT (default 80), IMAGE_TAG (defaults to release tag)
+# Build images on release and push to GHCR.
+# Deployment is handled by a separate Kubernetes workflow.
 
-name: Docker Release
+name: Build And Publish Images
 
 on:
   release:
@@ -55,35 +54,3 @@ jobs:
           tags: |
             ghcr.io/${{ steps.vars.outputs.repo }}/backend:${{ steps.vars.outputs.tag }}
             ghcr.io/${{ steps.vars.outputs.repo }}/backend:latest
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: ${{ vars.DEPLOY_ON_RELEASE == 'true' }}
-    steps:
-      - name: Deploy to server
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-        run: |
-          set -e
-          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_KEY" ]; then
-            echo "Error: DEPLOY_HOST, DEPLOY_USER, and DEPLOY_KEY must be set"
-            exit 1
-          fi
-          mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          TAG=$(echo '${{ github.ref_name }}' | tr '[:upper:]' '[:lower:]')
-          REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
-          DEPLOY_PATH="${DEPLOY_PATH:-/opt/myapp}"
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" "cd ${DEPLOY_PATH} && \
-            git pull && \
-            export IMAGE_TAG=${TAG} && \
-            export GITHUB_REPOSITORY=${REPO} && \
-            docker compose -f docker-compose.prod.yml pull && \
-            docker compose -f docker-compose.prod.yml up -d && \
-            docker image prune -f"
