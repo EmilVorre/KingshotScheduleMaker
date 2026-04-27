@@ -29,11 +29,19 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
     let data_dir = "data".to_string();
     std::fs::create_dir_all(&data_dir)?;
 
-    let accounts = persistence::load_accounts(&data_dir);
-    let forms = persistence::load_forms(&data_dir);
-    let mut current_forms = persistence::load_current_forms(&data_dir);
-    current_forms.retain(|_, code| forms.contains_key(code));
-    persistence::save_current_forms(&data_dir, &current_forms).ok();
+    // Load persistence on the blocking thread pool so sync `postgres` never runs on a
+    // Tokio worker during startup (avoids nested-runtime panics with #[tokio::main]).
+    let data_dir_load = data_dir.clone();
+    let (accounts, forms, current_forms) = tokio::task::spawn_blocking(move || {
+        let accounts = persistence::load_accounts(&data_dir_load);
+        let forms = persistence::load_forms(&data_dir_load);
+        let mut current_forms = persistence::load_current_forms(&data_dir_load);
+        current_forms.retain(|_, code| forms.contains_key(code));
+        persistence::save_current_forms(&data_dir_load, &current_forms).ok();
+        (accounts, forms, current_forms)
+    })
+    .await
+    .map_err(|e| std::io::Error::other(format!("data load join: {e}")))?;
 
     let data_dir_for_task = data_dir.clone();
     tokio::spawn(async move {
