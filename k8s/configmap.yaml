@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kingshot-config
+  namespace: kingshot
+data:
+  RUST_LOG: info
+  STORAGE_BACKEND: postgres
+  PORT: "8080"
+  API_BASE_URL: http://backend:8080

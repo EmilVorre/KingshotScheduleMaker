@@ -4,11 +4,9 @@ use actix_session::Session;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
 
 use super::admin::require_admin;
-use super::persistence::save_accounts;
+use super::persistence::{load_domain_doc, save_accounts, save_domain_doc};
 use super::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,31 +21,15 @@ pub struct AllianceApplication {
     pub submitted_at: String,
 }
 
-fn applications_path(data_dir: &str) -> std::path::PathBuf {
-    Path::new(data_dir).join("alliance_applications.json")
-}
-
 fn load_applications(data_dir: &str) -> HashMap<String, AllianceApplication> {
-    let path = applications_path(data_dir);
-    if path.exists() {
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(map) = serde_json::from_str::<HashMap<String, AllianceApplication>>(&content)
-            {
-                return map;
-            }
-        }
-    }
-    HashMap::new()
+    load_domain_doc(data_dir, "alliance_applications", "all").unwrap_or_default()
 }
 
 fn save_applications(
     data_dir: &str,
     apps: &HashMap<String, AllianceApplication>,
 ) -> std::io::Result<()> {
-    std::fs::create_dir_all(data_dir)?;
-    let content = serde_json::to_string_pretty(apps)?;
-    fs::write(applications_path(data_dir), content)?;
-    Ok(())
+    save_domain_doc(data_dir, "alliance_applications", "all", apps)
 }
 
 fn generate_id() -> String {

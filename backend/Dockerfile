@@ -16,6 +16,8 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/prep-appointments .
+COPY --from=builder /app/target/release/migrate_json_to_pg .
+COPY prep-appointments/migrations ./migrations
 RUN mkdir -p data
 
 ENV PORT=8080

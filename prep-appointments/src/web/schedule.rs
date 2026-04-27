@@ -5,10 +5,9 @@ use actix_web::{web, HttpResponse, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::path::Path;
 
 use crate::display::format_player_name;
-use crate::parser::{load_appointments, AppointmentEntry};
+use crate::parser::{load_appointments_from_submissions, AppointmentEntry};
 use crate::schedule::types::ScheduledAppointment;
 use crate::schedule::{
     calculate_time_slots, schedule_construction_day_with_locked, schedule_research_day_with_locked,
@@ -16,7 +15,8 @@ use crate::schedule::{
 };
 
 use super::persistence::{
-    get_current_form, load_schedule, load_statistics, save_schedule, save_statistics, schedule_key,
+    get_current_form, load_form_submissions, load_schedule, load_statistics, save_schedule,
+    save_statistics, schedule_key,
 };
 use super::state::{
     derive_scheduled_player_ids, get_scheduled_player_ids, AllianceStats, AppState,
@@ -48,6 +48,53 @@ fn should_link_construction_research(config: &super::state::FormConfig) -> bool 
     r_idx - c_idx == 1
 }
 
+fn load_entries_for_current_form(
+    state: &web::Data<AppState>,
+    account_name: &str,
+    server_number: u32,
+) -> (
+    Option<String>,
+    Option<super::state::FormConfig>,
+    Vec<AppointmentEntry>,
+) {
+    let current_form = {
+        let forms = state.forms.lock().unwrap();
+        let current_forms = state.current_forms.lock().unwrap();
+        get_current_form(&forms, &current_forms, account_name, server_number)
+    };
+    let Some(current_form) = current_form else {
+        return (None, None, Vec::new());
+    };
+    let form_code = current_form.code.clone();
+    let form_config = Some(current_form.config.clone());
+    let submissions = load_form_submissions(&state.data_dir, &form_code);
+    let construction_slots = form_config.as_ref().map(|config| {
+        calculate_time_slots(
+            &config.construction_times.start_time,
+            config.construction_times.end_time.as_deref(),
+        )
+    });
+    let research_slots = form_config.as_ref().map(|config| {
+        calculate_time_slots(
+            &config.research_times.start_time,
+            config.research_times.end_time.as_deref(),
+        )
+    });
+    let troops_slots = form_config.as_ref().map(|config| {
+        calculate_time_slots(
+            &config.troops_times.start_time,
+            config.troops_times.end_time.as_deref(),
+        )
+    });
+    let entries = load_appointments_from_submissions(
+        &submissions,
+        construction_slots.as_deref(),
+        research_slots.as_deref(),
+        troops_slots.as_deref(),
+    );
+    (Some(form_code), form_config, entries)
+}
+
 /// Stats endpoint
 pub async fn get_stats(
     path: web::Path<(String, u32)>,
@@ -73,26 +120,9 @@ pub async fn get_stats(
     let mut research_start_time: Option<String> = None;
     let mut troops_start_time: Option<String> = None;
 
-    // First, try to load from form submissions CSV (this is the source of truth)
-    let form_csv_path = {
-        let forms = state.forms.lock().unwrap();
-        let current_forms = state.current_forms.lock().unwrap();
-        if let Some(current_form) =
-            get_current_form(&forms, &current_forms, &account_name, server_number)
-        {
-            format!(
-                "{}/current_forms/{}_submissions.csv",
-                state.data_dir, current_form.code
-            )
-        } else {
-            format!(
-                "{}/{}_{}_form_submissions.csv",
-                state.data_dir, account_name, server_number
-            )
-        }
-    };
-
-    if Path::new(&form_csv_path).exists() {
+    let (form_code, _form_config, form_entries) =
+        load_entries_for_current_form(&state, &account_name, server_number);
+    if form_code.is_some() && !form_entries.is_empty() {
         let form_config = {
             let forms = state.forms.lock().unwrap();
             let current_forms = state.current_forms.lock().unwrap();
@@ -158,12 +188,7 @@ pub async fn get_stats(
             .map(|slots| slots.iter().map(|(s, t)| (*s, t.clone())).collect())
             .unwrap_or_default();
 
-        if let Ok(form_entries) = load_appointments(
-            &form_csv_path,
-            construction_slots.as_ref().map(|v| v.as_slice()),
-            research_slots.as_ref().map(|v| v.as_slice()),
-            troops_slots.as_ref().map(|v| v.as_slice()),
-        ) {
+        {
             for entry in form_entries {
                 let stats = alliance_counts
                     .entry(entry.alliance.clone())
@@ -536,27 +561,10 @@ async fn get_schedule_inner(
     let schedule = if let Some(s) = schedule_opt {
         s
     } else {
-        let form_csv_path = {
-            let forms = state.forms.lock().unwrap();
-            let current_forms = state.current_forms.lock().unwrap();
-            if let Some(current_form) =
-                get_current_form(&forms, &current_forms, &account_name, server_number)
-            {
-                format!(
-                    "{}/current_forms/{}_submissions.csv",
-                    state.data_dir, current_form.code
-                )
-            } else {
-                format!(
-                    "{}/{}_{}_form_submissions.csv",
-                    state.data_dir, account_name, server_number
-                )
-            }
-        };
-
-        if Path::new(&form_csv_path).exists() {
-            let config_for_loading = form_config.clone();
-            let (construction_slots, research_slots, troops_slots) =
+        let (_form_code, config_for_loading, entries) =
+            load_entries_for_current_form(&state, account_name, server_number);
+        if !entries.is_empty() {
+            let (construction_slots, _research_slots, _troops_slots) =
                 if let Some(config) = &config_for_loading {
                     (
                         Some(calculate_time_slots(
@@ -576,76 +584,64 @@ async fn get_schedule_inner(
                     (None, None, None)
                 };
 
-            if let Ok(entries) = load_appointments(
-                &form_csv_path,
-                construction_slots.as_ref().map(|v| v.as_slice()),
-                research_slots.as_ref().map(|v| v.as_slice()),
-                troops_slots.as_ref().map(|v| v.as_slice()),
+            let last_slot_override = construction_slots
+                .as_ref()
+                .and_then(|slots| slots.iter().map(|(s, _)| *s).max());
+            let construction_schedule = schedule_construction_day_with_locked(
+                &entries,
+                &HashSet::new(),
+                last_slot_override,
+                None,
+            );
+            let research_schedule = schedule_research_day_with_locked(
+                &entries,
+                &construction_schedule,
+                &HashSet::new(),
+                true,
+            );
+            let troops_schedule = schedule_troops_day(&entries);
+
+            let scheduled_ids: Vec<String> = {
+                let mut ids = HashSet::new();
+                for appt in construction_schedule.appointments.values() {
+                    ids.insert(appt.player_id.clone());
+                }
+                for appt in research_schedule.appointments.values() {
+                    ids.insert(appt.player_id.clone());
+                }
+                for appt in troops_schedule.appointments.values() {
+                    ids.insert(appt.player_id.clone());
+                }
+                ids.into_iter().collect()
+            };
+            let schedule_data = ScheduleData {
+                construction_schedule: Some(construction_schedule.clone()),
+                research_schedule: Some(research_schedule.clone()),
+                troops_schedule: Some(troops_schedule.clone()),
+                entries: Some(entries.clone()),
+                scheduled_player_ids: Some(scheduled_ids),
+            };
+
+            let mut schedules = state.schedules.lock().unwrap();
+            schedules.insert(key.clone(), schedule_data.clone());
+            drop(schedules);
+
+            if let Err(e) = save_schedule(
+                &state.data_dir,
+                &account_name,
+                server_number,
+                &schedule_data,
             ) {
-                let last_slot_override = construction_slots
-                    .as_ref()
-                    .and_then(|slots| slots.iter().map(|(s, _)| *s).max());
-                let construction_schedule = schedule_construction_day_with_locked(
-                    &entries,
-                    &HashSet::new(),
-                    last_slot_override,
-                    None,
-                );
-                let research_schedule = schedule_research_day_with_locked(
-                    &entries,
-                    &construction_schedule,
-                    &HashSet::new(),
-                    true,
-                );
-                let troops_schedule = schedule_troops_day(&entries);
+                eprintln!("Warning: Failed to save schedule to disk: {}", e);
+            }
 
-                let scheduled_ids: Vec<String> = {
-                    let mut ids = HashSet::new();
-                    for appt in construction_schedule.appointments.values() {
-                        ids.insert(appt.player_id.clone());
-                    }
-                    for appt in research_schedule.appointments.values() {
-                        ids.insert(appt.player_id.clone());
-                    }
-                    for appt in troops_schedule.appointments.values() {
-                        ids.insert(appt.player_id.clone());
-                    }
-                    ids.into_iter().collect()
-                };
-                let schedule_data = ScheduleData {
-                    construction_schedule: Some(construction_schedule.clone()),
-                    research_schedule: Some(research_schedule.clone()),
-                    troops_schedule: Some(troops_schedule.clone()),
-                    entries: Some(entries.clone()),
-                    scheduled_player_ids: Some(scheduled_ids),
-                };
-
-                let mut schedules = state.schedules.lock().unwrap();
-                schedules.insert(key.clone(), schedule_data.clone());
-                drop(schedules);
-
-                if let Err(e) = save_schedule(
-                    &state.data_dir,
-                    &account_name,
-                    server_number,
-                    &schedule_data,
-                ) {
-                    eprintln!("Warning: Failed to save schedule to disk: {}", e);
-                }
-
-                match day_str {
-                    "construction" => construction_schedule,
-                    "research" => research_schedule,
-                    "troops" => troops_schedule,
-                    _ => {
-                        return Ok(HttpResponse::BadRequest()
-                            .json(serde_json::json!({"error": "Invalid day"})))
-                    }
-                }
-            } else {
-                DaySchedule {
-                    appointments: HashMap::new(),
-                    unassigned: Vec::new(),
+            match day_str {
+                "construction" => construction_schedule,
+                "research" => research_schedule,
+                "troops" => troops_schedule,
+                _ => {
+                    return Ok(HttpResponse::BadRequest()
+                        .json(serde_json::json!({"error": "Invalid day"})))
                 }
             }
         } else {
@@ -734,30 +730,8 @@ pub async fn generate_schedule_api(
     let account_name = account_name.to_lowercase();
     let key = schedule_key(&account_name, server_number);
 
-    let (form_csv_path, form_config, form_code) = {
-        let forms = state.forms.lock().unwrap();
-        let current_forms = state.current_forms.lock().unwrap();
-        if let Some(current_form) =
-            get_current_form(&forms, &current_forms, &account_name, server_number)
-        {
-            let csv_path = format!(
-                "{}/current_forms/{}_submissions.csv",
-                state.data_dir,
-                current_form.code.clone()
-            );
-            (
-                csv_path,
-                Some(current_form.config.clone()),
-                Some(current_form.code.clone()),
-            )
-        } else {
-            let csv_path = format!(
-                "{}/{}_{}_form_submissions.csv",
-                state.data_dir, account_name, server_number
-            );
-            (csv_path, None, None)
-        }
-    };
+    let (form_code, form_config, entries_from_submissions) =
+        load_entries_for_current_form(&state, &account_name, server_number);
 
     if form_code.is_none() {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
@@ -766,7 +740,7 @@ pub async fn generate_schedule_api(
         })));
     }
 
-    if !Path::new(&form_csv_path).exists() {
+    if entries_from_submissions.is_empty() {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
             "success": false,
             "error": "No form submissions found. Please create a form and have players submit responses first."
@@ -794,20 +768,7 @@ pub async fn generate_schedule_api(
             (None, None, None, true)
         };
 
-    let entries = match load_appointments(
-        &form_csv_path,
-        construction_slots.as_ref().map(|v| v.as_slice()),
-        research_slots.as_ref().map(|v| v.as_slice()),
-        troops_slots.as_ref().map(|v| v.as_slice()),
-    ) {
-        Ok(e) => e,
-        Err(e) => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "success": false,
-                "error": format!("Failed to load form submissions: {}", e)
-            })));
-        }
-    };
+    let entries = entries_from_submissions;
 
     if entries.is_empty() {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({

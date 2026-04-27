@@ -23,11 +23,10 @@ Starts the Vite dev server on port 5173. Proxy is configured to forward API requ
 npm run build
 ```
 
-Builds the app and outputs to `../prep-appointments/static/dist/`. The backend serves this when running in production.
+Builds static assets into `frontend/dist/` for the frontend container/static host.
 
 ## Production
 
 1. Run `npm run build` in the frontend folder
-2. Start the backend - it will serve the React app from `static/dist/`
-
-If the build doesn't exist, the backend falls back to the legacy Vue templates.
+2. Serve `frontend/dist/` with the frontend container or your web server
+3. Run the Rust backend separately for API routes

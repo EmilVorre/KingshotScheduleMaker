@@ -49,12 +49,8 @@ cargo run web 3000
 
 **Development (hot reload):** Run `npm run dev` from project root to start both backend and Vite. Open **http://localhost:5173** — frontend changes hot-reload instantly without rebuilding.
 
-Then access (port 5173 in dev, 8080 in prod):
-- Home: http://localhost:8080
-- Create Account: http://localhost:8080/create-account
-- Dashboard: http://localhost:8080/dashboard/{account_name} (after login)
-- Public Form: http://localhost:8080/form/{form_code}
-- Legacy Admin Panel: http://localhost:8080/{account_name}/{server}/admin (for CSV upload)
+Frontend routes are served by the React app (Vite in dev, frontend container in prod).
+The Rust service on port 8080 exposes backend APIs consumed by the frontend.
 
 ## Main Workflow
 
@@ -100,10 +96,8 @@ To deploy to name.com hosting:
    cargo build --release
    ```
 
-2. Upload the binary and required files:
+2. Upload the binary:
    - `target/release/prep-appointments.exe` (or binary for your server OS)
-   - `templates/` directory
-   - `static/` directory
 
 3. Set up data directory structure:
    ```bash
@@ -135,13 +129,6 @@ prep-appointments/
 │       ├── construction.rs # Construction day scheduler
 │       ├── research.rs   # Research day scheduler
 │       └── troops.rs     # Troops training day scheduler
-├── templates/            # HTML templates
-│   ├── index.html
-│   ├── admin.html
-│   ├── stats.html
-│   └── schedules.html
-├── static/               # Static assets
-│   └── style.css
 └── Cargo.toml
 ```
 
@@ -157,9 +144,16 @@ prep-appointments/
   - **`research.rs`**: Specialized logic for Research Day (handles locked slot 1 from Construction Day)
   - **`troops.rs`**: Simple wrapper for Troops Training Day scheduling
 - **`display.rs`**: Handles all output formatting, including terminal display and file writing
-- **`web.rs`**: Web server implementation using Actix-web, handles API endpoints and serves HTML pages
+- **`web.rs`**: Web server implementation using Actix-web, handles API endpoints
 
 ## Security Note
 
 **Important**: The system uses session-based authentication. Each account has its own password. Make sure to use strong passwords for production deployments.
+
+## Postgres + k3s migration assets
+
+- SQL schema migration: `prep-appointments/migrations/0001_init.sql`
+- Data migration binary: `cargo run --bin migrate_json_to_pg --manifest-path prep-appointments/Cargo.toml`
+- k3s manifests: `k8s/`
+- Cutover runbook: `prep-appointments/docs/K3S_POSTGRES_CUTOVER.md`
 

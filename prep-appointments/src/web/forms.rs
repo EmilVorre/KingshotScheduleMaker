@@ -3,17 +3,15 @@
 use actix_session::Session;
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use std::collections::HashMap;
-use std::path::Path;
 
-use crate::form::{
-    export_submission_to_csv, validate_submission, FormSubmission, FormSubmissionRequest,
-};
+use crate::form::{validate_submission, FormSubmission, FormSubmissionRequest};
 use crate::kingshot_api;
-use crate::parser::{has_player_submitted, load_appointments};
+use crate::parser::load_appointments_from_submissions;
 
 use super::persistence::{
-    archive_old_forms, generate_form_code, get_current_form, list_old_forms, reopen_old_form,
-    save_current_forms, save_form,
+    archive_old_forms, count_form_submissions, generate_form_code, get_current_form,
+    has_player_submission, list_old_forms, load_form_submissions, reopen_old_form,
+    save_current_forms, save_form, save_form_submission,
 };
 use super::state::{
     AppState, CreateFormRequest, FormConfig, FormData, FormStatsResponse, FormTimeSlotStats,
@@ -85,27 +83,7 @@ pub async fn submit_form_by_code(
         suggestions: req.suggestions.clone(),
     };
 
-    let current_forms_dir = format!("{}/current_forms", state.data_dir);
-    std::fs::create_dir_all(&current_forms_dir)?;
-    let csv_path = format!("{}/{}_submissions.csv", current_forms_dir, code);
-    let csv_path = Path::new(&csv_path);
-
-    if let Err(e) = export_submission_to_csv(
-        &submission,
-        csv_path,
-        (
-            &config.construction_times.start_time,
-            config.construction_times.end_time.as_deref(),
-        ),
-        (
-            &config.research_times.start_time,
-            config.research_times.end_time.as_deref(),
-        ),
-        (
-            &config.troops_times.start_time,
-            config.troops_times.end_time.as_deref(),
-        ),
-    ) {
+    if let Err(e) = save_form_submission(&state.data_dir, &code, &submission) {
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "error": format!("Failed to save submission: {}", e)
@@ -198,29 +176,7 @@ pub async fn create_form(
         let forms = state.forms.lock().unwrap();
         let in_memory = forms.contains_key(&code);
         drop(forms);
-
-        let current_forms_file = format!("{}/current_forms/{}.json", state.data_dir, code);
-        let file_exists = Path::new(&current_forms_file).exists();
-
-        let old_forms_dir = format!("{}/old_forms", state.data_dir);
-        let mut old_file_exists = false;
-        if Path::new(&old_forms_dir).exists() {
-            if let Ok(entries) = std::fs::read_dir(&old_forms_dir) {
-                for entry in entries.flatten() {
-                    if let Ok(entry_path) = entry.path().canonicalize() {
-                        if entry_path.is_dir() {
-                            let old_form_file = entry_path.join(format!("{}.json", code));
-                            if old_form_file.exists() {
-                                old_file_exists = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if !in_memory && !file_exists && !old_file_exists {
+        if !in_memory {
             break;
         }
 
@@ -407,17 +363,14 @@ pub async fn check_submission_by_code(
     let forms = state.forms.lock().unwrap();
     let form_data = forms.get(&code).cloned();
     drop(forms);
-    let csv_path = if let Some(fd) = form_data {
-        format!(
-            "{}/current_forms/{}_submissions.csv",
-            state.data_dir, fd.code
-        )
+    let form_code = if let Some(fd) = form_data {
+        fd.code
     } else {
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "has_submitted": false
         })));
     };
-    let has_submitted = has_player_submitted(&csv_path, player_id);
+    let has_submitted = has_player_submission(&state.data_dir, &form_code, player_id);
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "has_submitted": has_submitted
     })))
@@ -508,9 +461,6 @@ pub async fn get_form_stats_by_code(
         })));
     };
 
-    let current_forms_dir = format!("{}/current_forms", state.data_dir);
-    let csv_path = format!("{}/{}_submissions.csv", current_forms_dir, code);
-
     let construction_slots = calculate_time_slots(
         &config.construction_times.start_time,
         config.construction_times.end_time.as_deref(),
@@ -528,28 +478,13 @@ pub async fn get_form_stats_by_code(
     let research_slots_ref: Vec<(u8, String)> = research_slots.clone();
     let troops_slots_ref: Vec<(u8, String)> = troops_slots.clone();
 
-    let entries = match load_appointments(
-        &csv_path,
+    let submissions = load_form_submissions(&state.data_dir, &code);
+    let entries = load_appointments_from_submissions(
+        &submissions,
         Some(&construction_slots_ref),
         Some(&research_slots_ref),
         Some(&troops_slots_ref),
-    ) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!(
-                "Error loading form submissions CSV from {}: {}",
-                csv_path, e
-            );
-            return Ok(HttpResponse::Ok().json(FormStatsResponse {
-                construction_start_time: "00:00".to_string(),
-                research_start_time: "00:00".to_string(),
-                troops_start_time: "00:00".to_string(),
-                construction_time_slot_popularity: HashMap::new(),
-                research_time_slot_popularity: HashMap::new(),
-                troops_time_slot_popularity: HashMap::new(),
-            }));
-        }
-    };
+    );
 
     let mut construction_time_slot_popularity: HashMap<String, FormTimeSlotStats> = HashMap::new();
     for (_, time) in &construction_slots {
@@ -660,19 +595,7 @@ pub async fn get_current_form_info(
 
     if let Some(form) = current_form {
         let form_url = format!("/form/{}", form.code);
-        let form_csv_path = format!(
-            "{}/current_forms/{}_submissions.csv",
-            state.data_dir, form.code
-        );
-        let submissions_count = if Path::new(&form_csv_path).exists() {
-            if let Ok(content) = std::fs::read_to_string(&form_csv_path) {
-                content.lines().filter(|l| l.contains('/')).count()
-            } else {
-                0
-            }
-        } else {
-            0
-        };
+        let submissions_count = count_form_submissions(&state.data_dir, &form.code);
 
         Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
@@ -905,13 +828,10 @@ pub async fn get_player_by_id(
 
     let forms = state.forms.lock().unwrap();
     let current_forms = state.current_forms.lock().unwrap();
-    let csv_path = if let Some(current_form) =
+    let form_code = if let Some(current_form) =
         get_current_form(&forms, &current_forms, &url_account_name, server_number)
     {
-        format!(
-            "{}/current_forms/{}_submissions.csv",
-            state.data_dir, current_form.code
-        )
+        current_form.code
     } else {
         drop(forms);
         drop(current_forms);
@@ -923,29 +843,14 @@ pub async fn get_player_by_id(
     drop(forms);
     drop(current_forms);
 
-    if !Path::new(&csv_path).exists() {
-        return Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "success": false,
-            "error": "Form submissions not found"
-        })));
-    }
+    let submissions = load_form_submissions(&state.data_dir, &form_code);
 
-    let entries = match load_appointments(&csv_path, None, None, None) {
-        Ok(e) => e,
-        Err(_) => {
-            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                "success": false,
-                "error": "Failed to load form submissions"
-            })));
-        }
-    };
-
-    if let Some(entry) = entries.iter().find(|e| e.player_id == player_id) {
+    if let Some(entry) = submissions.iter().find(|e| e.player_id == player_id) {
         Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
             "player": {
                 "player_id": entry.player_id,
-                "name": entry.name,
+                "name": entry.character_name,
                 "alliance": entry.alliance
             }
         })))
@@ -1008,70 +913,110 @@ pub async fn download_form_csv(
 
     let forms = state.forms.lock().unwrap();
     let current_forms = state.current_forms.lock().unwrap();
-    let mut current_form =
-        get_current_form(&forms, &current_forms, &url_account_name, server_number);
+    let current_form = get_current_form(&forms, &current_forms, &url_account_name, server_number);
     drop(forms);
     drop(current_forms);
 
-    if current_form.is_none() {
-        let current_forms_dir = format!("{}/current_forms", state.data_dir);
-        if let Ok(entries) = std::fs::read_dir(&current_forms_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                        if file_name.contains("_submissions") {
-                            continue;
-                        }
-                        if let Ok(content) = std::fs::read_to_string(&path) {
-                            if let Ok(mut form_data) = serde_json::from_str::<FormData>(&content) {
-                                let form_account_name = form_data.account_name.to_lowercase();
-                                if form_account_name == url_account_name
-                                    && form_data.server_number == server_number
-                                {
-                                    form_data.account_name = form_account_name;
-                                    current_form = Some(form_data);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if let Some(form) = current_form {
-        let csv_path = format!(
-            "{}/current_forms/{}_submissions.csv",
-            state.data_dir, form.code
-        );
-        if Path::new(&csv_path).exists() {
-            if let Ok(csv_content) = std::fs::read_to_string(&csv_path) {
-                let filename = format!(
-                    "{}_submissions_{}.csv",
-                    form.code,
-                    chrono::Utc::now().format("%Y%m%d_%H%M%S")
-                );
-                return Ok(HttpResponse::Ok()
-                    .content_type("text/csv")
-                    .append_header((
-                        "Content-Disposition",
-                        format!("attachment; filename=\"{}\"", filename),
-                    ))
-                    .body(csv_content));
-            }
-        }
-        return Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "success": false,
-            "error": "CSV file not found"
-        })));
-    } else {
+    let Some(form) = current_form else {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "success": false,
             "error": "No current form found"
         })));
+    };
+
+    let submissions = load_form_submissions(&state.data_dir, &form.code);
+    if submissions.is_empty() {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "success": false,
+            "error": "No submissions found"
+        })));
     }
+
+    let mut writer = csv::Writer::from_writer(Vec::<u8>::new());
+    writer
+        .write_record([
+            "timestamp",
+            "alliance",
+            "custom_alliance",
+            "character_name",
+            "player_id",
+            "submission_type",
+            "wants_construction",
+            "construction_speedups",
+            "construction_truegold",
+            "construction_tempered_truegold",
+            "construction_time_slots",
+            "wants_research",
+            "research_speedups",
+            "research_truegold_dust",
+            "research_time_slots",
+            "wants_troops",
+            "troops_speedups",
+            "troops_time_slots",
+            "additional_notes",
+            "suggestions",
+        ])
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("CSV write failed: {}", e))
+        })?;
+    for s in submissions {
+        writer
+            .write_record([
+                s.timestamp,
+                s.alliance,
+                s.custom_alliance.unwrap_or_default(),
+                s.character_name,
+                s.player_id,
+                s.submission_type,
+                s.wants_construction.to_string(),
+                s.construction_speedups.unwrap_or(0).to_string(),
+                s.construction_truegold.unwrap_or(0).to_string(),
+                s.construction_tempered_truegold.unwrap_or(0).to_string(),
+                s.construction_time_slots
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                s.wants_research.to_string(),
+                s.research_speedups.unwrap_or(0).to_string(),
+                s.research_truegold_dust.unwrap_or(0).to_string(),
+                s.research_time_slots
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                s.wants_troops.to_string(),
+                s.troops_speedups.unwrap_or(0).to_string(),
+                s.troops_time_slots
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                s.additional_notes.unwrap_or_default(),
+                s.suggestions.unwrap_or_default(),
+            ])
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("CSV write failed: {}", e))
+            })?;
+    }
+    let bytes = writer.into_inner().map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("CSV finalize failed: {}", e))
+    })?;
+    let csv_content = String::from_utf8(bytes).map_err(|e| {
+        actix_web::error::ErrorInternalServerError(format!("CSV encoding failed: {}", e))
+    })?;
+    let filename = format!(
+        "{}_submissions_{}.csv",
+        form.code,
+        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    );
+    Ok(HttpResponse::Ok()
+        .content_type("text/csv")
+        .append_header((
+            "Content-Disposition",
+            format!("attachment; filename=\"{}\"", filename),
+        ))
+        .body(csv_content))
 }
 
 /// Get previous form config (admin)
@@ -1192,49 +1137,38 @@ pub async fn get_form_submissions(
     }
 
     let current_form = current_form.unwrap();
-    let form_csv_path = format!(
-        "{}/current_forms/{}_submissions.csv",
-        state.data_dir, current_form.code
-    );
-
-    if !Path::new(&form_csv_path).exists() {
+    let submissions = load_form_submissions(&state.data_dir, &current_form.code);
+    if submissions.is_empty() {
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
             "submissions": []
         })));
     }
 
-    let mut reader = csv::Reader::from_path(&form_csv_path).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to read CSV: {}", e))
-    })?;
-
-    let headers = reader
-        .headers()
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to read CSV headers: {}", e))
-        })?
-        .clone();
-
     let mut submissions = Vec::new();
-    for result in reader.records() {
-        let record = result.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to parse CSV record: {}", e))
-        })?;
-
-        let first_field = record.get(0).unwrap_or("");
-        if !first_field.contains('/') || first_field.len() < 8 {
-            continue;
-        }
-
-        let mut submission = serde_json::Map::new();
-        for (i, field) in record.iter().enumerate() {
-            let header = headers
-                .get(i)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("field_{}", i));
-            submission.insert(header, serde_json::Value::String(field.to_string()));
-        }
-        submissions.push(serde_json::Value::Object(submission));
+    for s in load_form_submissions(&state.data_dir, &current_form.code) {
+        submissions.push(serde_json::json!({
+            "timestamp": s.timestamp,
+            "alliance": s.alliance,
+            "custom_alliance": s.custom_alliance,
+            "character_name": s.character_name,
+            "player_id": s.player_id,
+            "submission_type": s.submission_type,
+            "wants_construction": s.wants_construction,
+            "construction_speedups": s.construction_speedups,
+            "construction_truegold": s.construction_truegold,
+            "construction_tempered_truegold": s.construction_tempered_truegold,
+            "construction_time_slots": s.construction_time_slots,
+            "wants_research": s.wants_research,
+            "research_speedups": s.research_speedups,
+            "research_truegold_dust": s.research_truegold_dust,
+            "research_time_slots": s.research_time_slots,
+            "wants_troops": s.wants_troops,
+            "troops_speedups": s.troops_speedups,
+            "troops_time_slots": s.troops_time_slots,
+            "additional_notes": s.additional_notes,
+            "suggestions": s.suggestions
+        }));
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({

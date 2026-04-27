@@ -166,13 +166,21 @@ pub async fn account_upload(
     }
     drop(accounts);
 
-    std::fs::create_dir_all(&state.data_dir)?;
-    let csv_path = format!("{}/{}_{}.csv", state.data_dir, account_name, server_number);
+    let csv_path = {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "ks_upload_{}_{}_{}.csv",
+            account_name,
+            server_number,
+            uuid::Uuid::new_v4()
+        ));
+        p
+    };
     std::fs::write(&csv_path, &body).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save file: {}", e))
+        actix_web::error::ErrorInternalServerError(format!("Failed to buffer upload: {}", e))
     })?;
 
-    match load_appointments(&csv_path, None, None, None) {
+    let result = match load_appointments(&csv_path, None, None, None) {
         Ok(entries) => {
             let construction_schedule = schedule_construction_day(&entries);
             let research_schedule = schedule_research_day(&entries, &construction_schedule);
@@ -213,7 +221,9 @@ pub async fn account_upload(
             "success": false,
             "error": format!("Failed to process CSV: {}", e)
         }))),
-    }
+    };
+    let _ = std::fs::remove_file(&csv_path);
+    result
 }
 
 /// Login endpoint (uses account name + password, sets session cookie)

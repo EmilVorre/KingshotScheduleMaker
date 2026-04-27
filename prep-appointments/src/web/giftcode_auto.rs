@@ -1,7 +1,5 @@
 //! Background task: automatically fetch and redeem gift codes for all accounts with recipients.
 
-use std::fs;
-use std::path::Path;
 use std::time::Duration;
 
 use crate::giftcode_api;
@@ -11,33 +9,7 @@ use super::giftcode_recipients;
 
 /// Run one cycle: fetch codes, redeem for each account with recipients, skip already-redeemed codes.
 pub async fn run_auto_redeem_cycle(data_dir: &str) {
-    let recipients_dir = Path::new(data_dir).join("giftcode_recipients");
-    if !recipients_dir.exists() {
-        return;
-    }
-
-    let entries = match fs::read_dir(&recipients_dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-
-    let mut account_servers: Vec<(String, u32)> = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().map_or(true, |e| e != "json") {
-            continue;
-        }
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-        if let Some((account, server_str)) = stem.split_once('_') {
-            if let Ok(server) = server_str.parse::<u32>() {
-                let player_ids =
-                    giftcode_recipients::load_recipients_internal(data_dir, account, server);
-                if !player_ids.is_empty() {
-                    account_servers.push((account.to_lowercase(), server));
-                }
-            }
-        }
-    }
+    let account_servers = giftcode_recipients::list_accounts_with_recipients(data_dir);
 
     if account_servers.is_empty() {
         return;

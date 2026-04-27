@@ -3,11 +3,10 @@
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
 use std::time::Duration;
 
 use super::alliance_invites;
+use super::persistence::{delete_domain_doc, load_domain_doc, save_domain_doc};
 use super::state::AppState;
 use crate::kingshot_api::{self, stove_lv_to_label};
 
@@ -30,10 +29,8 @@ pub fn alliance_to_slug(name: &str) -> String {
         .collect()
 }
 
-fn alliances_dir(data_dir: &str, account: &str, server: u32) -> std::path::PathBuf {
-    std::path::Path::new(data_dir)
-        .join("alliances")
-        .join(format!("{}_{}", account.to_lowercase(), server))
+fn alliance_doc_key(account: &str, server: u32, slug: &str) -> String {
+    format!("{}_{}_{}", account.to_lowercase(), server, slug)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,18 +55,25 @@ struct AllianceFile {
     players: Vec<AlliancePlayer>,
 }
 
-fn load_alliance_file(path: &Path) -> Option<AllianceFile> {
-    let content = fs::read_to_string(path).ok()?;
-    serde_json::from_str(&content).ok()
+fn load_alliance_file(
+    data_dir: &str,
+    account: &str,
+    server: u32,
+    slug: &str,
+) -> Option<AllianceFile> {
+    let key = alliance_doc_key(account, server, slug);
+    load_domain_doc(data_dir, "alliances", &key)
 }
 
-fn save_alliance_file(path: &Path, data: &AllianceFile) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let json = serde_json::to_string_pretty(data)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    fs::write(path, json)
+fn save_alliance_file(
+    data_dir: &str,
+    account: &str,
+    server: u32,
+    slug: &str,
+    data: &AllianceFile,
+) -> std::io::Result<()> {
+    let key = alliance_doc_key(account, server, slug);
+    save_domain_doc(data_dir, "alliances", &key, data)
 }
 
 /// List alliances: own + accepted invites
@@ -102,15 +106,12 @@ pub async fn list_alliances(
 
     if !alliance_name.is_empty() {
         let slug = alliance_to_slug(&alliance_name);
-        let dir = alliances_dir(&state.data_dir, &session_account, server);
-        let file_path = dir.join(format!("{}.json", slug));
-        let (players, file_alliance_id) = if file_path.exists() {
-            load_alliance_file(&file_path)
-                .map(|f| (f.players, f.alliance_id))
-                .unwrap_or_else(|| (vec![], None))
-        } else {
-            (vec![], None)
-        };
+        let (players, file_alliance_id) =
+            if let Some(f) = load_alliance_file(&state.data_dir, &session_account, server, &slug) {
+                (f.players, f.alliance_id)
+            } else {
+                (vec![], None)
+            };
         let aid = file_alliance_id.unwrap_or_else(|| alliance_id.clone());
         alliances.push(serde_json::json!({
             "name": alliance_name,
@@ -127,14 +128,17 @@ pub async fn list_alliances(
     // Invited alliances (accepted)
     let invites = alliance_invites::load_invites_for_user(&state, &session_account);
     for inv in invites {
-        let dir = alliances_dir(&state.data_dir, &inv.from_account, inv.from_server);
-        let file_path = dir.join(format!("{}.json", inv.alliance_slug));
-        if !file_path.exists() {
+        let (players, file_alliance_id) = load_alliance_file(
+            &state.data_dir,
+            &inv.from_account,
+            inv.from_server,
+            &inv.alliance_slug,
+        )
+        .map(|f| (f.players, f.alliance_id))
+        .unwrap_or_else(|| (vec![], None));
+        if players.is_empty() && file_alliance_id.is_none() {
             continue;
         }
-        let (players, file_alliance_id) = load_alliance_file(&file_path)
-            .map(|f| (f.players, f.alliance_id))
-            .unwrap_or_else(|| (vec![], None));
         let aid = file_alliance_id.unwrap_or_default();
         let accounts = state.accounts.lock().unwrap();
         let tag = accounts
@@ -180,7 +184,7 @@ pub async fn add_player(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
 
-    let (session_account, _) =
+    let (_session_account, _) =
         match auth_check_for_alliance_edit(&session, &state, &url_account, server) {
             Ok(v) => v,
             Err(resp) => return Ok(resp),
@@ -229,22 +233,12 @@ pub async fn add_player(
         }
     };
 
-    let dir = alliances_dir(&state.data_dir, &url_account, server);
-    let file_path = dir.join(format!("{}.json", slug));
-
-    let mut data = if file_path.exists() {
-        load_alliance_file(&file_path).unwrap_or(AllianceFile {
+    let mut data =
+        load_alliance_file(&state.data_dir, &url_account, server, &slug).unwrap_or(AllianceFile {
             alliance_name: alliance_name.clone(),
             alliance_id: Some(alliance_id.clone()),
             players: vec![],
-        })
-    } else {
-        AllianceFile {
-            alliance_name: alliance_name.clone(),
-            alliance_id: Some(alliance_id.clone()),
-            players: vec![],
-        }
-    };
+        });
 
     if data.alliance_id.is_none() {
         data.alliance_id = Some(alliance_id);
@@ -267,7 +261,7 @@ pub async fn add_player(
         added_at,
     });
 
-    save_alliance_file(&file_path, &data).map_err(|e| {
+    save_alliance_file(&state.data_dir, &url_account, server, &slug, &data).map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
     })?;
 
@@ -312,18 +306,14 @@ pub async fn remove_player(
         })));
     }
 
-    let dir = alliances_dir(&state.data_dir, &url_account, server);
-    let file_path = dir.join(format!("{}.json", alliance_slug));
-
-    if !file_path.exists() {
+    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &alliance_slug);
+    if data.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "success": false,
             "error": "Alliance not found"
         })));
     }
-
-    let mut data = load_alliance_file(&file_path)
-        .ok_or_else(|| actix_web::error::ErrorNotFound("Alliance file corrupted"))?;
+    let mut data = data.take().unwrap();
 
     let to_remove = if player_id_or_name.chars().all(|c| c.is_ascii_digit()) {
         data.players
@@ -351,11 +341,12 @@ pub async fn remove_player(
     data.players.retain(|p| p.player_id != player_id);
 
     if data.players.is_empty() {
-        fs::remove_file(&file_path).ok();
+        let key = alliance_doc_key(&url_account, server, &alliance_slug);
+        delete_domain_doc(&state.data_dir, "alliances", &key).ok();
     } else {
-        save_alliance_file(&file_path, &data).map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-        })?;
+        save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(
+            |e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)),
+        )?;
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -391,18 +382,14 @@ pub async fn refresh_names(
         })));
     }
 
-    let dir = alliances_dir(&state.data_dir, &url_account, server);
-    let file_path = dir.join(format!("{}.json", alliance_slug));
-
-    if !file_path.exists() {
+    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &alliance_slug);
+    if data.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "success": false,
             "error": "Alliance not found"
         })));
     }
-
-    let mut data = load_alliance_file(&file_path)
-        .ok_or_else(|| actix_web::error::ErrorNotFound("Alliance file corrupted"))?;
+    let mut data = data.take().unwrap();
 
     let mut updated = 0u32;
     for player in &mut data.players {
@@ -419,9 +406,9 @@ pub async fn refresh_names(
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    save_alliance_file(&file_path, &data).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(
+        |e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)),
+    )?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,

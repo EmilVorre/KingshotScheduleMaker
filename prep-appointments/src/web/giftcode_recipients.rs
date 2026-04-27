@@ -4,14 +4,13 @@
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
 use std::time::Duration;
 
 use crate::giftcode_api;
 use crate::kingshot_api;
 
 use super::alliance_invites;
+use super::persistence::{list_domain_docs, load_domain_doc, save_domain_doc};
 use super::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,18 +23,12 @@ struct RedeemedCodesFile {
     redeemed_codes: Vec<String>,
 }
 
-fn recipients_path(data_dir: &str, account: &str, server: u32) -> std::path::PathBuf {
-    Path::new(data_dir)
-        .join("giftcode_recipients")
-        .join(format!("{}_{}.json", account.to_lowercase(), server))
+fn recipients_key(account: &str, server: u32) -> String {
+    format!("{}_{}", account.to_lowercase(), server)
 }
 
-fn redeemed_path(data_dir: &str, account: &str, server: u32) -> std::path::PathBuf {
-    Path::new(data_dir).join("giftcode_redeemed").join(format!(
-        "{}_{}.json",
-        account.to_lowercase(),
-        server
-    ))
+fn redeemed_key(account: &str, server: u32) -> String {
+    format!("{}_{}", account.to_lowercase(), server)
 }
 
 pub(crate) fn load_redeemed_internal(
@@ -43,15 +36,10 @@ pub(crate) fn load_redeemed_internal(
     account: &str,
     server: u32,
 ) -> std::collections::HashSet<String> {
-    let path = redeemed_path(data_dir, account, server);
-    if path.exists() {
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(data) = serde_json::from_str::<RedeemedCodesFile>(&content) {
-                return data.redeemed_codes.into_iter().collect();
-            }
-        }
-    }
-    std::collections::HashSet::new()
+    let key = redeemed_key(account, server);
+    load_domain_doc::<RedeemedCodesFile>(data_dir, "giftcode_redeemed", &key)
+        .map(|d| d.redeemed_codes.into_iter().collect())
+        .unwrap_or_default()
 }
 
 pub(crate) fn add_redeemed_code_internal(
@@ -60,7 +48,6 @@ pub(crate) fn add_redeemed_code_internal(
     server: u32,
     code: &str,
 ) -> std::io::Result<()> {
-    let path = redeemed_path(data_dir, account, server);
     let mut codes = load_redeemed_internal(data_dir, account, server);
     let code_clean = code.trim().to_uppercase();
     if code_clean.is_empty() {
@@ -70,23 +57,15 @@ pub(crate) fn add_redeemed_code_internal(
     let data = RedeemedCodesFile {
         redeemed_codes: codes.into_iter().collect(),
     };
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let content = serde_json::to_string_pretty(&data)?;
-    fs::write(path, content)
+    let key = redeemed_key(account, server);
+    save_domain_doc(data_dir, "giftcode_redeemed", &key, &data)
 }
 
 pub(crate) fn load_recipients_internal(data_dir: &str, account: &str, server: u32) -> Vec<String> {
-    let path = recipients_path(data_dir, account, server);
-    if path.exists() {
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(data) = serde_json::from_str::<GiftcodeRecipientsFile>(&content) {
-                return data.player_ids;
-            }
-        }
-    }
-    Vec::new()
+    let key = recipients_key(account, server);
+    load_domain_doc::<GiftcodeRecipientsFile>(data_dir, "giftcode_recipients", &key)
+        .map(|d| d.player_ids)
+        .unwrap_or_default()
 }
 
 fn load_recipients(data_dir: &str, account: &str, server: u32) -> Vec<String> {
@@ -99,15 +78,25 @@ fn save_recipients(
     server: u32,
     player_ids: &[String],
 ) -> std::io::Result<()> {
-    let path = recipients_path(data_dir, account, server);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
     let data = GiftcodeRecipientsFile {
         player_ids: player_ids.to_vec(),
     };
-    let content = serde_json::to_string_pretty(&data)?;
-    fs::write(path, content)
+    let key = recipients_key(account, server);
+    save_domain_doc(data_dir, "giftcode_recipients", &key, &data)
+}
+
+pub(crate) fn list_accounts_with_recipients(data_dir: &str) -> Vec<(String, u32)> {
+    list_domain_docs::<GiftcodeRecipientsFile>(data_dir, "giftcode_recipients", None)
+        .into_iter()
+        .filter_map(|(key, v)| {
+            if v.player_ids.is_empty() {
+                return None;
+            }
+            let (account, server_str) = key.split_once('_')?;
+            let server = server_str.parse::<u32>().ok()?;
+            Some((account.to_string(), server))
+        })
+        .collect()
 }
 
 /// GET /{account}/{server}/api/giftcode-recipients - List selected player IDs for auto-redeem
