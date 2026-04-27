@@ -49,12 +49,8 @@ cargo run web
 cargo run web 3000
 ```
 
-Then access:
-- Home: http://localhost:8080
-- Create Account: http://localhost:8080/create-account
-- Dashboard: http://localhost:8080/dashboard/{account_name} (after login)
-- Public Form: http://localhost:8080/form/{form_code}
-- Legacy Admin Panel: http://localhost:8080/{account_name}/{server}/admin (for CSV upload)
+The Rust service exposes backend APIs on this port. The React frontend runs separately
+and consumes these endpoints.
 
 ## Main Workflow
 
@@ -100,10 +96,8 @@ To deploy to name.com hosting:
    cargo build --release
    ```
 
-2. Upload the binary and required files:
+2. Upload the binary:
    - `target/release/prep-appointments.exe` (or binary for your server OS)
-   - `templates/` directory
-   - `static/` directory
 
 3. Set up data directory structure:
    ```bash
@@ -135,13 +129,6 @@ prep-appointments/
 │       ├── construction.rs # Construction day scheduler
 │       ├── research.rs   # Research day scheduler
 │       └── troops.rs     # Troops training day scheduler
-├── templates/            # HTML templates
-│   ├── index.html
-│   ├── admin.html
-│   ├── stats.html
-│   └── schedules.html
-├── static/               # Static assets
-│   └── style.css
 └── Cargo.toml
 ```
 
@@ -157,7 +144,7 @@ prep-appointments/
   - **`research.rs`**: Specialized logic for Research Day (handles locked slot 1 from Construction Day)
   - **`troops.rs`**: Simple wrapper for Troops Training Day scheduling
 - **`display.rs`**: Handles all output formatting, including terminal display and file writing
-- **`web.rs`**: Web server implementation using Actix-web, handles API endpoints and serves HTML pages
+- **`web.rs`**: Web server implementation using Actix-web, handles API endpoints
 
 ## Security Note
 

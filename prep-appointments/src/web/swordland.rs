@@ -3,10 +3,9 @@
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
 
 use super::alliance_invites;
+use super::persistence::{load_domain_doc, save_domain_doc};
 use super::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,18 +58,13 @@ fn default_legions() -> Vec<Legion> {
     ]
 }
 
-fn swordland_path(
-    data_dir: &str,
-    owner_account: &str,
-    owner_server: u32,
-    alliance_slug: &str,
-) -> std::path::PathBuf {
-    Path::new(data_dir).join("swordland").join(format!(
-        "{}_{}_{}.json",
+fn swordland_doc_key(owner_account: &str, owner_server: u32, alliance_slug: &str) -> String {
+    format!(
+        "{}_{}_{}",
         owner_account.to_lowercase(),
         owner_server,
         alliance_slug
-    ))
+    )
 }
 
 fn load_swordland(
@@ -79,17 +73,12 @@ fn load_swordland(
     owner_server: u32,
     alliance_slug: &str,
 ) -> SwordlandFile {
-    let path = swordland_path(data_dir, owner_account, owner_server, alliance_slug);
-    if path.exists() {
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(data) = serde_json::from_str::<SwordlandFile>(&content) {
-                let mut data = data;
-                if data.legions.len() < 2 {
-                    data.legions = default_legions();
-                }
-                return data;
-            }
+    let key = swordland_doc_key(owner_account, owner_server, alliance_slug);
+    if let Some(mut data) = load_domain_doc::<SwordlandFile>(data_dir, "swordland", &key) {
+        if data.legions.len() < 2 {
+            data.legions = default_legions();
         }
+        return data;
     }
     SwordlandFile {
         legions: default_legions(),
@@ -104,12 +93,8 @@ fn save_swordland(
     alliance_slug: &str,
     data: &SwordlandFile,
 ) -> std::io::Result<()> {
-    let path = swordland_path(data_dir, owner_account, owner_server, alliance_slug);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let content = serde_json::to_string_pretty(data)?;
-    fs::write(path, content)
+    let key = swordland_doc_key(owner_account, owner_server, alliance_slug);
+    save_domain_doc(data_dir, "swordland", &key, data)
 }
 
 /// Auth: session user must have access to edit this alliance (owner or invited)

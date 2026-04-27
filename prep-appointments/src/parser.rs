@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use crate::form::submission::FormSubmission;
 
 /// Check if a player has already submitted to a form (by reading the submissions CSV).
 pub fn has_player_submitted<P: AsRef<Path>>(csv_path: P, player_id: &str) -> bool {
@@ -389,4 +390,118 @@ pub fn load_appointments<P: AsRef<Path>>(
     let entries: Vec<AppointmentEntry> = entries_map.into_values().collect();
 
     Ok(entries)
+}
+
+/// Build scheduler entries directly from form submissions (DB-backed path).
+pub fn load_appointments_from_submissions(
+    submissions: &[FormSubmission],
+    _construction_time_slots: Option<&[(u8, String)]>,
+    _research_time_slots: Option<&[(u8, String)]>,
+    _troops_time_slots: Option<&[(u8, String)]>,
+) -> Vec<AppointmentEntry> {
+    let mut entries_map: HashMap<String, AppointmentEntry> = HashMap::new();
+
+    for s in submissions {
+        let player_id = s.player_id.trim().to_string();
+        if player_id.is_empty() {
+            continue;
+        }
+        let alliance = if s.alliance.trim().eq_ignore_ascii_case("Non of the above") {
+            s.custom_alliance
+                .clone()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| s.alliance.clone())
+        } else {
+            s.alliance.clone()
+        };
+        let name = s.character_name.clone();
+        let wants_construction = s.wants_construction;
+        let wants_research = s.wants_research;
+        let wants_troops = s.wants_troops;
+        let construction_speedups = s.construction_speedups.unwrap_or(0);
+        let research_speedups = s.research_speedups.unwrap_or(0);
+        let troops_speedups = s.troops_speedups.unwrap_or(0);
+        let construction_truegold = s.construction_truegold.unwrap_or(0);
+        let construction_tempered_truegold = s.construction_tempered_truegold.unwrap_or(0);
+        let construction_score = (construction_truegold * 2000)
+            + (construction_tempered_truegold * 30000)
+            + (construction_speedups * 30);
+        let research_truegold_dust = s.research_truegold_dust.unwrap_or(0);
+        let research_score = (research_truegold_dust * 1000) + (research_speedups * 30);
+        let construction_available_slots = s.construction_time_slots.clone();
+        let research_available_slots = s.research_time_slots.clone();
+        let troops_available_slots = s.troops_time_slots.clone();
+
+        let is_resubmission = s.submission_type.to_lowercase().contains("re-submission")
+            || s.submission_type.to_lowercase().contains("resubmission");
+
+        if is_resubmission {
+            if let Some(existing) = entries_map.get_mut(&player_id) {
+                existing.alliance = alliance;
+                existing.name = name;
+                existing.wants_construction = wants_construction;
+                existing.wants_research = wants_research;
+                existing.wants_troops = wants_troops;
+                existing.construction_speedups = construction_speedups;
+                existing.research_speedups = research_speedups;
+                existing.troops_speedups = troops_speedups;
+                existing.construction_truegold = construction_truegold;
+                existing.construction_tempered_truegold = construction_tempered_truegold;
+                existing.construction_score = construction_score;
+                existing.research_truegold_dust = research_truegold_dust;
+                existing.research_score = research_score;
+                existing.construction_available_slots = construction_available_slots.clone();
+                existing.research_available_slots = research_available_slots.clone();
+                existing.troops_available_slots = troops_available_slots.clone();
+            } else {
+                entries_map.insert(
+                    player_id.clone(),
+                    AppointmentEntry {
+                        alliance,
+                        name,
+                        player_id,
+                        wants_construction,
+                        wants_research,
+                        wants_troops,
+                        construction_speedups,
+                        research_speedups,
+                        troops_speedups,
+                        construction_truegold,
+                        construction_tempered_truegold,
+                        construction_score,
+                        research_truegold_dust,
+                        research_score,
+                        construction_available_slots,
+                        research_available_slots,
+                        troops_available_slots,
+                    },
+                );
+            }
+        } else {
+            entries_map.insert(
+                player_id.clone(),
+                AppointmentEntry {
+                    alliance,
+                    name,
+                    player_id,
+                    wants_construction,
+                    wants_research,
+                    wants_troops,
+                    construction_speedups,
+                    research_speedups,
+                    troops_speedups,
+                    construction_truegold,
+                    construction_tempered_truegold,
+                    construction_score,
+                    research_truegold_dust,
+                    research_score,
+                    construction_available_slots,
+                    research_available_slots,
+                    troops_available_slots,
+                },
+            );
+        }
+    }
+
+    entries_map.into_values().collect()
 }

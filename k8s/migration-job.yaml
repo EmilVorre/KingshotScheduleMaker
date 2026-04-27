@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: json-to-pg-migration
+  namespace: kingshot
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrator
+          image: ghcr.io/your-org/kingshot-backend:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: kingshot-secrets
+          env:
+            - name: MIGRATE_DATA_DIR
+              value: /legacy-data
+            - name: DRY_RUN
+              value: "false"
+          command:
+            - /app/migrate_json_to_pg
+          volumeMounts:
+            - name: legacy-data
+              mountPath: /legacy-data
+      volumes:
+        - name: legacy-data
+          hostPath:
+            path: /srv/kingshot-legacy-data
+            type: Directory

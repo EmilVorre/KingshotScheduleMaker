@@ -5,10 +5,8 @@ use actix_session::Session;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
 
-use super::persistence::save_accounts;
+use super::persistence::{load_domain_doc, save_accounts, save_domain_doc};
 use super::state::{generate_friend_code, AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,30 +21,16 @@ pub struct AllianceInvite {
     pub created_at: String,
 }
 
-fn invites_path(data_dir: &str) -> std::path::PathBuf {
-    Path::new(data_dir).join("alliance_invites.json")
-}
-
 pub fn load_invites(data_dir: &str) -> HashMap<String, AllianceInvite> {
-    let path = invites_path(data_dir);
-    if path.exists() {
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(map) = serde_json::from_str::<HashMap<String, AllianceInvite>>(&content) {
-                return map;
-            }
-        }
-    }
-    HashMap::new()
+    load_domain_doc(data_dir, "alliance_invites", "all")
+        .unwrap_or_default()
 }
 
 pub fn save_invites(
     data_dir: &str,
     invites: &HashMap<String, AllianceInvite>,
 ) -> std::io::Result<()> {
-    std::fs::create_dir_all(data_dir)?;
-    let content = serde_json::to_string_pretty(invites)?;
-    fs::write(invites_path(data_dir), content)?;
-    Ok(())
+    save_domain_doc(data_dir, "alliance_invites", "all", invites)
 }
 
 fn generate_invite_id() -> String {

@@ -4,10 +4,9 @@
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
 
 use super::alliance_invites;
+use super::persistence::{load_domain_doc, save_domain_doc};
 use super::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,18 +59,13 @@ fn default_legions() -> Vec<Legion> {
     ]
 }
 
-fn tri_alliance_path(
-    data_dir: &str,
-    owner_account: &str,
-    owner_server: u32,
-    alliance_slug: &str,
-) -> std::path::PathBuf {
-    Path::new(data_dir).join("tri_alliance").join(format!(
-        "{}_{}_{}.json",
+fn tri_alliance_doc_key(owner_account: &str, owner_server: u32, alliance_slug: &str) -> String {
+    format!(
+        "{}_{}_{}",
         owner_account.to_lowercase(),
         owner_server,
         alliance_slug
-    ))
+    )
 }
 
 fn load_tri_alliance(
@@ -80,17 +74,12 @@ fn load_tri_alliance(
     owner_server: u32,
     alliance_slug: &str,
 ) -> TriAllianceFile {
-    let path = tri_alliance_path(data_dir, owner_account, owner_server, alliance_slug);
-    if path.exists() {
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(data) = serde_json::from_str::<TriAllianceFile>(&content) {
-                let mut data = data;
-                if data.legions.len() < 2 {
-                    data.legions = default_legions();
-                }
-                return data;
-            }
+    let key = tri_alliance_doc_key(owner_account, owner_server, alliance_slug);
+    if let Some(mut data) = load_domain_doc::<TriAllianceFile>(data_dir, "tri_alliance", &key) {
+        if data.legions.len() < 2 {
+            data.legions = default_legions();
         }
+        return data;
     }
     TriAllianceFile {
         legions: default_legions(),
@@ -105,12 +94,8 @@ fn save_tri_alliance(
     alliance_slug: &str,
     data: &TriAllianceFile,
 ) -> std::io::Result<()> {
-    let path = tri_alliance_path(data_dir, owner_account, owner_server, alliance_slug);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let content = serde_json::to_string_pretty(data)?;
-    fs::write(path, content)
+    let key = tri_alliance_doc_key(owner_account, owner_server, alliance_slug);
+    save_domain_doc(data_dir, "tri_alliance", &key, data)
 }
 
 fn auth_check_alliance(

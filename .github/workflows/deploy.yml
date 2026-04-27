@@ -52,9 +52,7 @@ jobs:
           # Pull latest (for non-built files)
           ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "cd ${DEPLOY_PATH} && git pull"
 
-          # Copy built frontend (vite outputs to prep-appointments/static/dist)
-          scp $SSH_OPTS -r prep-appointments/static/dist \
-            ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/prep-appointments/static/
+          # Frontend is now deployed separately (container/static host)
 
           # Copy built binary (run.sh expects target/release/prep-appointments)
           ssh $SSH_OPTS ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p ${DEPLOY_PATH}/prep-appointments/target/release"
