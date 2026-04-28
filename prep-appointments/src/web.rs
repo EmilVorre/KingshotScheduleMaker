@@ -4,12 +4,13 @@ pub mod alliance_invites;
 pub mod alliances;
 mod auth;
 mod avatar;
+pub mod db;
 mod feedback;
 pub mod forms;
 mod giftcode_auto;
 mod giftcode_recipients;
 mod oauth;
-pub mod oauth_state;
+mod oauth_signed;
 mod persistence;
 pub mod schedule;
 mod state;
@@ -22,26 +23,109 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 // Re-export for external use
+pub use db::PgPool;
 pub use persistence::*;
 pub use state::*;
+
+/// Resolve the master secret used for signed cookies. In production this MUST
+/// be set in the `SESSION_SECRET` env var (>=64 raw bytes, hex- or base64-
+/// encoded). We tolerate ephemeral keys only when no DATABASE_URL is configured
+/// (i.e. local dev with the JSON backend).
+fn load_session_secret() -> Vec<u8> {
+    if let Ok(raw) = std::env::var("SESSION_SECRET") {
+        let trimmed = raw.trim();
+        if let Some(bytes) = decode_secret(trimmed) {
+            if bytes.len() >= 64 {
+                return bytes;
+            }
+            eprintln!(
+                "SESSION_SECRET decoded to {} bytes; need at least 64. Falling back to ephemeral.",
+                bytes.len()
+            );
+        } else {
+            eprintln!("SESSION_SECRET is not valid hex or base64. Falling back to ephemeral.");
+        }
+    } else {
+        eprintln!(
+            "SESSION_SECRET is not set; using ephemeral key (sessions will not survive restarts)."
+        );
+    }
+    let mut buf = vec![0u8; 64];
+    use rand::RngCore;
+    rand::thread_rng().fill_bytes(&mut buf);
+    buf
+}
+
+fn decode_secret(s: &str) -> Option<Vec<u8>> {
+    if let Ok(bytes) = hex_decode(s) {
+        return Some(bytes);
+    }
+    use base64::Engine;
+    if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(s) {
+        return Some(bytes);
+    }
+    if let Ok(bytes) = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(s) {
+        return Some(bytes);
+    }
+    None
+}
+
+fn hex_decode(s: &str) -> Result<Vec<u8>, ()> {
+    if s.len() % 2 != 0 {
+        return Err(());
+    }
+    let mut out = Vec::with_capacity(s.len() / 2);
+    let bytes = s.as_bytes();
+    for chunk in bytes.chunks(2) {
+        let hi = hex_nibble(chunk[0])?;
+        let lo = hex_nibble(chunk[1])?;
+        out.push((hi << 4) | lo);
+    }
+    Ok(out)
+}
+
+fn hex_nibble(b: u8) -> Result<u8, ()> {
+    match b {
+        b'0'..=b'9' => Ok(b - b'0'),
+        b'a'..=b'f' => Ok(10 + b - b'a'),
+        b'A'..=b'F' => Ok(10 + b - b'A'),
+        _ => Err(()),
+    }
+}
+
+fn derive_oauth_hmac_key(session_secret: &[u8]) -> Vec<u8> {
+    if let Ok(raw) = std::env::var("OAUTH_HMAC_KEY") {
+        if let Some(bytes) = decode_secret(raw.trim()) {
+            if bytes.len() >= 32 {
+                return bytes;
+            }
+        }
+        eprintln!("OAUTH_HMAC_KEY invalid or too short; deriving from SESSION_SECRET.");
+    }
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(b"kingshot/oauth_hmac_v1");
+    hasher.update(session_secret);
+    hasher.finalize().to_vec()
+}
 
 pub async fn start_server(port: u16) -> std::io::Result<()> {
     let data_dir = "data".to_string();
     std::fs::create_dir_all(&data_dir)?;
 
-    // Load persistence on the blocking thread pool so sync `postgres` never runs on a
-    // Tokio worker during startup (avoids nested-runtime panics with #[tokio::main]).
-    let data_dir_load = data_dir.clone();
-    let (accounts, forms, current_forms) = tokio::task::spawn_blocking(move || {
-        let accounts = persistence::load_accounts(&data_dir_load);
-        let forms = persistence::load_forms(&data_dir_load);
-        let mut current_forms = persistence::load_current_forms(&data_dir_load);
-        current_forms.retain(|_, code| forms.contains_key(code));
-        persistence::save_current_forms(&data_dir_load, &current_forms).ok();
-        (accounts, forms, current_forms)
-    })
-    .await
-    .map_err(|e| std::io::Error::other(format!("data load join: {e}")))?;
+    if persistence::is_postgres_backend() {
+        let pool = db::PgPool::from_env()
+            .map_err(|e| std::io::Error::other(format!("failed to build Postgres pool: {e}")))?;
+        persistence::init_pg_pool(pool);
+    }
+
+    let accounts = persistence::load_accounts(&data_dir).await;
+    let forms = persistence::load_forms(&data_dir).await;
+    let mut current_forms = persistence::load_current_forms(&data_dir).await;
+    current_forms.retain(|_, code| forms.contains_key(code));
+    persistence::save_current_forms(&data_dir, &current_forms)
+        .await
+        .ok();
 
     let data_dir_for_task = data_dir.clone();
     tokio::spawn(async move {
@@ -53,17 +137,20 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
         }
     });
 
+    let session_secret = load_session_secret();
+    let oauth_hmac_key = derive_oauth_hmac_key(&session_secret);
+
     let app_state = web::Data::new(state::AppState {
         accounts: Mutex::new(accounts),
         schedules: Mutex::new(HashMap::new()),
         forms: Mutex::new(forms),
         current_forms: Mutex::new(current_forms),
         data_dir,
-        oauth_state_cache: oauth_state::OAuthStateCache::new(),
-        pending_oauth_cache: oauth_state::PendingOAuthCache::new(),
+        pg: persistence::pg_pool().cloned(),
+        oauth_hmac_key,
     });
 
-    let secret_key = Key::generate();
+    let secret_key = Key::derive_from(&session_secret);
 
     HttpServer::new(move || {
         App::new()

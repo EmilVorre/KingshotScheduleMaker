@@ -1,9 +1,10 @@
-use postgres::{Client, NoTls};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tokio_postgres::types::ToSql;
+use tokio_postgres::{NoTls, Transaction};
 
 use prep_appointments::web::{Account, FormData, ScheduleData, StatsResponse};
 
@@ -19,7 +20,8 @@ struct Counts {
     domain_docs: usize,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = env::var("MIGRATE_DATA_DIR").unwrap_or_else(|_| "data".to_string());
     let database_url =
         env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is required for migration script")?;
@@ -27,28 +29,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
-    let mut client = Client::connect(&database_url, NoTls)?;
+    let (mut client, connection) = tokio_postgres::connect(&database_url, NoTls).await?;
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("postgres connection error: {e}");
+        }
+    });
+
     let mut counts = Counts::default();
 
     if dry_run {
         println!("Running in dry-run mode (no writes will be committed).");
     }
 
-    let mut tx = client.transaction()?;
-    migrate_accounts(&data_dir, &mut tx, &mut counts)?;
-    migrate_current_forms_map(&data_dir, &mut tx, &mut counts)?;
-    migrate_forms(&data_dir, &mut tx, &mut counts)?;
-    migrate_schedules(&data_dir, &mut tx, &mut counts)?;
-    migrate_statistics(&data_dir, &mut tx, &mut counts)?;
-    migrate_feedback(&data_dir, &mut tx, &mut counts)?;
-    migrate_submissions_csv(&data_dir, &mut tx, &mut counts)?;
-    migrate_generic_domain_documents(&data_dir, &mut tx, &mut counts)?;
+    let tx = client.transaction().await?;
+    migrate_accounts(&data_dir, &tx, &mut counts).await?;
+    migrate_current_forms_map(&data_dir, &tx, &mut counts).await?;
+    migrate_forms(&data_dir, &tx, &mut counts).await?;
+    migrate_schedules(&data_dir, &tx, &mut counts).await?;
+    migrate_statistics(&data_dir, &tx, &mut counts).await?;
+    migrate_feedback(&data_dir, &tx, &mut counts).await?;
+    migrate_submissions_csv(&data_dir, &tx, &mut counts).await?;
+    migrate_generic_domain_documents(&data_dir, &tx, &mut counts).await?;
 
     if dry_run {
-        tx.rollback()?;
+        tx.rollback().await?;
         println!("Dry run finished. Transaction rolled back.");
     } else {
-        tx.commit()?;
+        tx.commit().await?;
         println!("Migration committed.");
     }
 
@@ -65,9 +73,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn migrate_accounts(
+async fn migrate_accounts(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let path = Path::new(data_dir).join("accounts.json");
@@ -78,19 +86,21 @@ fn migrate_accounts(
     let accounts: HashMap<String, Account> = serde_json::from_str(&content)?;
     for (key, account) in accounts {
         let payload = serde_json::to_value(account)?;
+        let params: &[&(dyn ToSql + Sync)] = &[&key, &payload];
         tx.execute(
             "INSERT INTO accounts (account_key, payload, updated_at) VALUES ($1, $2, NOW())
              ON CONFLICT (account_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-            &[&key, &payload],
-        )?;
+            params,
+        )
+        .await?;
         counts.accounts += 1;
     }
     Ok(())
 }
 
-fn migrate_current_forms_map(
+async fn migrate_current_forms_map(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let path = Path::new(data_dir).join("current_forms_map.json");
@@ -100,19 +110,21 @@ fn migrate_current_forms_map(
     let content = fs::read_to_string(path)?;
     let mapping: HashMap<String, String> = serde_json::from_str(&content)?;
     for (key, value) in mapping {
+        let params: &[&(dyn ToSql + Sync)] = &[&key, &value];
         tx.execute(
             "INSERT INTO current_forms_map (schedule_key, form_code, updated_at) VALUES ($1, $2, NOW())
              ON CONFLICT (schedule_key) DO UPDATE SET form_code = EXCLUDED.form_code, updated_at = NOW()",
-            &[&key, &value],
-        )?;
+            params,
+        )
+        .await?;
         counts.current_forms_map += 1;
     }
     Ok(())
 }
 
-fn migrate_forms(
+async fn migrate_forms(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let current_forms_dir = Path::new(data_dir).join("current_forms");
@@ -125,6 +137,9 @@ fn migrate_forms(
             let content = fs::read_to_string(&path)?;
             let form: FormData = serde_json::from_str(&content)?;
             let payload = serde_json::to_value(&form)?;
+            let server = form.server_number as i32;
+            let params: &[&(dyn ToSql + Sync)] =
+                &[&form.code, &form.account_name, &server, &payload];
             tx.execute(
                 "INSERT INTO forms (code, account_name, server_number, archived, archive_name, payload, updated_at)
                  VALUES ($1, $2, $3, FALSE, NULL, $4, NOW())
@@ -135,8 +150,9 @@ fn migrate_forms(
                    archive_name = NULL,
                    payload = EXCLUDED.payload,
                    updated_at = NOW()",
-                &[&form.code, &form.account_name, &(form.server_number as i32), &payload],
-            )?;
+                params,
+            )
+            .await?;
             counts.forms += 1;
         }
     }
@@ -156,6 +172,14 @@ fn migrate_forms(
             let content = fs::read_to_string(&path)?;
             let form: FormData = serde_json::from_str(&content)?;
             let payload = serde_json::to_value(&form)?;
+            let server = form.server_number as i32;
+            let params: &[&(dyn ToSql + Sync)] = &[
+                &form.code,
+                &form.account_name,
+                &server,
+                &archive_name,
+                &payload,
+            ];
             tx.execute(
                 "INSERT INTO forms (code, account_name, server_number, archived, archive_name, payload, updated_at)
                  VALUES ($1, $2, $3, TRUE, $4, $5, NOW())
@@ -166,41 +190,36 @@ fn migrate_forms(
                    archive_name = EXCLUDED.archive_name,
                    payload = EXCLUDED.payload,
                    updated_at = NOW()",
-                &[
-                    &form.code,
-                    &form.account_name,
-                    &(form.server_number as i32),
-                    &archive_name,
-                    &payload,
-                ],
-            )?;
+                params,
+            )
+            .await?;
             counts.forms += 1;
         }
     }
     Ok(())
 }
 
-fn migrate_schedules(
+async fn migrate_schedules(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let dir = Path::new(data_dir).join("schedules");
-    migrate_account_server_json_tree(dir, tx, "schedules", counts)
+    migrate_account_server_json_tree(dir, tx, "schedules", counts).await
 }
 
-fn migrate_statistics(
+async fn migrate_statistics(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let dir = Path::new(data_dir).join("statistics");
-    migrate_account_server_json_tree(dir, tx, "statistics", counts)
+    migrate_account_server_json_tree(dir, tx, "statistics", counts).await
 }
 
-fn migrate_account_server_json_tree(
+async fn migrate_account_server_json_tree(
     root: PathBuf,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     table: &str,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -243,7 +262,8 @@ fn migrate_account_server_json_tree(
                  ON CONFLICT (account_name, server_number) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
                 table
             );
-            tx.execute(&sql, &[&account_name, &server_number, &payload])?;
+            let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server_number, &payload];
+            tx.execute(&sql, params).await?;
             if table == "schedules" {
                 counts.schedules += 1;
             } else {
@@ -254,9 +274,9 @@ fn migrate_account_server_json_tree(
     Ok(())
 }
 
-fn migrate_feedback(
+async fn migrate_feedback(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let path = Path::new(data_dir).join("feedback.json");
@@ -276,19 +296,21 @@ fn migrate_feedback(
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
+        let params: &[&(dyn ToSql + Sync)] = &[&id, &created_at, &entry];
         tx.execute(
             "INSERT INTO feedback (id, created_at, payload) VALUES ($1, $2, $3)
              ON CONFLICT (id) DO UPDATE SET created_at = EXCLUDED.created_at, payload = EXCLUDED.payload",
-            &[&id, &created_at, &entry],
-        )?;
+            params,
+        )
+        .await?;
         counts.feedback += 1;
     }
     Ok(())
 }
 
-fn migrate_submissions_csv(
+async fn migrate_submissions_csv(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut csv_paths = Vec::new();
@@ -324,19 +346,21 @@ fn migrate_submissions_csv(
                 .get("player_id")
                 .and_then(Value::as_str)
                 .map(|s| s.to_string());
+            let params: &[&(dyn ToSql + Sync)] = &[&form_code, &player_id, &payload];
             tx.execute(
                 "INSERT INTO form_submissions (form_code, player_id, row_data) VALUES ($1, $2, $3)",
-                &[&form_code, &player_id, &payload],
-            )?;
+                params,
+            )
+            .await?;
             counts.submissions += 1;
         }
     }
     Ok(())
 }
 
-fn migrate_generic_domain_documents(
+async fn migrate_generic_domain_documents(
     data_dir: &str,
-    tx: &mut postgres::Transaction<'_>,
+    tx: &Transaction<'_>,
     counts: &mut Counts,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let known_roots = [
@@ -358,11 +382,14 @@ fn migrate_generic_domain_documents(
         let path = entry.path();
         if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json") {
             let payload: Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+            let domain = "misc";
+            let params: &[&(dyn ToSql + Sync)] = &[&domain, &name, &payload];
             tx.execute(
                 "INSERT INTO domain_documents (domain, doc_key, payload, updated_at) VALUES ($1, $2, $3, NOW())
                  ON CONFLICT (domain, doc_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-                &[&"misc", &name, &payload],
-            )?;
+                params,
+            )
+            .await?;
             counts.domain_docs += 1;
         } else if path.is_dir() {
             let domain = name;
@@ -375,11 +402,13 @@ fn migrate_generic_domain_documents(
                     .to_string_lossy()
                     .to_string();
                 let payload: Value = serde_json::from_str(&fs::read_to_string(&file)?)?;
+                let params: &[&(dyn ToSql + Sync)] = &[&domain, &rel, &payload];
                 tx.execute(
                     "INSERT INTO domain_documents (domain, doc_key, payload, updated_at) VALUES ($1, $2, $3, NOW())
                      ON CONFLICT (domain, doc_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-                    &[&domain, &rel, &payload],
-                )?;
+                    params,
+                )
+                .await?;
                 counts.domain_docs += 1;
             }
         }

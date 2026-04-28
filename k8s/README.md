@@ -6,7 +6,8 @@ This directory contains baseline manifests for deploying Kingshot on a single-no
 
 - `namespace.yaml`: namespace `kingshot`
 - `configmap.yaml`: non-secret app configuration
-- `secrets.example.yaml`: template for required secrets (copy and fill values)
+- `secrets.example.yaml`: template for required secrets (copy and fill values).
+  - **`SESSION_SECRET`** must be a stable >=64 byte value (hex or base64); changing it logs every user out and invalidates any in-flight OAuth login. Generate with `openssl rand -hex 64`. If unset, the backend falls back to an ephemeral key and warns on startup.
 - `backend.yaml`: Rust API deployment/service
 - `frontend.yaml`: React frontend deployment/service
 - `ingress.yaml`: routes `/api` and `/form` to backend, everything else to frontend

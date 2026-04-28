@@ -144,8 +144,8 @@ fn test_generate_form_code_format() {
 
 // ============ Persistence: accounts ============
 
-#[test]
-fn test_load_save_accounts_roundtrip() {
+#[tokio::test]
+async fn test_load_save_accounts_roundtrip() {
     let dir = std::env::temp_dir().join("test_accounts_persist");
     std::fs::create_dir_all(&dir).ok();
     let dir_str = dir.to_str().unwrap();
@@ -170,24 +170,24 @@ fn test_load_save_accounts_roundtrip() {
         },
     );
 
-    save_accounts(dir_str, &accounts).unwrap();
-    let loaded = load_accounts(dir_str);
+    save_accounts(dir_str, &accounts).await.unwrap();
+    let loaded = load_accounts(dir_str).await;
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded.get("alice").unwrap().account_name, "alice");
 
     std::fs::remove_dir_all(&dir).ok();
 }
 
-#[test]
-fn test_load_accounts_missing_returns_empty() {
-    let loaded = load_accounts("/nonexistent/path/12345");
+#[tokio::test]
+async fn test_load_accounts_missing_returns_empty() {
+    let loaded = load_accounts("/nonexistent/path/12345").await;
     assert!(loaded.is_empty());
 }
 
 // ============ Persistence: current forms ============
 
-#[test]
-fn test_load_save_current_forms_roundtrip() {
+#[tokio::test]
+async fn test_load_save_current_forms_roundtrip() {
     let dir = std::env::temp_dir().join("test_current_forms");
     std::fs::create_dir_all(&dir).ok();
     let dir_str = dir.to_str().unwrap();
@@ -195,8 +195,8 @@ fn test_load_save_current_forms_roundtrip() {
     let mut current_forms = HashMap::new();
     current_forms.insert("alice:1".to_string(), "ABC123".to_string());
 
-    save_current_forms(dir_str, &current_forms).unwrap();
-    let loaded = load_current_forms(dir_str);
+    save_current_forms(dir_str, &current_forms).await.unwrap();
+    let loaded = load_current_forms(dir_str).await;
     assert_eq!(loaded.get("alice:1"), Some(&"ABC123".to_string()));
 
     std::fs::remove_dir_all(&dir).ok();
@@ -204,8 +204,8 @@ fn test_load_save_current_forms_roundtrip() {
 
 // ============ Persistence: schedule ============
 
-#[test]
-fn test_save_load_schedule_roundtrip() {
+#[tokio::test]
+async fn test_save_load_schedule_roundtrip() {
     let dir = std::env::temp_dir().join("test_schedule_persist");
     std::fs::create_dir_all(&dir).ok();
     let dir_str = dir.to_str().unwrap();
@@ -223,8 +223,10 @@ fn test_save_load_schedule_roundtrip() {
         scheduled_player_ids: None,
     };
 
-    save_schedule(dir_str, "testacct", 1, &schedule_data).unwrap();
-    let loaded = load_schedule(dir_str, "testacct", 1);
+    save_schedule(dir_str, "testacct", 1, &schedule_data)
+        .await
+        .unwrap();
+    let loaded = load_schedule(dir_str, "testacct", 1).await;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
     assert!(loaded.construction_schedule.is_some());
@@ -242,16 +244,16 @@ fn test_save_load_schedule_roundtrip() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-#[test]
-fn test_load_schedule_missing_returns_none() {
-    let loaded = load_schedule("/nonexistent", "x", 99);
+#[tokio::test]
+async fn test_load_schedule_missing_returns_none() {
+    let loaded = load_schedule("/nonexistent", "x", 99).await;
     assert!(loaded.is_none());
 }
 
 // ============ Persistence: statistics ============
 
-#[test]
-fn test_save_load_statistics_roundtrip() {
+#[tokio::test]
+async fn test_save_load_statistics_roundtrip() {
     let dir = std::env::temp_dir().join("test_stats_persist");
     std::fs::create_dir_all(&dir).ok();
     let dir_str = dir.to_str().unwrap();
@@ -276,8 +278,10 @@ fn test_save_load_statistics_roundtrip() {
         troops_time_slot_popularity: None,
     };
 
-    save_statistics(dir_str, "testacct", 1, &stats).unwrap();
-    let loaded = load_statistics(dir_str, "testacct", 1);
+    save_statistics(dir_str, "testacct", 1, &stats)
+        .await
+        .unwrap();
+    let loaded = load_statistics(dir_str, "testacct", 1).await;
     assert!(loaded.is_some());
     let loaded = loaded.unwrap();
     assert_eq!(

@@ -8,8 +8,8 @@ use prep_appointments::form::FormSubmissionRequest;
 use prep_appointments::schedule::types::ScheduledAppointment;
 use prep_appointments::schedule::DaySchedule;
 use prep_appointments::web::{
-    forms, load_form_submissions, oauth_state, save_schedule, schedule, AppState, FormConfig,
-    FormData, ScheduleData,
+    forms, load_form_submissions, save_schedule, schedule, AppState, FormConfig, FormData,
+    ScheduleData,
 };
 
 fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
@@ -34,8 +34,8 @@ fn make_test_app_state(data_dir: String) -> web::Data<AppState> {
         forms: Mutex::new(forms),
         current_forms: Mutex::new(HashMap::new()),
         data_dir,
-        oauth_state_cache: oauth_state::OAuthStateCache::new(),
-        pending_oauth_cache: oauth_state::PendingOAuthCache::new(),
+        pg: None,
+        oauth_hmac_key: vec![0u8; 32],
     })
 }
 
@@ -126,7 +126,7 @@ async fn test_submit_form_by_code_success() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let submissions = load_form_submissions(&data_dir, "TESTCODE123");
+    let submissions = load_form_submissions(&data_dir, "TESTCODE123").await;
     assert_eq!(
         submissions.len(),
         1,
@@ -191,8 +191,8 @@ fn make_schedule_app_state(
         forms: Mutex::new(forms_map),
         current_forms: Mutex::new(HashMap::new()),
         data_dir,
-        oauth_state_cache: oauth_state::OAuthStateCache::new(),
-        pending_oauth_cache: oauth_state::PendingOAuthCache::new(),
+        pg: None,
+        oauth_hmac_key: vec![0u8; 32],
     })
 }
 
@@ -243,7 +243,9 @@ async fn test_get_schedule_by_form_code_success() {
         entries: None,
         scheduled_player_ids: None,
     };
-    save_schedule(&data_dir, "testacct", 140, &schedule_data).unwrap();
+    save_schedule(&data_dir, "testacct", 140, &schedule_data)
+        .await
+        .unwrap();
 
     let app_state = make_schedule_app_state(data_dir.clone(), forms);
     let app = test::init_service(App::new().app_data(app_state).route(

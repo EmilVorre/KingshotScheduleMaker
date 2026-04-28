@@ -48,7 +48,7 @@ fn should_link_construction_research(config: &super::state::FormConfig) -> bool 
     r_idx - c_idx == 1
 }
 
-fn load_entries_for_current_form(
+async fn load_entries_for_current_form(
     state: &web::Data<AppState>,
     account_name: &str,
     server_number: u32,
@@ -67,7 +67,7 @@ fn load_entries_for_current_form(
     };
     let form_code = current_form.code.clone();
     let form_config = Some(current_form.config.clone());
-    let submissions = load_form_submissions(&state.data_dir, &form_code);
+    let submissions = load_form_submissions(&state.data_dir, &form_code).await;
     let construction_slots = form_config.as_ref().map(|config| {
         calculate_time_slots(
             &config.construction_times.start_time,
@@ -105,7 +105,8 @@ pub async fn get_stats(
     let key = schedule_key(&account_name, server_number);
 
     // Try to load cached statistics from disk first
-    if let Some(cached_stats) = load_statistics(&state.data_dir, &account_name, server_number) {
+    if let Some(cached_stats) = load_statistics(&state.data_dir, &account_name, server_number).await
+    {
         return Ok(HttpResponse::Ok().json(cached_stats));
     }
 
@@ -121,7 +122,7 @@ pub async fn get_stats(
     let mut troops_start_time: Option<String> = None;
 
     let (form_code, _form_config, form_entries) =
-        load_entries_for_current_form(&state, &account_name, server_number);
+        load_entries_for_current_form(&state, &account_name, server_number).await;
     if form_code.is_some() && !form_entries.is_empty() {
         let form_config = {
             let forms = state.forms.lock().unwrap();
@@ -389,7 +390,9 @@ pub async fn get_stats(
         &account_name,
         server_number,
         &stats_response,
-    ) {
+    )
+    .await
+    {
         eprintln!("Warning: Failed to save statistics to disk: {}", e);
     }
 
@@ -441,7 +444,8 @@ async fn get_schedule_inner(
 ) -> Result<HttpResponse> {
     let key = schedule_key(account_name, server_number);
 
-    if let Some(schedule_data) = load_schedule(&state.data_dir, &account_name, server_number) {
+    if let Some(schedule_data) = load_schedule(&state.data_dir, &account_name, server_number).await
+    {
         let mut schedules = state.schedules.lock().unwrap();
         schedules.insert(key.clone(), schedule_data.clone());
         drop(schedules);
@@ -562,7 +566,7 @@ async fn get_schedule_inner(
         s
     } else {
         let (_form_code, config_for_loading, entries) =
-            load_entries_for_current_form(&state, account_name, server_number);
+            load_entries_for_current_form(&state, account_name, server_number).await;
         if !entries.is_empty() {
             let (construction_slots, _research_slots, _troops_slots) =
                 if let Some(config) = &config_for_loading {
@@ -631,7 +635,9 @@ async fn get_schedule_inner(
                 &account_name,
                 server_number,
                 &schedule_data,
-            ) {
+            )
+            .await
+            {
                 eprintln!("Warning: Failed to save schedule to disk: {}", e);
             }
 
@@ -731,7 +737,7 @@ pub async fn generate_schedule_api(
     let key = schedule_key(&account_name, server_number);
 
     let (form_code, form_config, entries_from_submissions) =
-        load_entries_for_current_form(&state, &account_name, server_number);
+        load_entries_for_current_form(&state, &account_name, server_number).await;
 
     if form_code.is_none() {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
@@ -782,7 +788,10 @@ pub async fn generate_schedule_api(
             let schedules = state.schedules.lock().unwrap();
             schedules.get(&key).cloned()
         };
-        maybe_cached.or_else(|| load_schedule(&state.data_dir, &account_name, server_number))
+        match maybe_cached {
+            Some(s) => Some(s),
+            None => load_schedule(&state.data_dir, &account_name, server_number).await,
+        }
     } else {
         None
     };
@@ -1088,7 +1097,9 @@ pub async fn generate_schedule_api(
             &account_name,
             server_number,
             &schedule_data,
-        ) {
+        )
+        .await
+        {
             eprintln!("Warning: Failed to save schedule to disk: {}", e);
         }
 
@@ -1628,7 +1639,9 @@ pub async fn generate_schedule_api(
         &account_name,
         server_number,
         &schedule_data,
-    ) {
+    )
+    .await
+    {
         eprintln!("Warning: Failed to save schedule to disk: {}", e);
     }
 
@@ -1685,12 +1698,13 @@ pub async fn update_schedule_slot(
     }
 
     let key = schedule_key(&account_name, server_number);
-    let mut schedule_data = {
+    let cached = {
         let schedules = state.schedules.lock().unwrap();
-        schedules
-            .get(&key)
-            .cloned()
-            .or_else(|| load_schedule(&state.data_dir, &account_name, server_number))
+        schedules.get(&key).cloned()
+    };
+    let mut schedule_data = match cached {
+        Some(s) => Some(s),
+        None => load_schedule(&state.data_dir, &account_name, server_number).await,
     };
 
     if schedule_data.is_none() {
@@ -1858,7 +1872,9 @@ pub async fn update_schedule_slot(
         &account_name,
         server_number,
         &schedule_data,
-    ) {
+    )
+    .await
+    {
         eprintln!("Warning: Failed to save schedule to disk: {}", e);
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
@@ -1908,12 +1924,13 @@ pub async fn clear_schedule_api(
     let day_filter = payload.and_then(|p| p.day.clone());
 
     let key = schedule_key(&account_name, server_number);
-    let schedule_data = {
+    let cached = {
         let schedules = state.schedules.lock().unwrap();
-        schedules
-            .get(&key)
-            .cloned()
-            .or_else(|| load_schedule(&state.data_dir, &account_name, server_number))
+        schedules.get(&key).cloned()
+    };
+    let schedule_data = match cached {
+        Some(s) => Some(s),
+        None => load_schedule(&state.data_dir, &account_name, server_number).await,
     };
 
     if schedule_data.is_none() {
@@ -1962,7 +1979,9 @@ pub async fn clear_schedule_api(
         &account_name,
         server_number,
         &schedule_data,
-    ) {
+    )
+    .await
+    {
         eprintln!("Warning: Failed to save schedule: {}", e);
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,

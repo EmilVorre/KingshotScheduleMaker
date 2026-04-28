@@ -21,15 +21,17 @@ pub struct AllianceApplication {
     pub submitted_at: String,
 }
 
-fn load_applications(data_dir: &str) -> HashMap<String, AllianceApplication> {
-    load_domain_doc(data_dir, "alliance_applications", "all").unwrap_or_default()
+async fn load_applications(data_dir: &str) -> HashMap<String, AllianceApplication> {
+    load_domain_doc(data_dir, "alliance_applications", "all")
+        .await
+        .unwrap_or_default()
 }
 
-fn save_applications(
+async fn save_applications(
     data_dir: &str,
     apps: &HashMap<String, AllianceApplication>,
 ) -> std::io::Result<()> {
-    save_domain_doc(data_dir, "alliance_applications", "all", apps)
+    save_domain_doc(data_dir, "alliance_applications", "all", apps).await
 }
 
 fn generate_id() -> String {
@@ -100,7 +102,7 @@ pub async fn submit_application(
         })));
     }
 
-    let mut apps = load_applications(&state.data_dir);
+    let mut apps = load_applications(&state.data_dir).await;
     let has_pending = apps.values().any(|a| {
         a.account_name == account_name && (a.status == "pending" || a.status == "approved")
     });
@@ -123,9 +125,11 @@ pub async fn submit_application(
         submitted_at: chrono::Local::now().to_rfc3339(),
     };
     apps.insert(id, app);
-    save_applications(&state.data_dir, &apps).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    save_applications(&state.data_dir, &apps)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -152,7 +156,7 @@ pub async fn get_my_application(
         }
     };
 
-    let apps = load_applications(&state.data_dir);
+    let apps = load_applications(&state.data_dir).await;
     let mine = apps
         .values()
         .find(|a| a.account_name == account_name)
@@ -174,7 +178,7 @@ pub async fn list_applications_admin(
         Err(resp) => return Ok(resp),
     };
 
-    let apps = load_applications(&state.data_dir);
+    let apps = load_applications(&state.data_dir).await;
     let list: Vec<serde_json::Value> = apps
         .values()
         .map(|a| {
@@ -209,7 +213,7 @@ pub async fn approve_application(
     };
 
     let id = path.into_inner();
-    let mut apps = load_applications(&state.data_dir);
+    let mut apps = load_applications(&state.data_dir).await;
 
     let (account_name, alliance_tag, alliance_name) = {
         let app = apps
@@ -231,19 +235,28 @@ pub async fn approve_application(
         )
     };
 
-    save_applications(&state.data_dir, &apps).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    save_applications(&state.data_dir, &apps)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     let alliance_id = generate_alliance_id();
 
-    let mut accounts = state.accounts.lock().unwrap();
-    if let Some(acc) = accounts.get_mut(&account_name) {
-        acc.alliance_access = true;
-        acc.alliance_id = Some(alliance_id.clone());
-        acc.alliance_tag = Some(alliance_tag.clone());
-        acc.alliance_name = Some(alliance_name.clone());
-        save_accounts(&state.data_dir, &accounts).map_err(|e| {
+    let snapshot = {
+        let mut accounts = state.accounts.lock().unwrap();
+        if let Some(acc) = accounts.get_mut(&account_name) {
+            acc.alliance_access = true;
+            acc.alliance_id = Some(alliance_id.clone());
+            acc.alliance_tag = Some(alliance_tag.clone());
+            acc.alliance_name = Some(alliance_name.clone());
+            Some(accounts.clone())
+        } else {
+            None
+        }
+    };
+    if let Some(snap) = snapshot {
+        save_accounts(&state.data_dir, &snap).await.map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to save accounts: {}", e))
         })?;
     }
@@ -266,7 +279,7 @@ pub async fn reject_application(
     };
 
     let id = path.into_inner();
-    let mut apps = load_applications(&state.data_dir);
+    let mut apps = load_applications(&state.data_dir).await;
 
     let app = apps
         .get_mut(&id)
@@ -280,9 +293,11 @@ pub async fn reject_application(
     }
 
     app.status = "rejected".to_string();
-    save_applications(&state.data_dir, &apps).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    save_applications(&state.data_dir, &apps)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,

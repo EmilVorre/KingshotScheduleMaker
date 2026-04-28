@@ -83,7 +83,7 @@ pub async fn submit_form_by_code(
         suggestions: req.suggestions.clone(),
     };
 
-    if let Err(e) = save_form_submission(&state.data_dir, &code, &submission) {
+    if let Err(e) = save_form_submission(&state.data_dir, &code, &submission).await {
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "error": format!("Failed to save submission: {}", e)
@@ -222,28 +222,41 @@ pub async fn create_form(
         },
     };
 
-    archive_old_forms(&state.data_dir, &url_account_name, server_number).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to archive old forms: {}", e))
-    })?;
+    archive_old_forms(&state.data_dir, &url_account_name, server_number)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to archive old forms: {}",
+                e
+            ))
+        })?;
 
-    let mut forms = state.forms.lock().unwrap();
-    forms.retain(|_, fd| {
-        !(fd.account_name == url_account_name && fd.server_number == server_number)
-    });
-    forms.insert(code.clone(), form_data.clone());
-    drop(forms);
+    {
+        let mut forms = state.forms.lock().unwrap();
+        forms.retain(|_, fd| {
+            !(fd.account_name == url_account_name && fd.server_number == server_number)
+        });
+        forms.insert(code.clone(), form_data.clone());
+    }
 
-    save_form(&state.data_dir, &form_data).map_err(|e| {
+    save_form(&state.data_dir, &form_data).await.map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to save form: {}", e))
     })?;
 
-    let mut current_forms = state.current_forms.lock().unwrap();
-    let key = format!("{}:{}", url_account_name, server_number);
-    current_forms.insert(key, code.clone());
-    save_current_forms(&state.data_dir, &current_forms).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save current forms: {}", e))
-    })?;
-    drop(current_forms);
+    let cf_snapshot = {
+        let mut current_forms = state.current_forms.lock().unwrap();
+        let key = format!("{}:{}", url_account_name, server_number);
+        current_forms.insert(key, code.clone());
+        current_forms.clone()
+    };
+    save_current_forms(&state.data_dir, &cf_snapshot)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to save current forms: {}",
+                e
+            ))
+        })?;
 
     let form_url = format!("/form/{}", code);
 
@@ -305,42 +318,43 @@ pub async fn update_form_config(
         })));
     }
 
-    let mut forms = state.forms.lock().unwrap();
-    let current_forms = state.current_forms.lock().unwrap();
     let key = format!("{}:{}", url_account_name, server_number);
-
-    let form_code = if let Some(code) = current_forms.get(&key) {
-        code.clone()
-    } else {
-        drop(forms);
-        drop(current_forms);
-        return Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "success": false,
-            "error": "No current form found"
-        })));
+    let form_code = {
+        let current_forms = state.current_forms.lock().unwrap();
+        match current_forms.get(&key) {
+            Some(code) => code.clone(),
+            None => {
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "success": false,
+                    "error": "No current form found"
+                })))
+            }
+        }
     };
 
-    let mut form_data = if let Some(form) = forms.get(&form_code).cloned() {
-        form
-    } else {
-        drop(forms);
-        drop(current_forms);
-        return Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "success": false,
-            "error": "Form not found"
-        })));
+    let mut form_data = {
+        let forms = state.forms.lock().unwrap();
+        match forms.get(&form_code).cloned() {
+            Some(f) => f,
+            None => {
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "success": false,
+                    "error": "Form not found"
+                })))
+            }
+        }
     };
-
-    drop(current_forms);
 
     form_data.config.predetermined_slots = body.predetermined_slots.clone();
 
-    save_form(&state.data_dir, &form_data).map_err(|e| {
+    save_form(&state.data_dir, &form_data).await.map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to save form: {}", e))
     })?;
 
-    forms.insert(form_code.clone(), form_data);
-    drop(forms);
+    {
+        let mut forms = state.forms.lock().unwrap();
+        forms.insert(form_code.clone(), form_data);
+    }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -370,7 +384,7 @@ pub async fn check_submission_by_code(
             "has_submitted": false
         })));
     };
-    let has_submitted = has_player_submission(&state.data_dir, &form_code, player_id);
+    let has_submitted = has_player_submission(&state.data_dir, &form_code, player_id).await;
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "has_submitted": has_submitted
     })))
@@ -478,7 +492,7 @@ pub async fn get_form_stats_by_code(
     let research_slots_ref: Vec<(u8, String)> = research_slots.clone();
     let troops_slots_ref: Vec<(u8, String)> = troops_slots.clone();
 
-    let submissions = load_form_submissions(&state.data_dir, &code);
+    let submissions = load_form_submissions(&state.data_dir, &code).await;
     let entries = load_appointments_from_submissions(
         &submissions,
         Some(&construction_slots_ref),
@@ -595,7 +609,7 @@ pub async fn get_current_form_info(
 
     if let Some(form) = current_form {
         let form_url = format!("/form/{}", form.code);
-        let submissions_count = count_form_submissions(&state.data_dir, &form.code);
+        let submissions_count = count_form_submissions(&state.data_dir, &form.code).await;
 
         Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
@@ -670,7 +684,7 @@ pub async fn list_old_forms_api(
         })));
     }
 
-    let old_forms = list_old_forms(&state.data_dir, &url_account_name, server_number);
+    let old_forms = list_old_forms(&state.data_dir, &url_account_name, server_number).await;
     let items: Vec<serde_json::Value> = old_forms
         .into_iter()
         .map(|(archive_name, form)| {
@@ -745,7 +759,9 @@ pub async fn reopen_form_api(
         &url_account_name,
         server_number,
         archive_name,
-    ) {
+    )
+    .await
+    {
         Ok(f) => f,
         Err(e) => {
             return Ok(HttpResponse::BadRequest().json(serde_json::json!({
@@ -755,17 +771,22 @@ pub async fn reopen_form_api(
         }
     };
 
-    let mut forms = state.forms.lock().unwrap();
-    forms.insert(form_data.code.clone(), form_data.clone());
-    drop(forms);
+    {
+        let mut forms = state.forms.lock().unwrap();
+        forms.insert(form_data.code.clone(), form_data.clone());
+    }
 
-    let mut current_forms = state.current_forms.lock().unwrap();
-    let key = format!("{}:{}", url_account_name, server_number);
-    current_forms.insert(key, form_data.code.clone());
-    save_current_forms(&state.data_dir, &current_forms).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
-    drop(current_forms);
+    let cf_snapshot = {
+        let mut current_forms = state.current_forms.lock().unwrap();
+        let key = format!("{}:{}", url_account_name, server_number);
+        current_forms.insert(key, form_data.code.clone());
+        current_forms.clone()
+    };
+    save_current_forms(&state.data_dir, &cf_snapshot)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     let form_url = format!("/form/{}", form_data.code);
 
@@ -843,7 +864,7 @@ pub async fn get_player_by_id(
     drop(forms);
     drop(current_forms);
 
-    let submissions = load_form_submissions(&state.data_dir, &form_code);
+    let submissions = load_form_submissions(&state.data_dir, &form_code).await;
 
     if let Some(entry) = submissions.iter().find(|e| e.player_id == player_id) {
         Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -924,7 +945,7 @@ pub async fn download_form_csv(
         })));
     };
 
-    let submissions = load_form_submissions(&state.data_dir, &form.code);
+    let submissions = load_form_submissions(&state.data_dir, &form.code).await;
     if submissions.is_empty() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "success": false,
@@ -1137,8 +1158,8 @@ pub async fn get_form_submissions(
     }
 
     let current_form = current_form.unwrap();
-    let submissions = load_form_submissions(&state.data_dir, &current_form.code);
-    if submissions.is_empty() {
+    let raw_submissions = load_form_submissions(&state.data_dir, &current_form.code).await;
+    if raw_submissions.is_empty() {
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
             "submissions": []
@@ -1146,7 +1167,7 @@ pub async fn get_form_submissions(
     }
 
     let mut submissions = Vec::new();
-    for s in load_form_submissions(&state.data_dir, &current_form.code) {
+    for s in raw_submissions {
         submissions.push(serde_json::json!({
             "timestamp": s.timestamp,
             "alliance": s.alliance,

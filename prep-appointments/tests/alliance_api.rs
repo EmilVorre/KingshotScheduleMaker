@@ -6,7 +6,7 @@ use actix_web::{test, web, App};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use prep_appointments::web::{alliances, oauth_state, swordland, tri_alliance, AppState};
+use prep_appointments::web::{alliances, swordland, tri_alliance, AppState};
 
 fn make_alliance_app_state(data_dir: String) -> web::Data<AppState> {
     let mut accounts = HashMap::new();
@@ -34,8 +34,8 @@ fn make_alliance_app_state(data_dir: String) -> web::Data<AppState> {
         forms: Mutex::new(HashMap::new()),
         current_forms: Mutex::new(HashMap::new()),
         data_dir,
-        oauth_state_cache: oauth_state::OAuthStateCache::new(),
-        pending_oauth_cache: oauth_state::PendingOAuthCache::new(),
+        pg: None,
+        oauth_hmac_key: vec![0u8; 32],
     })
 }
 

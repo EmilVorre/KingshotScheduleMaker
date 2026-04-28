@@ -66,8 +66,10 @@ pub struct AppState {
     pub forms: Mutex<HashMap<String, FormData>>,
     pub current_forms: Mutex<HashMap<String, String>>,
     pub data_dir: String,
-    pub oauth_state_cache: super::oauth_state::OAuthStateCache,
-    pub pending_oauth_cache: super::oauth_state::PendingOAuthCache,
+    /// Async Postgres pool; `None` when running with the JSON file backend.
+    pub pg: Option<super::db::PgPool>,
+    /// HMAC key used to sign the stateless OAuth `state` cookie.
+    pub oauth_hmac_key: Vec<u8>,
 }
 
 // ============ Account ============

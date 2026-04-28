@@ -31,24 +31,25 @@ fn redeemed_key(account: &str, server: u32) -> String {
     format!("{}_{}", account.to_lowercase(), server)
 }
 
-pub(crate) fn load_redeemed_internal(
+pub(crate) async fn load_redeemed_internal(
     data_dir: &str,
     account: &str,
     server: u32,
 ) -> std::collections::HashSet<String> {
     let key = redeemed_key(account, server);
     load_domain_doc::<RedeemedCodesFile>(data_dir, "giftcode_redeemed", &key)
+        .await
         .map(|d| d.redeemed_codes.into_iter().collect())
         .unwrap_or_default()
 }
 
-pub(crate) fn add_redeemed_code_internal(
+pub(crate) async fn add_redeemed_code_internal(
     data_dir: &str,
     account: &str,
     server: u32,
     code: &str,
 ) -> std::io::Result<()> {
-    let mut codes = load_redeemed_internal(data_dir, account, server);
+    let mut codes = load_redeemed_internal(data_dir, account, server).await;
     let code_clean = code.trim().to_uppercase();
     if code_clean.is_empty() {
         return Ok(());
@@ -58,21 +59,26 @@ pub(crate) fn add_redeemed_code_internal(
         redeemed_codes: codes.into_iter().collect(),
     };
     let key = redeemed_key(account, server);
-    save_domain_doc(data_dir, "giftcode_redeemed", &key, &data)
+    save_domain_doc(data_dir, "giftcode_redeemed", &key, &data).await
 }
 
-pub(crate) fn load_recipients_internal(data_dir: &str, account: &str, server: u32) -> Vec<String> {
+pub(crate) async fn load_recipients_internal(
+    data_dir: &str,
+    account: &str,
+    server: u32,
+) -> Vec<String> {
     let key = recipients_key(account, server);
     load_domain_doc::<GiftcodeRecipientsFile>(data_dir, "giftcode_recipients", &key)
+        .await
         .map(|d| d.player_ids)
         .unwrap_or_default()
 }
 
-fn load_recipients(data_dir: &str, account: &str, server: u32) -> Vec<String> {
-    load_recipients_internal(data_dir, account, server)
+async fn load_recipients(data_dir: &str, account: &str, server: u32) -> Vec<String> {
+    load_recipients_internal(data_dir, account, server).await
 }
 
-fn save_recipients(
+async fn save_recipients(
     data_dir: &str,
     account: &str,
     server: u32,
@@ -82,11 +88,12 @@ fn save_recipients(
         player_ids: player_ids.to_vec(),
     };
     let key = recipients_key(account, server);
-    save_domain_doc(data_dir, "giftcode_recipients", &key, &data)
+    save_domain_doc(data_dir, "giftcode_recipients", &key, &data).await
 }
 
-pub(crate) fn list_accounts_with_recipients(data_dir: &str) -> Vec<(String, u32)> {
+pub(crate) async fn list_accounts_with_recipients(data_dir: &str) -> Vec<(String, u32)> {
     list_domain_docs::<GiftcodeRecipientsFile>(data_dir, "giftcode_recipients", None)
+        .await
         .into_iter()
         .filter_map(|(key, v)| {
             if v.player_ids.is_empty() {
@@ -108,12 +115,12 @@ pub async fn get_recipients(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
 
-    let (session_account, _) = match auth_check(&session, &state, &url_account, server) {
+    let (session_account, _) = match auth_check(&session, &state, &url_account, server).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
 
-    let player_ids = load_recipients(&state.data_dir, &session_account, server);
+    let player_ids = load_recipients(&state.data_dir, &session_account, server).await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -136,7 +143,7 @@ pub async fn set_recipients(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
 
-    let (session_account, _) = match auth_check(&session, &state, &url_account, server) {
+    let (session_account, _) = match auth_check(&session, &state, &url_account, server).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -148,9 +155,11 @@ pub async fn set_recipients(
         .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
         .collect();
 
-    save_recipients(&state.data_dir, &session_account, server, &player_ids).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    save_recipients(&state.data_dir, &session_account, server, &player_ids)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -158,7 +167,7 @@ pub async fn set_recipients(
     })))
 }
 
-fn auth_check(
+async fn auth_check(
     session: &Session,
     state: &web::Data<AppState>,
     url_account: &str,
@@ -202,7 +211,7 @@ fn auth_check(
             .cloned()
             .unwrap_or_default();
         drop(accounts);
-        let invites = alliance_invites::load_invites(&state.data_dir);
+        let invites = alliance_invites::load_invites(&state.data_dir).await;
         let has_inv = invites
             .values()
             .any(|i| i.to_friend_code.eq_ignore_ascii_case(&my_fc));
@@ -232,7 +241,7 @@ pub async fn redeem_giftcode(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
 
-    let (session_account, _) = match auth_check(&session, &state, &url_account, server) {
+    let (session_account, _) = match auth_check(&session, &state, &url_account, server).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -244,7 +253,7 @@ pub async fn redeem_giftcode(
         })));
     }
 
-    let player_ids = load_recipients(&state.data_dir, &session_account, server);
+    let player_ids = load_recipients(&state.data_dir, &session_account, server).await;
     if player_ids.is_empty() {
         return Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
@@ -279,7 +288,7 @@ pub async fn fetch_giftcodes(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
 
-    let _ = match auth_check(&session, &state, &url_account, server) {
+    let _ = match auth_check(&session, &state, &url_account, server).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };

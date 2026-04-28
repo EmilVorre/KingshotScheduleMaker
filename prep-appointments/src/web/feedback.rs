@@ -69,7 +69,7 @@ pub async fn submit_feedback(
     let id = super::persistence::generate_form_code();
     let created_at = chrono::Utc::now().to_rfc3339();
 
-    let mut feedback = load_feedback(&state.data_dir);
+    let mut feedback = load_feedback(&state.data_dir).await;
     feedback.push(FeedbackEntry {
         id: id.clone(),
         r#type: feedback_type.to_string(),
@@ -78,7 +78,7 @@ pub async fn submit_feedback(
         archived: false,
     });
 
-    if let Err(e) = save_feedback(&state.data_dir, &feedback) {
+    if let Err(e) = save_feedback(&state.data_dir, &feedback).await {
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "error": format!("Failed to save: {}", e)
@@ -98,7 +98,7 @@ pub async fn list_feedback(session: Session, state: web::Data<AppState>) -> Resu
         Err(resp) => return Ok(resp),
     };
 
-    let feedback = load_feedback(&state.data_dir);
+    let feedback = load_feedback(&state.data_dir).await;
     let list: Vec<serde_json::Value> = feedback
         .iter()
         .filter(|f| !f.archived)
@@ -131,7 +131,7 @@ pub async fn archive_feedback(
     };
 
     let id = path.into_inner();
-    let mut feedback = load_feedback(&state.data_dir);
+    let mut feedback = load_feedback(&state.data_dir).await;
 
     if let Some(f) = feedback.iter_mut().find(|e| e.id == id) {
         f.archived = true;
@@ -142,7 +142,7 @@ pub async fn archive_feedback(
         })));
     }
 
-    if let Err(e) = save_feedback(&state.data_dir, &feedback) {
+    if let Err(e) = save_feedback(&state.data_dir, &feedback).await {
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "error": format!("Failed to save: {}", e)

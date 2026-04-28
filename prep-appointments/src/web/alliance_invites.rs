@@ -21,15 +21,17 @@ pub struct AllianceInvite {
     pub created_at: String,
 }
 
-pub fn load_invites(data_dir: &str) -> HashMap<String, AllianceInvite> {
-    load_domain_doc(data_dir, "alliance_invites", "all").unwrap_or_default()
+pub async fn load_invites(data_dir: &str) -> HashMap<String, AllianceInvite> {
+    load_domain_doc(data_dir, "alliance_invites", "all")
+        .await
+        .unwrap_or_default()
 }
 
-pub fn save_invites(
+pub async fn save_invites(
     data_dir: &str,
     invites: &HashMap<String, AllianceInvite>,
 ) -> std::io::Result<()> {
-    save_domain_doc(data_dir, "alliance_invites", "all", invites)
+    save_domain_doc(data_dir, "alliance_invites", "all", invites).await
 }
 
 fn generate_invite_id() -> String {
@@ -38,8 +40,8 @@ fn generate_invite_id() -> String {
 }
 
 /// Load accepted invites for a user (alliances they can edit)
-pub fn load_invites_for_user(state: &AppState, session_account: &str) -> Vec<AllianceInvite> {
-    let invites = load_invites(&state.data_dir);
+pub async fn load_invites_for_user(state: &AppState, session_account: &str) -> Vec<AllianceInvite> {
+    let invites = load_invites(&state.data_dir).await;
     let my_friend_code = {
         let accounts = state.accounts.lock().unwrap();
         accounts
@@ -98,28 +100,35 @@ pub async fn get_friend_code(
         })));
     }
 
-    let mut accounts = state.accounts.lock().unwrap();
-    let need_save = {
-        let account = match accounts.get_mut(&session_account) {
-            Some(a) => a,
+    let (friend_code, snapshot_to_save) = {
+        let mut accounts = state.accounts.lock().unwrap();
+        let need_save = match accounts.get_mut(&session_account) {
+            Some(a) => {
+                if a.friend_code.is_none() {
+                    a.friend_code = Some(generate_friend_code());
+                    true
+                } else {
+                    false
+                }
+            }
             None => {
                 return Ok(HttpResponse::NotFound()
                     .json(serde_json::json!({"error": "Account not found"})))
             }
         };
-        if account.friend_code.is_none() {
-            account.friend_code = Some(generate_friend_code());
-            true
+        let fc = accounts
+            .get(&session_account)
+            .and_then(|a| a.friend_code.clone())
+            .unwrap_or_default();
+        let snap = if need_save {
+            Some(accounts.clone())
         } else {
-            false
-        }
+            None
+        };
+        (fc, snap)
     };
-    let friend_code = accounts
-        .get(&session_account)
-        .and_then(|a| a.friend_code.clone())
-        .unwrap_or_default();
-    if need_save {
-        save_accounts(&state.data_dir, &accounts).map_err(|e| {
+    if let Some(snap) = snapshot_to_save {
+        save_accounts(&state.data_dir, &snap).await.map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
         })?;
     }
@@ -238,7 +247,7 @@ pub async fn create_invite(
         })));
     }
 
-    let mut invites = load_invites(&state.data_dir);
+    let mut invites = load_invites(&state.data_dir).await;
     let has_pending = invites.values().any(|i| {
         i.from_account == session_account
             && i.from_server == server
@@ -265,7 +274,7 @@ pub async fn create_invite(
         created_at: chrono::Local::now().to_rfc3339(),
     };
     invites.insert(id, invite);
-    save_invites(&state.data_dir, &invites).map_err(|e| {
+    save_invites(&state.data_dir, &invites).await.map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
     })?;
 
@@ -325,7 +334,7 @@ pub async fn list_invites(
             .unwrap_or_default()
     };
 
-    let invites = load_invites(&state.data_dir);
+    let invites = load_invites(&state.data_dir).await;
     let accounts = state.accounts.lock().unwrap();
     let sent: Vec<_> = invites
         .values()
@@ -405,7 +414,7 @@ pub async fn accept_invite(
             .unwrap_or_default()
     };
 
-    let mut invites = load_invites(&state.data_dir);
+    let mut invites = load_invites(&state.data_dir).await;
     let invite = match invites.get_mut(&id) {
         Some(i) => i,
         None => {
@@ -430,7 +439,7 @@ pub async fn accept_invite(
     }
 
     invite.status = "accepted".to_string();
-    save_invites(&state.data_dir, &invites).map_err(|e| {
+    save_invites(&state.data_dir, &invites).await.map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
     })?;
 
@@ -470,7 +479,7 @@ pub async fn reject_invite(
             .unwrap_or_default()
     };
 
-    let mut invites = load_invites(&state.data_dir);
+    let mut invites = load_invites(&state.data_dir).await;
     let invite = match invites.get_mut(&id) {
         Some(i) => i,
         None => {
@@ -495,7 +504,7 @@ pub async fn reject_invite(
     }
 
     invite.status = "rejected".to_string();
-    save_invites(&state.data_dir, &invites).map_err(|e| {
+    save_invites(&state.data_dir, &invites).await.map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
     })?;
 
@@ -547,7 +556,7 @@ pub async fn revoke_invite(
         })));
     }
 
-    let mut invites = load_invites(&state.data_dir);
+    let mut invites = load_invites(&state.data_dir).await;
     let invite = match invites.get_mut(&id) {
         Some(i) => i,
         None => {
@@ -575,7 +584,7 @@ pub async fn revoke_invite(
     }
 
     invite.status = "revoked".to_string();
-    save_invites(&state.data_dir, &invites).map_err(|e| {
+    save_invites(&state.data_dir, &invites).await.map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
     })?;
 
@@ -586,7 +595,7 @@ pub async fn revoke_invite(
 }
 
 /// Check if session_account has access to edit (owner_account, owner_server, alliance_slug)
-pub fn has_alliance_access(
+pub async fn has_alliance_access(
     state: &AppState,
     session_account: &str,
     owner_account: &str,
@@ -596,7 +605,7 @@ pub fn has_alliance_access(
     if session_account.eq_ignore_ascii_case(owner_account) {
         return true;
     }
-    let invites = load_invites(&state.data_dir);
+    let invites = load_invites(&state.data_dir).await;
     let my_friend_code = {
         let accounts = state.accounts.lock().unwrap();
         accounts

@@ -88,19 +88,23 @@ pub async fn set_admin(
     let target_account = path.into_inner().trim().to_lowercase();
     let admin = req.as_ref().map(|r| r.admin).unwrap_or(true);
 
-    let mut accounts = state.accounts.lock().unwrap();
-    let account = match accounts.get_mut(&target_account) {
-        Some(a) => a,
-        None => {
-            return Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "success": false,
-                "error": "Account not found"
-            })))
+    let snapshot = {
+        let mut accounts = state.accounts.lock().unwrap();
+        match accounts.get_mut(&target_account) {
+            Some(a) => {
+                a.admin = admin;
+            }
+            None => {
+                return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                    "success": false,
+                    "error": "Account not found"
+                })))
+            }
         }
+        accounts.clone()
     };
 
-    account.admin = admin;
-    if let Err(e) = save_accounts(&state.data_dir, &accounts) {
+    if let Err(e) = save_accounts(&state.data_dir, &snapshot).await {
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "error": format!("Failed to save: {}", e)

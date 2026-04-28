@@ -55,17 +55,17 @@ struct AllianceFile {
     players: Vec<AlliancePlayer>,
 }
 
-fn load_alliance_file(
+async fn load_alliance_file(
     data_dir: &str,
     account: &str,
     server: u32,
     slug: &str,
 ) -> Option<AllianceFile> {
     let key = alliance_doc_key(account, server, slug);
-    load_domain_doc(data_dir, "alliances", &key)
+    load_domain_doc(data_dir, "alliances", &key).await
 }
 
-fn save_alliance_file(
+async fn save_alliance_file(
     data_dir: &str,
     account: &str,
     server: u32,
@@ -73,7 +73,7 @@ fn save_alliance_file(
     data: &AllianceFile,
 ) -> std::io::Result<()> {
     let key = alliance_doc_key(account, server, slug);
-    save_domain_doc(data_dir, "alliances", &key, data)
+    save_domain_doc(data_dir, "alliances", &key, data).await
 }
 
 /// List alliances: own + accepted invites
@@ -85,7 +85,7 @@ pub async fn list_alliances(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
 
-    let (session_account, _) = match auth_check(&session, &state, &url_account, server) {
+    let (session_account, _) = match auth_check(&session, &state, &url_account, server).await {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -106,12 +106,13 @@ pub async fn list_alliances(
 
     if !alliance_name.is_empty() {
         let slug = alliance_to_slug(&alliance_name);
-        let (players, file_alliance_id) =
-            if let Some(f) = load_alliance_file(&state.data_dir, &session_account, server, &slug) {
-                (f.players, f.alliance_id)
-            } else {
-                (vec![], None)
-            };
+        let (players, file_alliance_id) = if let Some(f) =
+            load_alliance_file(&state.data_dir, &session_account, server, &slug).await
+        {
+            (f.players, f.alliance_id)
+        } else {
+            (vec![], None)
+        };
         let aid = file_alliance_id.unwrap_or_else(|| alliance_id.clone());
         alliances.push(serde_json::json!({
             "name": alliance_name,
@@ -126,7 +127,7 @@ pub async fn list_alliances(
     }
 
     // Invited alliances (accepted)
-    let invites = alliance_invites::load_invites_for_user(&state, &session_account);
+    let invites = alliance_invites::load_invites_for_user(&state, &session_account).await;
     for inv in invites {
         let (players, file_alliance_id) = load_alliance_file(
             &state.data_dir,
@@ -134,6 +135,7 @@ pub async fn list_alliances(
             inv.from_server,
             &inv.alliance_slug,
         )
+        .await
         .map(|f| (f.players, f.alliance_id))
         .unwrap_or_else(|| (vec![], None));
         if players.is_empty() && file_alliance_id.is_none() {
@@ -185,7 +187,7 @@ pub async fn add_player(
     let url_account = url_account.to_lowercase();
 
     let (_session_account, _) =
-        match auth_check_for_alliance_edit(&session, &state, &url_account, server) {
+        match auth_check_for_alliance_edit(&session, &state, &url_account, server).await {
             Ok(v) => v,
             Err(resp) => return Ok(resp),
         };
@@ -233,8 +235,9 @@ pub async fn add_player(
         }
     };
 
-    let mut data =
-        load_alliance_file(&state.data_dir, &url_account, server, &slug).unwrap_or(AllianceFile {
+    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &slug)
+        .await
+        .unwrap_or(AllianceFile {
             alliance_name: alliance_name.clone(),
             alliance_id: Some(alliance_id.clone()),
             players: vec![],
@@ -261,9 +264,11 @@ pub async fn add_player(
         added_at,
     });
 
-    save_alliance_file(&state.data_dir, &url_account, server, &slug, &data).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    save_alliance_file(&state.data_dir, &url_account, server, &slug, &data)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -288,7 +293,7 @@ pub async fn remove_player(
     let player_id_or_name = player_id_or_name.trim();
 
     let (session_account, _) =
-        match auth_check_for_alliance_edit(&session, &state, &url_account, server) {
+        match auth_check_for_alliance_edit(&session, &state, &url_account, server).await {
             Ok(v) => v,
             Err(resp) => return Ok(resp),
         };
@@ -299,14 +304,16 @@ pub async fn remove_player(
         &url_account,
         server,
         &alliance_slug,
-    ) {
+    )
+    .await
+    {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "success": false,
             "error": "Unauthorized: you can only manage alliances you own or are invited to"
         })));
     }
 
-    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &alliance_slug);
+    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &alliance_slug).await;
     if data.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "success": false,
@@ -342,11 +349,15 @@ pub async fn remove_player(
 
     if data.players.is_empty() {
         let key = alliance_doc_key(&url_account, server, &alliance_slug);
-        delete_domain_doc(&state.data_dir, "alliances", &key).ok();
+        delete_domain_doc(&state.data_dir, "alliances", &key)
+            .await
+            .ok();
     } else {
-        save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(
-            |e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)),
-        )?;
+        save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data)
+            .await
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+            })?;
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -364,7 +375,7 @@ pub async fn refresh_names(
     let url_account = url_account.to_lowercase();
 
     let (session_account, _) =
-        match auth_check_for_alliance_edit(&session, &state, &url_account, server) {
+        match auth_check_for_alliance_edit(&session, &state, &url_account, server).await {
             Ok(v) => v,
             Err(resp) => return Ok(resp),
         };
@@ -375,14 +386,16 @@ pub async fn refresh_names(
         &url_account,
         server,
         &alliance_slug,
-    ) {
+    )
+    .await
+    {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "success": false,
             "error": "Unauthorized: you can only manage alliances you own or are invited to"
         })));
     }
 
-    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &alliance_slug);
+    let mut data = load_alliance_file(&state.data_dir, &url_account, server, &alliance_slug).await;
     if data.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "success": false,
@@ -406,9 +419,11 @@ pub async fn refresh_names(
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data).map_err(
-        |e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)),
-    )?;
+    save_alliance_file(&state.data_dir, &url_account, server, &alliance_slug, &data)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -418,7 +433,7 @@ pub async fn refresh_names(
 }
 
 /// Auth for alliance edit: owner or invitee with accepted invite
-fn auth_check_for_alliance_edit(
+async fn auth_check_for_alliance_edit(
     session: &Session,
     state: &web::Data<AppState>,
     owner_account: &str,
@@ -478,7 +493,9 @@ fn auth_check_for_alliance_edit(
         owner_account,
         owner_server,
         &owner_slug,
-    ) {
+    )
+    .await
+    {
         return Ok((session_account, session_server));
     }
 
@@ -488,7 +505,7 @@ fn auth_check_for_alliance_edit(
     })))
 }
 
-fn auth_check(
+async fn auth_check(
     session: &Session,
     state: &web::Data<AppState>,
     url_account: &str,
@@ -539,7 +556,7 @@ fn auth_check(
             .cloned()
             .unwrap_or_default();
         drop(accounts);
-        let invites = alliance_invites::load_invites(&state.data_dir);
+        let invites = alliance_invites::load_invites(&state.data_dir).await;
         let has_inv = invites
             .values()
             .any(|i| i.to_friend_code.eq_ignore_ascii_case(&my_fc));

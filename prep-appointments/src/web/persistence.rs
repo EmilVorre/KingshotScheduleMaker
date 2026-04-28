@@ -1,22 +1,30 @@
 //! Persistence layer: load/save for accounts, forms, schedules, and statistics.
+//!
+//! The Postgres path uses an async `deadpool-postgres` pool initialised once
+//! at startup. The JSON path keeps the existing on-disk file layout and runs
+//! inline (file reads are microseconds and the dev/test backend never needs
+//! pooling). All public helpers are `async` so handlers can `.await` them
+//! uniformly regardless of backend.
 
 use rand::Rng;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
+use tokio_postgres::types::ToSql;
 
+use super::db::PgPool;
 use super::state::{Account, FormData, ScheduleData, StatsResponse};
 use crate::form::submission::FormSubmission;
-use postgres::{Client, NoTls};
 
 #[derive(Clone, Debug)]
 enum StorageBackend {
     Json,
-    Postgres { database_url: String },
+    Postgres,
 }
 
 static STORAGE_BACKEND: OnceLock<StorageBackend> = OnceLock::new();
+static PG_POOL: OnceLock<PgPool> = OnceLock::new();
 
 fn storage_backend() -> &'static StorageBackend {
     STORAGE_BACKEND.get_or_init(|| {
@@ -29,7 +37,7 @@ fn storage_backend() -> &'static StorageBackend {
                 );
                 StorageBackend::Json
             } else {
-                StorageBackend::Postgres { database_url }
+                StorageBackend::Postgres
             }
         } else {
             StorageBackend::Json
@@ -37,44 +45,28 @@ fn storage_backend() -> &'static StorageBackend {
     })
 }
 
-/// Returns true when the backend is configured to use Postgres. Useful for
-/// caches that want to write-through so state survives a pod restart.
+/// True when the storage backend is configured to use Postgres.
 pub fn is_postgres_backend() -> bool {
-    matches!(storage_backend(), StorageBackend::Postgres { .. })
+    matches!(storage_backend(), StorageBackend::Postgres)
 }
 
-/// Run sync postgres work (connect + callback + client drop) on a fresh OS thread
-/// that has no Tokio runtime attached. This avoids two failure modes:
-///
-/// - `Cannot start a runtime from within a runtime` panic from the inner
-///   tokio-postgres runtime (or its `Client::drop`) when called from inside any
-///   Tokio runtime context.
-/// - `can call blocking only when running on the multi-threaded runtime` panic
-///   from `tokio::task::block_in_place`, since Actix-web workers each run on a
-///   `current_thread` runtime.
-///
-/// `std::thread::scope` lets the spawned worker borrow non-`'static` data, so
-/// existing call sites that pass `&str` / `&T` keep working unchanged.
-fn with_pg_client<R, F>(database_url: &str, f: F) -> Result<R, Box<dyn std::error::Error>>
-where
-    F: FnOnce(&mut Client) -> Result<R, Box<dyn std::error::Error>> + Send,
-    R: Send,
-{
-    let url = database_url.to_string();
-    let join_result = std::thread::scope(|scope| {
-        scope
-            .spawn(move || -> Result<R, String> {
-                let mut client = Client::connect(&url, NoTls).map_err(|e| e.to_string())?;
-                f(&mut client).map_err(|e| e.to_string())
-            })
-            .join()
-    });
+/// Install the global pool. Must be called once during startup before any
+/// persistence call when the backend is Postgres.
+pub fn init_pg_pool(pool: PgPool) {
+    let _ = PG_POOL.set(pool);
+}
 
-    match join_result {
-        Ok(Ok(value)) => Ok(value),
-        Ok(Err(msg)) => Err(msg.into()),
-        Err(_) => Err("postgres worker thread panicked".into()),
-    }
+/// Returns the global pool, if installed.
+pub fn pg_pool() -> Option<&'static PgPool> {
+    PG_POOL.get()
+}
+
+fn require_pool() -> Result<&'static PgPool, Box<dyn std::error::Error + Send + Sync>> {
+    pg_pool().ok_or_else(|| "Postgres pool not initialised".into())
+}
+
+fn io_other<E: std::fmt::Display>(e: E) -> std::io::Error {
+    std::io::Error::other(e.to_string())
 }
 
 /// Returns the schedule key for an account/server
@@ -105,10 +97,23 @@ pub fn get_current_form(
     }
 }
 
-/// Load accounts from file
-pub fn load_accounts(data_dir: &str) -> HashMap<String, Account> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_load_accounts(database_url).unwrap_or_else(|e| {
+/// Generate a unique 12-character alphanumeric form code
+pub fn generate_form_code() -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+    (0..12)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
+}
+
+// ============ accounts ============
+
+pub async fn load_accounts(data_dir: &str) -> HashMap<String, Account> {
+    if is_postgres_backend() {
+        return pg_load_accounts().await.unwrap_or_else(|e| {
             eprintln!("Failed to load accounts from postgres: {e}");
             HashMap::new()
         });
@@ -124,10 +129,12 @@ pub fn load_accounts(data_dir: &str) -> HashMap<String, Account> {
     HashMap::new()
 }
 
-/// Save accounts to file
-pub fn save_accounts(data_dir: &str, accounts: &HashMap<String, Account>) -> std::io::Result<()> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_save_accounts(database_url, accounts).map_err(io_other);
+pub async fn save_accounts(
+    data_dir: &str,
+    accounts: &HashMap<String, Account>,
+) -> std::io::Result<()> {
+    if is_postgres_backend() {
+        return pg_save_accounts(accounts).await.map_err(io_other);
     }
     std::fs::create_dir_all(data_dir)?;
     let accounts_path = format!("{}/accounts.json", data_dir);
@@ -136,10 +143,46 @@ pub fn save_accounts(data_dir: &str, accounts: &HashMap<String, Account>) -> std
     Ok(())
 }
 
-/// Load current forms mapping
-pub fn load_current_forms(data_dir: &str) -> HashMap<String, String> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_load_current_forms(database_url).unwrap_or_else(|e| {
+async fn pg_load_accounts(
+) -> Result<HashMap<String, Account>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let mut map = HashMap::new();
+    for row in client
+        .query("SELECT account_key, payload FROM accounts", &[])
+        .await?
+    {
+        let key: String = row.get(0);
+        let payload: Value = row.get(1);
+        let account: Account = serde_json::from_value(payload)?;
+        map.insert(key, account);
+    }
+    Ok(map)
+}
+
+async fn pg_save_accounts(
+    accounts: &HashMap<String, Account>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut client = require_pool()?.client().await?;
+    let tx = client.transaction().await?;
+    tx.execute("DELETE FROM accounts", &[]).await?;
+    for (k, v) in accounts {
+        let payload = serde_json::to_value(v)?;
+        let params: &[&(dyn ToSql + Sync)] = &[k, &payload];
+        tx.execute(
+            "INSERT INTO accounts (account_key, payload) VALUES ($1, $2)",
+            params,
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+// ============ current forms map ============
+
+pub async fn load_current_forms(data_dir: &str) -> HashMap<String, String> {
+    if is_postgres_backend() {
+        return pg_load_current_forms().await.unwrap_or_else(|e| {
             eprintln!("Failed to load current forms from postgres: {e}");
             HashMap::new()
         });
@@ -155,13 +198,12 @@ pub fn load_current_forms(data_dir: &str) -> HashMap<String, String> {
     HashMap::new()
 }
 
-/// Save current forms mapping
-pub fn save_current_forms(
+pub async fn save_current_forms(
     data_dir: &str,
     current_forms: &HashMap<String, String>,
 ) -> std::io::Result<()> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_save_current_forms(database_url, current_forms).map_err(io_other);
+    if is_postgres_backend() {
+        return pg_save_current_forms(current_forms).await.map_err(io_other);
     }
     std::fs::create_dir_all(data_dir)?;
     let path = format!("{}/current_forms_map.json", data_dir);
@@ -170,15 +212,48 @@ pub fn save_current_forms(
     Ok(())
 }
 
-/// Save schedule to disk
-pub fn save_schedule(
+async fn pg_load_current_forms(
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let mut map = HashMap::new();
+    for row in client
+        .query("SELECT schedule_key, form_code FROM current_forms_map", &[])
+        .await?
+    {
+        map.insert(row.get(0), row.get(1));
+    }
+    Ok(map)
+}
+
+async fn pg_save_current_forms(
+    current_forms: &HashMap<String, String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut client = require_pool()?.client().await?;
+    let tx = client.transaction().await?;
+    tx.execute("DELETE FROM current_forms_map", &[]).await?;
+    for (k, v) in current_forms {
+        let params: &[&(dyn ToSql + Sync)] = &[k, v];
+        tx.execute(
+            "INSERT INTO current_forms_map (schedule_key, form_code) VALUES ($1, $2)",
+            params,
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+// ============ schedules ============
+
+pub async fn save_schedule(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
     schedule_data: &ScheduleData,
 ) -> std::io::Result<()> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_save_schedule(database_url, account_name, server_number, schedule_data)
+    if is_postgres_backend() {
+        return pg_save_schedule(account_name, server_number, schedule_data)
+            .await
             .map_err(io_other);
     }
     let schedules_dir = format!("{}/schedules/{}", data_dir, account_name);
@@ -189,17 +264,18 @@ pub fn save_schedule(
     Ok(())
 }
 
-/// Load schedule from disk
-pub fn load_schedule(
+pub async fn load_schedule(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
 ) -> Option<ScheduleData> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_load_schedule(database_url, account_name, server_number).unwrap_or_else(|e| {
-            eprintln!("Failed to load schedule from postgres: {e}");
-            None
-        });
+    if is_postgres_backend() {
+        return pg_load_schedule(account_name, server_number)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to load schedule from postgres: {e}");
+                None
+            });
     }
     let path = format!(
         "{}/schedules/{}/{}.json",
@@ -221,15 +297,56 @@ pub fn load_schedule(
     None
 }
 
-/// Save statistics to disk
-pub fn save_statistics(
+async fn pg_save_schedule(
+    account_name: &str,
+    server_number: u32,
+    schedule_data: &ScheduleData,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let payload = serde_json::to_value(schedule_data)?;
+    let server = server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server, &payload];
+    client
+        .execute(
+            "INSERT INTO schedules (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (account_name, server_number) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
+            params,
+        )
+        .await?;
+    Ok(())
+}
+
+async fn pg_load_schedule(
+    account_name: &str,
+    server_number: u32,
+) -> Result<Option<ScheduleData>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let server = server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server];
+    if let Some(row) = client
+        .query_opt(
+            "SELECT payload FROM schedules WHERE account_name = $1 AND server_number = $2",
+            params,
+        )
+        .await?
+    {
+        let payload: Value = row.get(0);
+        return Ok(Some(serde_json::from_value(payload)?));
+    }
+    Ok(None)
+}
+
+// ============ statistics ============
+
+pub async fn save_statistics(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
     stats: &StatsResponse,
 ) -> std::io::Result<()> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_save_statistics(database_url, account_name, server_number, stats)
+    if is_postgres_backend() {
+        return pg_save_statistics(account_name, server_number, stats)
+            .await
             .map_err(io_other);
     }
     let stats_dir = format!("{}/statistics/{}", data_dir, account_name);
@@ -240,17 +357,18 @@ pub fn save_statistics(
     Ok(())
 }
 
-/// Load statistics from disk
-pub fn load_statistics(
+pub async fn load_statistics(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
 ) -> Option<StatsResponse> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_load_statistics(database_url, account_name, server_number).unwrap_or_else(|e| {
-            eprintln!("Failed to load statistics from postgres: {e}");
-            None
-        });
+    if is_postgres_backend() {
+        return pg_load_statistics(account_name, server_number)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to load statistics from postgres: {e}");
+                None
+            });
     }
     let path = format!(
         "{}/statistics/{}/{}.json",
@@ -272,19 +390,47 @@ pub fn load_statistics(
     None
 }
 
-/// Generate a unique 12-character alphanumeric form code
-pub fn generate_form_code() -> String {
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let mut rng = rand::thread_rng();
-    (0..12)
-        .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
-            CHARSET[idx] as char
-        })
-        .collect()
+async fn pg_save_statistics(
+    account_name: &str,
+    server_number: u32,
+    stats: &StatsResponse,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let payload = serde_json::to_value(stats)?;
+    let server = server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server, &payload];
+    client
+        .execute(
+            "INSERT INTO statistics (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (account_name, server_number) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
+            params,
+        )
+        .await?;
+    Ok(())
 }
 
-/// Move a single expired form to old_forms. Returns true if moved.
+async fn pg_load_statistics(
+    account_name: &str,
+    server_number: u32,
+) -> Result<Option<StatsResponse>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let server = server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server];
+    if let Some(row) = client
+        .query_opt(
+            "SELECT payload FROM statistics WHERE account_name = $1 AND server_number = $2",
+            params,
+        )
+        .await?
+    {
+        let payload: Value = row.get(0);
+        return Ok(Some(serde_json::from_value(payload)?));
+    }
+    Ok(None)
+}
+
+// ============ forms ============
+
 fn move_expired_form_to_old(
     _data_dir: &str,
     form_data: &FormData,
@@ -296,7 +442,7 @@ fn move_expired_form_to_old(
         Some(d) if d.as_str() <= today.as_str() => d,
         _ => return Ok(false),
     };
-    let _ = delete_date; // used in condition above
+    let _ = delete_date;
 
     let code = &form_data.code;
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
@@ -321,11 +467,9 @@ fn move_expired_form_to_old(
     Ok(true)
 }
 
-/// Load all forms from current_forms folder
-/// Expired forms (delete_date <= today) are moved to old_forms and excluded
-pub fn load_forms(data_dir: &str) -> HashMap<String, FormData> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_load_forms(database_url).unwrap_or_else(|e| {
+pub async fn load_forms(data_dir: &str) -> HashMap<String, FormData> {
+    if is_postgres_backend() {
+        return pg_load_forms().await.unwrap_or_else(|e| {
             eprintln!("Failed to load forms from postgres: {e}");
             HashMap::new()
         });
@@ -408,10 +552,9 @@ pub fn load_forms(data_dir: &str) -> HashMap<String, FormData> {
     forms
 }
 
-/// Save a single form to current_forms folder
-pub fn save_form(data_dir: &str, form_data: &FormData) -> std::io::Result<()> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_save_form(database_url, form_data).map_err(io_other);
+pub async fn save_form(data_dir: &str, form_data: &FormData) -> std::io::Result<()> {
+    if is_postgres_backend() {
+        return pg_save_form(form_data).await.map_err(io_other);
     }
     let current_forms_dir = format!("{}/current_forms", data_dir);
     std::fs::create_dir_all(&current_forms_dir)?;
@@ -421,15 +564,15 @@ pub fn save_form(data_dir: &str, form_data: &FormData) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Archive old forms to old_forms folder (including CSV files)
-/// Uses format {account}_{server}_{code}_{timestamp} for unique filenames
-pub fn archive_old_forms(
+pub async fn archive_old_forms(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
 ) -> std::io::Result<()> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_archive_old_forms(database_url, account_name, server_number).map_err(io_other);
+    if is_postgres_backend() {
+        return pg_archive_old_forms(account_name, server_number)
+            .await
+            .map_err(io_other);
     }
     let current_forms_dir = format!("{}/current_forms", data_dir);
     let old_forms_dir = format!("{}/old_forms", data_dir);
@@ -476,17 +619,18 @@ pub fn archive_old_forms(
     Ok(())
 }
 
-/// List archived forms for an account/server
-pub fn list_old_forms(
+pub async fn list_old_forms(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
 ) -> Vec<(String, FormData)> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_list_old_forms(database_url, account_name, server_number).unwrap_or_else(|e| {
-            eprintln!("Failed to list old forms from postgres: {e}");
-            Vec::new()
-        });
+    if is_postgres_backend() {
+        return pg_list_old_forms(account_name, server_number)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to list old forms from postgres: {e}");
+                Vec::new()
+            });
     }
     let old_forms_dir = format!("{}/old_forms", data_dir);
     let mut result = Vec::new();
@@ -516,22 +660,109 @@ pub fn list_old_forms(
     result
 }
 
-/// Feedback entry for user-submitted feedback
+async fn pg_load_forms(
+) -> Result<HashMap<String, FormData>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let mut map = HashMap::new();
+    for row in client
+        .query(
+            "SELECT code, payload FROM forms WHERE archived = FALSE",
+            &[],
+        )
+        .await?
+    {
+        let code: String = row.get(0);
+        let payload: Value = row.get(1);
+        let form: FormData = serde_json::from_value(payload)?;
+        map.insert(code, form);
+    }
+    Ok(map)
+}
+
+async fn pg_save_form(
+    form_data: &FormData,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let payload = serde_json::to_value(form_data)?;
+    let server = form_data.server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] =
+        &[&form_data.code, &form_data.account_name, &server, &payload];
+    client
+        .execute(
+            "INSERT INTO forms (code, account_name, server_number, archived, archive_name, payload, updated_at)
+         VALUES ($1, $2, $3, FALSE, NULL, $4, NOW())
+         ON CONFLICT (code) DO UPDATE SET
+           account_name = EXCLUDED.account_name,
+           server_number = EXCLUDED.server_number,
+           archived = FALSE,
+           archive_name = NULL,
+           payload = EXCLUDED.payload,
+           updated_at = NOW()",
+            params,
+        )
+        .await?;
+    Ok(())
+}
+
+async fn pg_archive_old_forms(
+    account_name: &str,
+    server_number: u32,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let server = server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server, &timestamp];
+    client
+        .execute(
+            "UPDATE forms
+         SET archived = TRUE, archive_name = CONCAT(code, '_', $3), updated_at = NOW()
+         WHERE account_name = $1 AND server_number = $2 AND archived = FALSE",
+            params,
+        )
+        .await?;
+    Ok(())
+}
+
+async fn pg_list_old_forms(
+    account_name: &str,
+    server_number: u32,
+) -> Result<Vec<(String, FormData)>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let mut out = Vec::new();
+    let server = server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server];
+    for row in client
+        .query(
+            "SELECT archive_name, payload FROM forms
+         WHERE account_name = $1 AND server_number = $2 AND archived = TRUE
+         ORDER BY updated_at DESC",
+            params,
+        )
+        .await?
+    {
+        let archive_name: Option<String> = row.get(0);
+        let payload: Value = row.get(1);
+        let form: FormData = serde_json::from_value(payload)?;
+        out.push((archive_name.unwrap_or_else(|| form.code.clone()), form));
+    }
+    Ok(out)
+}
+
+// ============ feedback ============
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FeedbackEntry {
     pub id: String,
-    pub r#type: String, // "bug" | "feature" | "general"
+    pub r#type: String,
     pub text: String,
     pub created_at: String,
-    /// When true, hidden from the feedback list but still saved
     #[serde(default)]
     pub archived: bool,
 }
 
-/// Load all feedback from file
-pub fn load_feedback(data_dir: &str) -> Vec<FeedbackEntry> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_load_feedback(database_url).unwrap_or_else(|e| {
+pub async fn load_feedback(data_dir: &str) -> Vec<FeedbackEntry> {
+    if is_postgres_backend() {
+        return pg_load_feedback().await.unwrap_or_else(|e| {
             eprintln!("Failed to load feedback from postgres: {e}");
             Vec::new()
         });
@@ -547,10 +778,9 @@ pub fn load_feedback(data_dir: &str) -> Vec<FeedbackEntry> {
     Vec::new()
 }
 
-/// Save feedback to file
-pub fn save_feedback(data_dir: &str, feedback: &[FeedbackEntry]) -> std::io::Result<()> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_save_feedback(database_url, feedback).map_err(io_other);
+pub async fn save_feedback(data_dir: &str, feedback: &[FeedbackEntry]) -> std::io::Result<()> {
+    if is_postgres_backend() {
+        return pg_save_feedback(feedback).await.map_err(io_other);
     }
     std::fs::create_dir_all(data_dir)?;
     let path = format!("{}/feedback.json", data_dir);
@@ -559,15 +789,49 @@ pub fn save_feedback(data_dir: &str, feedback: &[FeedbackEntry]) -> std::io::Res
     Ok(())
 }
 
-/// Reopen an archived form: copy from old_forms back to current_forms
-pub fn reopen_old_form(
+async fn pg_load_feedback() -> Result<Vec<FeedbackEntry>, Box<dyn std::error::Error + Send + Sync>>
+{
+    let client = require_pool()?.client().await?;
+    let mut entries = Vec::new();
+    for row in client
+        .query("SELECT payload FROM feedback ORDER BY created_at DESC", &[])
+        .await?
+    {
+        let payload: Value = row.get(0);
+        let entry: FeedbackEntry = serde_json::from_value(payload)?;
+        entries.push(entry);
+    }
+    Ok(entries)
+}
+
+async fn pg_save_feedback(
+    feedback: &[FeedbackEntry],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut client = require_pool()?.client().await?;
+    let tx = client.transaction().await?;
+    tx.execute("DELETE FROM feedback", &[]).await?;
+    for entry in feedback {
+        let payload = serde_json::to_value(entry)?;
+        let params: &[&(dyn ToSql + Sync)] = &[&entry.id, &entry.created_at, &payload];
+        tx.execute(
+            "INSERT INTO feedback (id, created_at, payload) VALUES ($1, $2, $3)",
+            params,
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn reopen_old_form(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
     archive_name: &str,
 ) -> std::io::Result<FormData> {
-    if let StorageBackend::Postgres { database_url } = storage_backend() {
-        return pg_reopen_old_form(database_url, account_name, server_number, archive_name)
+    if is_postgres_backend() {
+        return pg_reopen_old_form(account_name, server_number, archive_name)
+            .await
             .map_err(io_other);
     }
     let old_forms_dir = format!("{}/old_forms", data_dir);
@@ -600,388 +864,137 @@ pub fn reopen_old_form(
     Ok(form_data)
 }
 
-pub fn load_domain_doc<T: serde::de::DeserializeOwned + Send>(
+async fn pg_reopen_old_form(
+    account_name: &str,
+    server_number: u32,
+    archive_name: &str,
+) -> Result<FormData, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let server = server_number as i32;
+    let params: &[&(dyn ToSql + Sync)] = &[&archive_name, &account_name, &server];
+    let row = client
+        .query_opt(
+            "SELECT payload FROM forms WHERE archive_name = $1 AND account_name = $2 AND server_number = $3",
+            params,
+        )
+        .await?;
+    let Some(row) = row else {
+        return Err(format!("Archived form not found: {archive_name}").into());
+    };
+    let payload: Value = row.get(0);
+    let form_data: FormData = serde_json::from_value(payload)?;
+    let upd_params: &[&(dyn ToSql + Sync)] = &[&form_data.code];
+    client
+        .execute(
+            "UPDATE forms SET archived = FALSE, archive_name = NULL, updated_at = NOW() WHERE code = $1",
+            upd_params,
+        )
+        .await?;
+    Ok(form_data)
+}
+
+// ============ domain documents ============
+
+pub async fn load_domain_doc<T: serde::de::DeserializeOwned + Send>(
     data_dir: &str,
     domain: &str,
     doc_key: &str,
 ) -> Option<T> {
-    match storage_backend() {
-        StorageBackend::Postgres { database_url } => {
-            pg_load_domain_doc(database_url, domain, doc_key).unwrap_or_else(|e| {
+    if is_postgres_backend() {
+        return pg_load_domain_doc(domain, doc_key)
+            .await
+            .unwrap_or_else(|e| {
                 eprintln!("Failed to load domain doc from postgres ({domain}/{doc_key}): {e}");
                 None
-            })
-        }
-        StorageBackend::Json => load_domain_doc_json(data_dir, domain, doc_key),
+            });
     }
+    load_domain_doc_json(data_dir, domain, doc_key)
 }
 
-pub fn save_domain_doc<T: serde::Serialize + Send + Sync>(
+pub async fn save_domain_doc<T: serde::Serialize + Send + Sync>(
     data_dir: &str,
     domain: &str,
     doc_key: &str,
     value: &T,
 ) -> std::io::Result<()> {
-    match storage_backend() {
-        StorageBackend::Postgres { database_url } => {
-            pg_save_domain_doc(database_url, domain, doc_key, value).map_err(io_other)
-        }
-        StorageBackend::Json => save_domain_doc_json(data_dir, domain, doc_key, value),
+    if is_postgres_backend() {
+        return pg_save_domain_doc(domain, doc_key, value)
+            .await
+            .map_err(io_other);
     }
+    save_domain_doc_json(data_dir, domain, doc_key, value)
 }
 
-pub fn delete_domain_doc(data_dir: &str, domain: &str, doc_key: &str) -> std::io::Result<()> {
-    match storage_backend() {
-        StorageBackend::Postgres { database_url } => {
-            pg_delete_domain_doc(database_url, domain, doc_key).map_err(io_other)
-        }
-        StorageBackend::Json => delete_domain_doc_json(data_dir, domain, doc_key),
+pub async fn delete_domain_doc(data_dir: &str, domain: &str, doc_key: &str) -> std::io::Result<()> {
+    if is_postgres_backend() {
+        return pg_delete_domain_doc(domain, doc_key)
+            .await
+            .map_err(io_other);
     }
+    delete_domain_doc_json(data_dir, domain, doc_key)
 }
 
-pub fn list_domain_docs<T: serde::de::DeserializeOwned + Send>(
+pub async fn list_domain_docs<T: serde::de::DeserializeOwned + Send>(
     data_dir: &str,
     domain: &str,
     key_prefix: Option<&str>,
 ) -> Vec<(String, T)> {
-    match storage_backend() {
-        StorageBackend::Postgres { database_url } => {
-            pg_list_domain_docs(database_url, domain, key_prefix).unwrap_or_else(|e| {
+    if is_postgres_backend() {
+        return pg_list_domain_docs(domain, key_prefix)
+            .await
+            .unwrap_or_else(|e| {
                 eprintln!("Failed to list domain docs from postgres ({domain}): {e}");
                 Vec::new()
-            })
-        }
-        StorageBackend::Json => list_domain_docs_json(data_dir, domain, key_prefix),
+            });
     }
+    list_domain_docs_json(data_dir, domain, key_prefix)
 }
 
-pub fn save_form_submission(
+pub async fn save_form_submission(
     data_dir: &str,
     form_code: &str,
     submission: &FormSubmission,
 ) -> std::io::Result<()> {
-    match storage_backend() {
-        StorageBackend::Postgres { database_url } => {
-            pg_save_form_submission(database_url, form_code, submission).map_err(io_other)
-        }
-        StorageBackend::Json => {
-            let mut submissions: Vec<FormSubmission> =
-                load_domain_doc(data_dir, "form_submissions", form_code).unwrap_or_default();
-            submissions.push(submission.clone());
-            save_domain_doc(data_dir, "form_submissions", form_code, &submissions)
-        }
+    if is_postgres_backend() {
+        return pg_save_form_submission(form_code, submission)
+            .await
+            .map_err(io_other);
     }
+    let mut submissions: Vec<FormSubmission> =
+        load_domain_doc(data_dir, "form_submissions", form_code)
+            .await
+            .unwrap_or_default();
+    submissions.push(submission.clone());
+    save_domain_doc(data_dir, "form_submissions", form_code, &submissions).await
 }
 
-pub fn load_form_submissions(data_dir: &str, form_code: &str) -> Vec<FormSubmission> {
-    match storage_backend() {
-        StorageBackend::Postgres { database_url } => {
-            pg_load_form_submissions(database_url, form_code).unwrap_or_else(|e| {
+pub async fn load_form_submissions(data_dir: &str, form_code: &str) -> Vec<FormSubmission> {
+    if is_postgres_backend() {
+        return pg_load_form_submissions(form_code)
+            .await
+            .unwrap_or_else(|e| {
                 eprintln!("Failed to load form submissions from postgres ({form_code}): {e}");
                 Vec::new()
-            })
-        }
-        StorageBackend::Json => {
-            load_domain_doc(data_dir, "form_submissions", form_code).unwrap_or_default()
-        }
+            });
     }
+    load_domain_doc(data_dir, "form_submissions", form_code)
+        .await
+        .unwrap_or_default()
 }
 
-pub fn has_player_submission(data_dir: &str, form_code: &str, player_id: &str) -> bool {
+pub async fn has_player_submission(data_dir: &str, form_code: &str, player_id: &str) -> bool {
     let player_id = player_id.trim();
     if player_id.is_empty() {
         return false;
     }
     load_form_submissions(data_dir, form_code)
+        .await
         .iter()
         .any(|s| s.player_id.trim() == player_id)
 }
 
-pub fn count_form_submissions(data_dir: &str, form_code: &str) -> usize {
-    load_form_submissions(data_dir, form_code).len()
-}
-
-fn io_other<E: std::fmt::Display>(e: E) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-}
-
-fn json_value<T: serde::Serialize>(value: &T) -> Result<Value, serde_json::Error> {
-    serde_json::to_value(value)
-}
-
-fn from_json_value<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, serde_json::Error> {
-    serde_json::from_value(value)
-}
-
-fn pg_load_accounts(
-    database_url: &str,
-) -> Result<HashMap<String, Account>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut map = HashMap::new();
-        for row in client.query("SELECT account_key, payload FROM accounts", &[])? {
-            let key: String = row.get(0);
-            let payload: Value = row.get(1);
-            let account: Account = from_json_value(payload)?;
-            map.insert(key, account);
-        }
-        Ok(map)
-    })
-}
-
-fn pg_save_accounts(
-    database_url: &str,
-    accounts: &HashMap<String, Account>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut tx = client.transaction()?;
-        tx.execute("DELETE FROM accounts", &[])?;
-        for (k, v) in accounts {
-            let payload = json_value(v)?;
-            tx.execute(
-                "INSERT INTO accounts (account_key, payload) VALUES ($1, $2)",
-                &[k, &payload],
-            )?;
-        }
-        tx.commit()?;
-        Ok(())
-    })
-}
-
-fn pg_load_current_forms(
-    database_url: &str,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut map = HashMap::new();
-        for row in client.query("SELECT schedule_key, form_code FROM current_forms_map", &[])? {
-            map.insert(row.get(0), row.get(1));
-        }
-        Ok(map)
-    })
-}
-
-fn pg_save_current_forms(
-    database_url: &str,
-    current_forms: &HashMap<String, String>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut tx = client.transaction()?;
-        tx.execute("DELETE FROM current_forms_map", &[])?;
-        for (k, v) in current_forms {
-            tx.execute(
-                "INSERT INTO current_forms_map (schedule_key, form_code) VALUES ($1, $2)",
-                &[k, v],
-            )?;
-        }
-        tx.commit()?;
-        Ok(())
-    })
-}
-
-fn pg_save_schedule(
-    database_url: &str,
-    account_name: &str,
-    server_number: u32,
-    schedule_data: &ScheduleData,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let payload = json_value(schedule_data)?;
-        client.execute(
-            "INSERT INTO schedules (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (account_name, server_number) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-            &[&account_name, &(server_number as i32), &payload],
-        )?;
-        Ok(())
-    })
-}
-
-fn pg_load_schedule(
-    database_url: &str,
-    account_name: &str,
-    server_number: u32,
-) -> Result<Option<ScheduleData>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        if let Some(row) = client.query_opt(
-            "SELECT payload FROM schedules WHERE account_name = $1 AND server_number = $2",
-            &[&account_name, &(server_number as i32)],
-        )? {
-            let payload: Value = row.get(0);
-            return Ok(Some(from_json_value(payload)?));
-        }
-        Ok(None)
-    })
-}
-
-fn pg_save_statistics(
-    database_url: &str,
-    account_name: &str,
-    server_number: u32,
-    stats: &StatsResponse,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let payload = json_value(stats)?;
-        client.execute(
-            "INSERT INTO statistics (account_name, server_number, payload, updated_at) VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (account_name, server_number) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-            &[&account_name, &(server_number as i32), &payload],
-        )?;
-        Ok(())
-    })
-}
-
-fn pg_load_statistics(
-    database_url: &str,
-    account_name: &str,
-    server_number: u32,
-) -> Result<Option<StatsResponse>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        if let Some(row) = client.query_opt(
-            "SELECT payload FROM statistics WHERE account_name = $1 AND server_number = $2",
-            &[&account_name, &(server_number as i32)],
-        )? {
-            let payload: Value = row.get(0);
-            return Ok(Some(from_json_value(payload)?));
-        }
-        Ok(None)
-    })
-}
-
-fn pg_load_forms(
-    database_url: &str,
-) -> Result<HashMap<String, FormData>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut map = HashMap::new();
-        for row in client.query(
-            "SELECT code, payload FROM forms WHERE archived = FALSE",
-            &[],
-        )? {
-            let code: String = row.get(0);
-            let payload: Value = row.get(1);
-            let form: FormData = from_json_value(payload)?;
-            map.insert(code, form);
-        }
-        Ok(map)
-    })
-}
-
-fn pg_save_form(
-    database_url: &str,
-    form_data: &FormData,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let payload = json_value(form_data)?;
-        client.execute(
-            "INSERT INTO forms (code, account_name, server_number, archived, archive_name, payload, updated_at)
-         VALUES ($1, $2, $3, FALSE, NULL, $4, NOW())
-         ON CONFLICT (code) DO UPDATE SET
-           account_name = EXCLUDED.account_name,
-           server_number = EXCLUDED.server_number,
-           archived = FALSE,
-           archive_name = NULL,
-           payload = EXCLUDED.payload,
-           updated_at = NOW()",
-            &[
-                &form_data.code,
-                &form_data.account_name,
-                &(form_data.server_number as i32),
-                &payload,
-            ],
-        )?;
-        Ok(())
-    })
-}
-
-fn pg_archive_old_forms(
-    database_url: &str,
-    account_name: &str,
-    server_number: u32,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-        client.execute(
-            "UPDATE forms
-         SET archived = TRUE, archive_name = CONCAT(code, '_', $3), updated_at = NOW()
-         WHERE account_name = $1 AND server_number = $2 AND archived = FALSE",
-            &[&account_name, &(server_number as i32), &timestamp],
-        )?;
-        Ok(())
-    })
-}
-
-fn pg_list_old_forms(
-    database_url: &str,
-    account_name: &str,
-    server_number: u32,
-) -> Result<Vec<(String, FormData)>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut out = Vec::new();
-        for row in client.query(
-            "SELECT archive_name, payload FROM forms
-         WHERE account_name = $1 AND server_number = $2 AND archived = TRUE
-         ORDER BY updated_at DESC",
-            &[&account_name, &(server_number as i32)],
-        )? {
-            let archive_name: Option<String> = row.get(0);
-            let payload: Value = row.get(1);
-            let form: FormData = from_json_value(payload)?;
-            out.push((archive_name.unwrap_or_else(|| form.code.clone()), form));
-        }
-        Ok(out)
-    })
-}
-
-fn pg_load_feedback(database_url: &str) -> Result<Vec<FeedbackEntry>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut entries = Vec::new();
-        for row in client.query("SELECT payload FROM feedback ORDER BY created_at DESC", &[])? {
-            let payload: Value = row.get(0);
-            let entry: FeedbackEntry = from_json_value(payload)?;
-            entries.push(entry);
-        }
-        Ok(entries)
-    })
-}
-
-fn pg_save_feedback(
-    database_url: &str,
-    feedback: &[FeedbackEntry],
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut tx = client.transaction()?;
-        tx.execute("DELETE FROM feedback", &[])?;
-        for entry in feedback {
-            let payload = json_value(entry)?;
-            tx.execute(
-                "INSERT INTO feedback (id, created_at, payload) VALUES ($1, $2, $3)",
-                &[&entry.id, &entry.created_at, &payload],
-            )?;
-        }
-        tx.commit()?;
-        Ok(())
-    })
-}
-
-fn pg_reopen_old_form(
-    database_url: &str,
-    account_name: &str,
-    server_number: u32,
-    archive_name: &str,
-) -> Result<FormData, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let row = client.query_opt(
-            "SELECT payload FROM forms WHERE archive_name = $1 AND account_name = $2 AND server_number = $3",
-            &[&archive_name, &account_name, &(server_number as i32)],
-        )?;
-        let Some(row) = row else {
-            return Err(format!("Archived form not found: {archive_name}").into());
-        };
-        let payload: Value = row.get(0);
-        let form_data: FormData = from_json_value(payload)?;
-        client.execute(
-            "UPDATE forms SET archived = FALSE, archive_name = NULL, updated_at = NOW() WHERE code = $1",
-            &[&form_data.code],
-        )?;
-        Ok(form_data)
-    })
+pub async fn count_form_submissions(data_dir: &str, form_code: &str) -> usize {
+    load_form_submissions(data_dir, form_code).await.len()
 }
 
 fn domain_store_path(data_dir: &str, domain: &str) -> String {
@@ -1054,112 +1067,123 @@ fn list_domain_docs_json<T: serde::de::DeserializeOwned>(
         .collect()
 }
 
-fn pg_load_domain_doc<T: serde::de::DeserializeOwned + Send>(
-    database_url: &str,
+async fn pg_load_domain_doc<T: serde::de::DeserializeOwned + Send>(
     domain: &str,
     doc_key: &str,
-) -> Result<Option<T>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        if let Some(row) = client.query_opt(
+) -> Result<Option<T>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let params: &[&(dyn ToSql + Sync)] = &[&domain, &doc_key];
+    if let Some(row) = client
+        .query_opt(
             "SELECT payload FROM domain_documents WHERE domain = $1 AND doc_key = $2",
-            &[&domain, &doc_key],
-        )? {
-            let payload: Value = row.get(0);
-            return Ok(Some(serde_json::from_value(payload)?));
-        }
-        Ok(None)
-    })
+            params,
+        )
+        .await?
+    {
+        let payload: Value = row.get(0);
+        return Ok(Some(serde_json::from_value::<T>(payload)?));
+    }
+    Ok(None)
 }
 
-fn pg_save_domain_doc<T: serde::Serialize + Send + Sync>(
-    database_url: &str,
+async fn pg_save_domain_doc<T: serde::Serialize + Send + Sync>(
     domain: &str,
     doc_key: &str,
     value: &T,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let payload = serde_json::to_value(value)?;
-        client.execute(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let payload = serde_json::to_value(value)?;
+    let params: &[&(dyn ToSql + Sync)] = &[&domain, &doc_key, &payload];
+    client
+        .execute(
             "INSERT INTO domain_documents (domain, doc_key, payload, updated_at) VALUES ($1, $2, $3, NOW())
          ON CONFLICT (domain, doc_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()",
-            &[&domain, &doc_key, &payload],
-        )?;
-        Ok(())
-    })
+            params,
+        )
+        .await?;
+    Ok(())
 }
 
-fn pg_delete_domain_doc(
-    database_url: &str,
+async fn pg_delete_domain_doc(
     domain: &str,
     doc_key: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        client.execute(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let params: &[&(dyn ToSql + Sync)] = &[&domain, &doc_key];
+    client
+        .execute(
             "DELETE FROM domain_documents WHERE domain = $1 AND doc_key = $2",
-            &[&domain, &doc_key],
-        )?;
-        Ok(())
-    })
+            params,
+        )
+        .await?;
+    Ok(())
 }
 
-fn pg_list_domain_docs<T: serde::de::DeserializeOwned + Send>(
-    database_url: &str,
+async fn pg_list_domain_docs<T: serde::de::DeserializeOwned + Send>(
     domain: &str,
     key_prefix: Option<&str>,
-) -> Result<Vec<(String, T)>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut out = Vec::new();
-        let rows = if let Some(prefix) = key_prefix {
-            let like_pattern = format!("{prefix}%");
-            client.query(
+) -> Result<Vec<(String, T)>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let mut out = Vec::new();
+    let rows = if let Some(prefix) = key_prefix {
+        let like_pattern = format!("{prefix}%");
+        let params: &[&(dyn ToSql + Sync)] = &[&domain, &like_pattern];
+        client
+            .query(
                 "SELECT doc_key, payload FROM domain_documents WHERE domain = $1 AND doc_key LIKE $2",
-                &[&domain, &like_pattern],
-            )?
-        } else {
-            client.query(
+                params,
+            )
+            .await?
+    } else {
+        let params: &[&(dyn ToSql + Sync)] = &[&domain];
+        client
+            .query(
                 "SELECT doc_key, payload FROM domain_documents WHERE domain = $1",
-                &[&domain],
-            )?
-        };
-        for row in rows {
-            let key: String = row.get(0);
-            let payload: Value = row.get(1);
-            let decoded: T = serde_json::from_value(payload)?;
-            out.push((key, decoded));
-        }
-        Ok(out)
-    })
+                params,
+            )
+            .await?
+    };
+    for row in rows {
+        let key: String = row.get(0);
+        let payload: Value = row.get(1);
+        let decoded: T = serde_json::from_value(payload)?;
+        out.push((key, decoded));
+    }
+    Ok(out)
 }
 
-fn pg_save_form_submission(
-    database_url: &str,
+async fn pg_save_form_submission(
     form_code: &str,
     submission: &FormSubmission,
-) -> Result<(), Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let payload = serde_json::to_value(submission)?;
-        client.execute(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let payload = serde_json::to_value(submission)?;
+    let params: &[&(dyn ToSql + Sync)] = &[&form_code, &submission.player_id, &payload];
+    client
+        .execute(
             "INSERT INTO form_submissions (form_code, player_id, row_data) VALUES ($1, $2, $3)",
-            &[&form_code, &submission.player_id, &payload],
-        )?;
-        Ok(())
-    })
+            params,
+        )
+        .await?;
+    Ok(())
 }
 
-fn pg_load_form_submissions(
-    database_url: &str,
+async fn pg_load_form_submissions(
     form_code: &str,
-) -> Result<Vec<FormSubmission>, Box<dyn std::error::Error>> {
-    with_pg_client(database_url, |client| {
-        let mut out = Vec::new();
-        for row in client.query(
+) -> Result<Vec<FormSubmission>, Box<dyn std::error::Error + Send + Sync>> {
+    let client = require_pool()?.client().await?;
+    let mut out = Vec::new();
+    let params: &[&(dyn ToSql + Sync)] = &[&form_code];
+    for row in client
+        .query(
             "SELECT row_data FROM form_submissions WHERE form_code = $1 ORDER BY id ASC",
-            &[&form_code],
-        )? {
-            let payload: Value = row.get(0);
-            let submission: FormSubmission = serde_json::from_value(payload)?;
-            out.push(submission);
-        }
-        Ok(out)
-    })
+            params,
+        )
+        .await?
+    {
+        let payload: Value = row.get(0);
+        let submission: FormSubmission = serde_json::from_value(payload)?;
+        out.push(submission);
+    }
+    Ok(out)
 }

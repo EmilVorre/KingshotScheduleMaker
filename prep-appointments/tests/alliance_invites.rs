@@ -6,7 +6,6 @@ use std::sync::Mutex;
 use prep_appointments::web::alliance_invites::{
     has_alliance_access, load_invites, save_invites, AllianceInvite,
 };
-use prep_appointments::web::oauth_state;
 use prep_appointments::web::{Account, AppState};
 
 fn make_app_state(data_dir: String, accounts: HashMap<String, Account>) -> AppState {
@@ -16,13 +15,13 @@ fn make_app_state(data_dir: String, accounts: HashMap<String, Account>) -> AppSt
         forms: Mutex::new(HashMap::new()),
         current_forms: Mutex::new(HashMap::new()),
         data_dir,
-        oauth_state_cache: oauth_state::OAuthStateCache::new(),
-        pending_oauth_cache: oauth_state::PendingOAuthCache::new(),
+        pg: None,
+        oauth_hmac_key: vec![0u8; 32],
     }
 }
 
-#[test]
-fn test_has_alliance_access_owner() {
+#[tokio::test]
+async fn test_has_alliance_access_owner() {
     let dir = std::env::temp_dir().join("test_has_access_owner");
     std::fs::create_dir_all(&dir).ok();
     let mut accounts = HashMap::new();
@@ -45,25 +44,13 @@ fn test_has_alliance_access_owner() {
         },
     );
     let state = make_app_state(dir.to_str().unwrap().to_string(), accounts);
-    assert!(has_alliance_access(
-        &state,
-        "owner",
-        "owner",
-        140,
-        "slaughterhouse"
-    ));
-    assert!(has_alliance_access(
-        &state,
-        "Owner",
-        "owner",
-        140,
-        "slaughterhouse"
-    ));
+    assert!(has_alliance_access(&state, "owner", "owner", 140, "slaughterhouse").await);
+    assert!(has_alliance_access(&state, "Owner", "owner", 140, "slaughterhouse").await);
     std::fs::remove_dir_all(&dir).ok();
 }
 
-#[test]
-fn test_has_alliance_access_via_invite() {
+#[tokio::test]
+async fn test_has_alliance_access_via_invite() {
     let dir = std::env::temp_dir().join("test_has_access_invite");
     std::fs::create_dir_all(&dir).ok();
     let dir_str = dir.to_str().unwrap().to_string();
@@ -101,20 +88,14 @@ fn test_has_alliance_access_via_invite() {
             created_at: "2025-01-01T00:00:00Z".to_string(),
         },
     );
-    save_invites(&dir_str, &invites).unwrap();
+    save_invites(&dir_str, &invites).await.unwrap();
     let state = make_app_state(dir_str, accounts);
-    assert!(has_alliance_access(
-        &state,
-        "invitee",
-        "owner",
-        140,
-        "slaughterhouse"
-    ));
+    assert!(has_alliance_access(&state, "invitee", "owner", 140, "slaughterhouse").await);
     std::fs::remove_dir_all(&dir).ok();
 }
 
-#[test]
-fn test_has_alliance_access_no_access() {
+#[tokio::test]
+async fn test_has_alliance_access_no_access() {
     let dir = std::env::temp_dir().join("test_has_access_no");
     std::fs::create_dir_all(&dir).ok();
     let mut accounts = HashMap::new();
@@ -137,18 +118,12 @@ fn test_has_alliance_access_no_access() {
         },
     );
     let state = make_app_state(dir.to_str().unwrap().to_string(), accounts);
-    assert!(!has_alliance_access(
-        &state,
-        "stranger",
-        "owner",
-        140,
-        "slaughterhouse"
-    ));
+    assert!(!has_alliance_access(&state, "stranger", "owner", 140, "slaughterhouse").await);
     std::fs::remove_dir_all(&dir).ok();
 }
 
-#[test]
-fn test_load_save_invites_roundtrip() {
+#[tokio::test]
+async fn test_load_save_invites_roundtrip() {
     let dir = std::env::temp_dir().join("test_invites_roundtrip");
     std::fs::create_dir_all(&dir).ok();
     let dir_str = dir.to_str().unwrap().to_string();
@@ -166,8 +141,8 @@ fn test_load_save_invites_roundtrip() {
             created_at: "2025-01-01T00:00:00Z".to_string(),
         },
     );
-    save_invites(&dir_str, &invites).unwrap();
-    let loaded = load_invites(&dir_str);
+    save_invites(&dir_str, &invites).await.unwrap();
+    let loaded = load_invites(&dir_str).await;
     assert_eq!(loaded.len(), 1);
     let inv = loaded.get("inv_99").unwrap();
     assert_eq!(inv.from_account, "alice");

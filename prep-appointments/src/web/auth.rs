@@ -312,7 +312,7 @@ pub async fn get_session_info(
                 .unwrap_or((None, String::new(), false, false));
             let fc = acc.and_then(|a| a.friend_code.clone()).unwrap_or_default();
             drop(accounts);
-            let invites = super::alliance_invites::load_invites(&state.data_dir);
+            let invites = super::alliance_invites::load_invites(&state.data_dir).await;
             let has_inv = invites.values().any(|i| {
                 i.to_friend_code.eq_ignore_ascii_case(&fc)
                     && (i.status == "pending" || i.status == "accepted")
@@ -470,9 +470,13 @@ pub async fn update_profile(
         }
     }
 
-    save_accounts(&state.data_dir, &accounts).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    let snapshot = accounts.clone();
+    drop(accounts);
+    save_accounts(&state.data_dir, &snapshot)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     let final_name = if new_account_name != old_account_name {
         new_account_name
@@ -531,8 +535,8 @@ pub async fn kingshot_lookup_profile(
 
     let server_from_kid = player.kid.trim().parse::<u32>().unwrap_or(0);
 
-    let mut accounts = state.accounts.lock().unwrap();
-    let (server_number, player_id, in_game_name) = {
+    let (server_number, player_id, in_game_name, snapshot) = {
+        let mut accounts = state.accounts.lock().unwrap();
         let account = accounts
             .get_mut(&account_name)
             .ok_or_else(|| actix_web::error::ErrorNotFound("Account not found"))?;
@@ -541,23 +545,26 @@ pub async fn kingshot_lookup_profile(
         account.player_id = Some(player.fid.clone());
         if server_from_kid > 0 {
             account.server_number = server_from_kid;
-            session
-                .insert("server_number", server_from_kid)
-                .map_err(|e| {
-                    actix_web::error::ErrorInternalServerError(format!("Session: {}", e))
-                })?;
         }
 
-        (
-            account.server_number,
-            player.fid.clone(),
-            player.nickname.clone(),
-        )
+        let server_number = account.server_number;
+        let player_id = player.fid.clone();
+        let in_game_name = player.nickname.clone();
+        let snapshot = accounts.clone();
+        (server_number, player_id, in_game_name, snapshot)
     };
 
-    save_accounts(&state.data_dir, &accounts).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
-    })?;
+    if server_from_kid > 0 {
+        session
+            .insert("server_number", server_from_kid)
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Session: {}", e)))?;
+    }
+
+    save_accounts(&state.data_dir, &snapshot)
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -577,46 +584,50 @@ pub async fn dev_login_user(session: Session, state: web::Data<AppState>) -> Res
     const DEV_ACCOUNT: &str = "devuser";
     const DEV_SERVER: u32 = 140;
 
-    let mut accounts = state.accounts.lock().unwrap();
-    let account = if let Some(acc) = accounts.get(DEV_ACCOUNT) {
-        acc.clone()
-    } else {
-        let account = Account {
-            account_name: DEV_ACCOUNT.to_string(),
-            server_number: DEV_SERVER,
-            password: String::new(),
-            in_game_name: "Dev User".to_string(),
-            player_id: None,
-            oauth_provider: None,
-            oauth_id: None,
-            admin: false,
-            alliance_access: false,
-            alliance_id: None,
-            alliance_tag: None,
-            alliance_name: None,
-            friend_code: Some(generate_friend_code()),
-        };
-        accounts.insert(DEV_ACCOUNT.to_string(), account.clone());
+    let (account, snapshot_to_save) = {
+        let mut accounts = state.accounts.lock().unwrap();
+        if let Some(acc) = accounts.get(DEV_ACCOUNT) {
+            (acc.clone(), None)
+        } else {
+            let account = Account {
+                account_name: DEV_ACCOUNT.to_string(),
+                server_number: DEV_SERVER,
+                password: String::new(),
+                in_game_name: "Dev User".to_string(),
+                player_id: None,
+                oauth_provider: None,
+                oauth_id: None,
+                admin: false,
+                alliance_access: false,
+                alliance_id: None,
+                alliance_tag: None,
+                alliance_name: None,
+                friend_code: Some(generate_friend_code()),
+            };
+            accounts.insert(DEV_ACCOUNT.to_string(), account.clone());
 
-        let mut schedules = state.schedules.lock().unwrap();
-        schedules.insert(
-            schedule_key(DEV_ACCOUNT, DEV_SERVER),
-            ScheduleData {
-                construction_schedule: None,
-                research_schedule: None,
-                troops_schedule: None,
-                entries: None,
-                scheduled_player_ids: None,
-            },
-        );
-        drop(schedules);
+            let mut schedules = state.schedules.lock().unwrap();
+            schedules.insert(
+                schedule_key(DEV_ACCOUNT, DEV_SERVER),
+                ScheduleData {
+                    construction_schedule: None,
+                    research_schedule: None,
+                    troops_schedule: None,
+                    entries: None,
+                    scheduled_player_ids: None,
+                },
+            );
+            drop(schedules);
 
-        save_accounts(&state.data_dir, &accounts).map_err(|e| {
+            (account, Some(accounts.clone()))
+        }
+    };
+
+    if let Some(snap) = snapshot_to_save {
+        save_accounts(&state.data_dir, &snap).await.map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
         })?;
-        account
-    };
-    drop(accounts);
+    }
 
     session
         .insert("account_name", &account.account_name)
@@ -648,46 +659,50 @@ pub async fn dev_login(session: Session, state: web::Data<AppState>) -> Result<H
     const DEV_ACCOUNT: &str = "devtest";
     const DEV_SERVER: u32 = 1;
 
-    let mut accounts = state.accounts.lock().unwrap();
-    let account = if let Some(acc) = accounts.get(DEV_ACCOUNT) {
-        acc.clone()
-    } else {
-        let account = Account {
-            account_name: DEV_ACCOUNT.to_string(),
-            server_number: DEV_SERVER,
-            password: String::new(),
-            in_game_name: "Dev Tester".to_string(),
-            player_id: None,
-            oauth_provider: None,
-            oauth_id: None,
-            admin: true,
-            alliance_access: true,
-            alliance_id: None,
-            alliance_tag: None,
-            alliance_name: None,
-            friend_code: Some(generate_friend_code()),
-        };
-        accounts.insert(DEV_ACCOUNT.to_string(), account.clone());
+    let (account, snapshot_to_save) = {
+        let mut accounts = state.accounts.lock().unwrap();
+        if let Some(acc) = accounts.get(DEV_ACCOUNT) {
+            (acc.clone(), None)
+        } else {
+            let account = Account {
+                account_name: DEV_ACCOUNT.to_string(),
+                server_number: DEV_SERVER,
+                password: String::new(),
+                in_game_name: "Dev Tester".to_string(),
+                player_id: None,
+                oauth_provider: None,
+                oauth_id: None,
+                admin: true,
+                alliance_access: true,
+                alliance_id: None,
+                alliance_tag: None,
+                alliance_name: None,
+                friend_code: Some(generate_friend_code()),
+            };
+            accounts.insert(DEV_ACCOUNT.to_string(), account.clone());
 
-        let mut schedules = state.schedules.lock().unwrap();
-        schedules.insert(
-            schedule_key(DEV_ACCOUNT, DEV_SERVER),
-            ScheduleData {
-                construction_schedule: None,
-                research_schedule: None,
-                troops_schedule: None,
-                entries: None,
-                scheduled_player_ids: None,
-            },
-        );
-        drop(schedules);
+            let mut schedules = state.schedules.lock().unwrap();
+            schedules.insert(
+                schedule_key(DEV_ACCOUNT, DEV_SERVER),
+                ScheduleData {
+                    construction_schedule: None,
+                    research_schedule: None,
+                    troops_schedule: None,
+                    entries: None,
+                    scheduled_player_ids: None,
+                },
+            );
+            drop(schedules);
 
-        save_accounts(&state.data_dir, &accounts).map_err(|e| {
+            (account, Some(accounts.clone()))
+        }
+    };
+
+    if let Some(snap) = snapshot_to_save {
+        save_accounts(&state.data_dir, &snap).await.map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e))
         })?;
-        account
-    };
-    drop(accounts);
+    }
 
     session
         .insert("account_name", &account.account_name)

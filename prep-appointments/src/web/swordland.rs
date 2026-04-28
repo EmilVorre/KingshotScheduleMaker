@@ -67,14 +67,14 @@ fn swordland_doc_key(owner_account: &str, owner_server: u32, alliance_slug: &str
     )
 }
 
-fn load_swordland(
+async fn load_swordland(
     data_dir: &str,
     owner_account: &str,
     owner_server: u32,
     alliance_slug: &str,
 ) -> SwordlandFile {
     let key = swordland_doc_key(owner_account, owner_server, alliance_slug);
-    if let Some(mut data) = load_domain_doc::<SwordlandFile>(data_dir, "swordland", &key) {
+    if let Some(mut data) = load_domain_doc::<SwordlandFile>(data_dir, "swordland", &key).await {
         if data.legions.len() < 2 {
             data.legions = default_legions();
         }
@@ -86,7 +86,7 @@ fn load_swordland(
     }
 }
 
-fn save_swordland(
+async fn save_swordland(
     data_dir: &str,
     owner_account: &str,
     owner_server: u32,
@@ -94,11 +94,11 @@ fn save_swordland(
     data: &SwordlandFile,
 ) -> std::io::Result<()> {
     let key = swordland_doc_key(owner_account, owner_server, alliance_slug);
-    save_domain_doc(data_dir, "swordland", &key, data)
+    save_domain_doc(data_dir, "swordland", &key, data).await
 }
 
 /// Auth: session user must have access to edit this alliance (owner or invited)
-fn auth_check_alliance(
+async fn auth_check_alliance(
     session: &Session,
     state: &web::Data<AppState>,
     owner_account: &str,
@@ -136,7 +136,9 @@ fn auth_check_alliance(
         owner_account,
         owner_server,
         alliance_slug,
-    ) {
+    )
+    .await
+    {
         return Err(HttpResponse::Forbidden().json(serde_json::json!({
             "error": "Alliance access required"
         })));
@@ -160,7 +162,9 @@ pub async fn get_swordland(
         &owner_account,
         owner_server,
         &alliance_slug,
-    ) {
+    )
+    .await
+    {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -170,7 +174,8 @@ pub async fn get_swordland(
         &owner_account,
         owner_server,
         &alliance_slug,
-    );
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
@@ -200,7 +205,9 @@ pub async fn set_swordland(
         &owner_account,
         owner_server,
         &alliance_slug,
-    ) {
+    )
+    .await
+    {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -229,7 +236,8 @@ pub async fn set_swordland(
         &owner_account,
         owner_server,
         &alliance_slug,
-    );
+    )
+    .await;
     data.legions = legions;
 
     save_swordland(
@@ -239,6 +247,7 @@ pub async fn set_swordland(
         &alliance_slug,
         &data,
     )
+    .await
     .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)))?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -278,7 +287,9 @@ pub async fn add_attendance(
         &owner_account,
         owner_server,
         &alliance_slug,
-    ) {
+    )
+    .await
+    {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -309,7 +320,8 @@ pub async fn add_attendance(
         &owner_account,
         owner_server,
         &alliance_slug,
-    );
+    )
+    .await;
     data.attendance_records.push(record.clone());
 
     save_swordland(
@@ -319,6 +331,7 @@ pub async fn add_attendance(
         &alliance_slug,
         &data,
     )
+    .await
     .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)))?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -343,7 +356,9 @@ pub async fn update_attendance(
         &owner_account,
         owner_server,
         &alliance_slug,
-    ) {
+    )
+    .await
+    {
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
@@ -353,7 +368,8 @@ pub async fn update_attendance(
         &owner_account,
         owner_server,
         &alliance_slug,
-    );
+    )
+    .await;
     let idx = data
         .attendance_records
         .iter()
@@ -391,6 +407,7 @@ pub async fn update_attendance(
         &alliance_slug,
         &data,
     )
+    .await
     .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to save: {}", e)))?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
