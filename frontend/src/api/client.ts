@@ -563,6 +563,7 @@ export const api = {
       cavalry: { level_band: string; tg_band: string }
       infantry: { level_band: string; tg_band: string }
       utc_slots?: string[]
+      participate_full_five_hours?: boolean
     }
   ) =>
     apiFetch<{ success?: boolean }>(`/tyrant-form/${code}/api/submit`, {

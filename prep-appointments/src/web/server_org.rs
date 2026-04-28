@@ -87,14 +87,19 @@ pub struct TyrantSubmissionPayload {
     pub infantry: TyrantTroopBands,
     #[serde(default)]
     pub utc_slots: Vec<String>,
+    #[serde(default)]
+    pub participate_full_five_hours: bool,
 }
 
 fn valid_band_level(s: &str) -> bool {
-    matches!(s, "below_9" | "nine_to_eleven")
+    matches!(s, "level_1_9" | "level_10" | "level_11")
 }
 
 fn valid_band_tg(s: &str) -> bool {
-    matches!(s, "below_tg5" | "tg5_to_tg8")
+    matches!(
+        s,
+        "below_tg5" | "tg5" | "tg6" | "tg7" | "tg8"
+    )
 }
 
 async fn bundle_load(state: &AppState) -> OrgBundle {
@@ -848,6 +853,8 @@ pub struct TyrantSubmitBody {
     pub infantry: TyrantTroopBands,
     #[serde(default)]
     pub utc_slots: Vec<String>,
+    #[serde(default)]
+    pub participate_full_five_hours: bool,
 }
 
 /// POST /tyrant-form/{code}/api/submit
@@ -906,6 +913,7 @@ pub async fn tyrant_public_submit(
         cavalry: body.cavalry.clone(),
         infantry: body.infantry.clone(),
         utc_slots: body.utc_slots.clone(),
+        participate_full_five_hours: body.participate_full_five_hours,
     };
     let payload_v = serde_json::to_value(&payload).map_err(|e| {
         actix_web::error::ErrorInternalServerError(e.to_string())
@@ -1092,19 +1100,30 @@ struct RankedRow {
     rank_min_tg: i32,
 }
 
+/// Higher is stronger for ranking (minimum across troop types wins weakest link).
 fn level_val(s: &str) -> i32 {
-    if s == "nine_to_eleven" {
-        1
-    } else {
-        0
+    match s {
+        "level_11" => 2,
+        "level_10" => 1,
+        "level_1_9" => 0,
+        // Legacy submissions before granular bands
+        "below_9" => 0,
+        "nine_to_eleven" => 1,
+        _ => 0,
     }
 }
 
+/// Higher is stronger for ranking (minimum across troop types wins weakest link).
 fn tg_val(s: &str) -> i32 {
-    if s == "tg5_to_tg8" {
-        1
-    } else {
-        0
+    match s {
+        "tg8" => 4,
+        "tg7" => 3,
+        "tg6" => 2,
+        "tg5" => 1,
+        "below_tg5" => 0,
+        // Legacy: treat as middle of TG5–TG8 range for sorting
+        "tg5_to_tg8" => 2,
+        _ => 0,
     }
 }
 

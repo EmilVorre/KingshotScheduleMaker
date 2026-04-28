@@ -33,7 +33,6 @@ export default function TabManageServer({ accountName, serverNumber }: TabManage
   const [allyInput, setAllyInput] = useState('')
   const [kingdomId, setKingdomId] = useState('')
   const [includeNon, setIncludeNon] = useState(true)
-  const [utcNote, setUtcNote] = useState('')
   const [savingForm, setSavingForm] = useState(false)
 
   const [inviteCode, setInviteCode] = useState('')
@@ -104,7 +103,6 @@ export default function TabManageServer({ accountName, serverNumber }: TabManage
       alliances,
       include_non_of_above: includeNon,
       kingdom_id: kingdomId.trim(),
-      utc_slots_note: utcNote.trim() || undefined,
     })
     setSavingForm(false)
     if (!r.ok || !r.data?.success) {
@@ -290,15 +288,6 @@ export default function TabManageServer({ accountName, serverNumber }: TabManage
                       value={kingdomId}
                       onChange={(e) => setKingdomId(e.target.value)}
                       placeholder=""
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">UTC slot note (reserve for later)</label>
-                    <input
-                      className="w-full px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-gray-400"
-                      value={utcNote}
-                      onChange={(e) => setUtcNote(e.target.value)}
-                      placeholder="TBD — five UTC commitments"
                     />
                   </div>
                   <button

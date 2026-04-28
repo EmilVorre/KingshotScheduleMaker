@@ -83,9 +83,9 @@ async fn tyrant_submit_invalid_player_id() {
         .set_json(serde_json::json!({
             "player_id": "abc",
             "alliance": "[X]",
-            "archer": { "level_band": "below_9", "tg_band": "below_tg5" },
-            "cavalry": { "level_band": "below_9", "tg_band": "below_tg5" },
-            "infantry": { "level_band": "below_9", "tg_band": "below_tg5" }
+            "archer": { "level_band": "level_1_9", "tg_band": "below_tg5" },
+            "cavalry": { "level_band": "level_1_9", "tg_band": "below_tg5" },
+            "infantry": { "level_band": "level_1_9", "tg_band": "below_tg5" }
         }))
         .to_request();
     let resp = test::call_service(&app, req).await;

@@ -134,6 +134,7 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                     <th className="px-4 py-3">#</th>
                     <th className="px-4 py-3">Player id</th>
                     <th className="px-4 py-3">Alliance</th>
+                    <th className="px-4 py-3">Full 5h</th>
                     <th className="px-4 py-3">Ranks min L / TG</th>
                     <th className="px-4 py-3">Archer</th>
                     <th className="px-4 py-3">Cavalry</th>
@@ -145,6 +146,7 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                   {subs.map((row, i) => {
                     const p = (row.payload ?? {}) as {
                       alliance?: string
+                      participate_full_five_hours?: boolean
                       archer?: { level_band?: string; tg_band?: string }
                       cavalry?: { level_band?: string; tg_band?: string }
                       infantry?: { level_band?: string; tg_band?: string }
@@ -156,6 +158,7 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                         <td className="px-4 py-2">{i + 1}</td>
                         <td className="px-4 py-2 font-mono">{row.player_id}</td>
                         <td className="px-4 py-2">{p.alliance ?? '—'}</td>
+                        <td className="px-4 py-2 text-center">{p.participate_full_five_hours ? 'Yes' : '—'}</td>
                         <td className="px-4 py-2">
                           {row.rank_min_level ?? '—'} / {row.rank_min_tg ?? '—'}
                         </td>
@@ -168,7 +171,7 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                   })}
                   {subs.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                         No submissions yet for this workspace.
                       </td>
                     </tr>

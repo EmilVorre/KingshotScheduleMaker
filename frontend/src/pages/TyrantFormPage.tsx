@@ -77,9 +77,11 @@ export default function TyrantFormPage() {
   const [alliance, setAlliance] = useState('')
   const [customAlliance, setCustomAlliance] = useState('')
 
-  const [archer, setArcher] = useState({ level_band: 'below_9', tg_band: 'below_tg5' })
-  const [cavalry, setCavalry] = useState({ level_band: 'below_9', tg_band: 'below_tg5' })
-  const [infantry, setInfantry] = useState({ level_band: 'below_9', tg_band: 'below_tg5' })
+  const [archer, setArcher] = useState({ level_band: 'level_1_9', tg_band: 'below_tg5' })
+  const [cavalry, setCavalry] = useState({ level_band: 'level_1_9', tg_band: 'below_tg5' })
+  const [infantry, setInfantry] = useState({ level_band: 'level_1_9', tg_band: 'below_tg5' })
+
+  const [participateFullFiveHours, setParticipateFullFiveHours] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [submitOk, setSubmitOk] = useState(false)
@@ -92,8 +94,9 @@ export default function TyrantFormPage() {
   const levelOpts = useMemo(
     () =>
       [
-        { v: 'below_9', label: t('tyrantLevelBelow9') },
-        { v: 'nine_to_eleven', label: t('tyrantLevel9to11') },
+        { v: 'level_1_9', label: t('tyrantLevel1to9') },
+        { v: 'level_10', label: t('tyrantLevel10') },
+        { v: 'level_11', label: t('tyrantLevel11') },
       ] as const,
     [t, i18n.language]
   )
@@ -102,7 +105,10 @@ export default function TyrantFormPage() {
     () =>
       [
         { v: 'below_tg5', label: t('tyrantTgBelowTg5') },
-        { v: 'tg5_to_tg8', label: t('tyrantTg5toTg8') },
+        { v: 'tg5', label: t('tyrantTg5') },
+        { v: 'tg6', label: t('tyrantTg6') },
+        { v: 'tg7', label: t('tyrantTg7') },
+        { v: 'tg8', label: t('tyrantTg8') },
       ] as const,
     [t, i18n.language]
   )
@@ -188,6 +194,7 @@ export default function TyrantFormPage() {
       cavalry,
       infantry,
       utc_slots: [],
+      participate_full_five_hours: participateFullFiveHours,
     })
     setSubmitting(false)
     if (ok) {
@@ -216,8 +223,8 @@ export default function TyrantFormPage() {
     )
   }
 
-  const bandL = t('troopLevelBand')
-  const giftL = t('troopGiftBand')
+  const bandL = t('troopLevel')
+  const giftL = t('troopTruegoldLevel')
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-teal-950/30 to-gray-900 py-12 px-4">
@@ -358,6 +365,16 @@ export default function TyrantFormPage() {
               onLevel={(v) => setInfantry((s) => ({ ...s, level_band: v }))}
               onTg={(v) => setInfantry((s) => ({ ...s, tg_band: v }))}
             />
+
+            <label className="flex items-start gap-3 cursor-pointer text-gray-200">
+              <input
+                type="checkbox"
+                checked={participateFullFiveHours}
+                onChange={(e) => setParticipateFullFiveHours(e.target.checked)}
+                className="mt-1 w-5 h-5 rounded border-gray-600 bg-gray-900 text-teal-600 focus:ring-teal-500"
+              />
+              <span className="text-sm">{t('tyrantParticipateFullFiveHours')}</span>
+            </label>
 
             {submitErr && <div className="text-red-400 text-sm">{submitErr}</div>}
 
