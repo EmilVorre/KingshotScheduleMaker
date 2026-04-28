@@ -319,6 +319,8 @@ pub async fn get_session_info(
             });
             (pid, ign, admin, aaccess || has_inv, fc)
         };
+        let server_org_access =
+            super::server_org::account_has_any_server_org(state.get_ref(), &account_name).await;
         Ok(HttpResponse::Ok().json(serde_json::json!({
             "success": true,
             "account_name": account_name,
@@ -327,6 +329,7 @@ pub async fn get_session_info(
             "in_game_name": in_game_name,
             "is_admin": is_admin,
             "alliance_access": alliance_access,
+            "server_org_access": server_org_access,
             "friend_code": friend_code
         })))
     } else {

@@ -6,7 +6,7 @@ This runbook covers a one-time (big-bang) migration from file-based JSON/CSV sto
 
 - Server A runs k3s and can reach Server B (Postgres host) on TCP 5432.
 - Server B has PostgreSQL provisioned with database and user credentials.
-- `DATABASE_URL` secret created in k8s.
+- `DATABASE_URL` secret created in k8s (connection string like `postgres://USER:PASSWORD@HOST:PORT/DATABASE`).
 - Legacy data directory (`data/`) is available on Server A.
 - Backend image includes both binaries:
   - `/app/prep-appointments`
@@ -14,11 +14,15 @@ This runbook covers a one-time (big-bang) migration from file-based JSON/CSV sto
 
 ## Rehearsal Checklist (Required)
 
+Substitute your real URL in place of the placeholder (copy from k8s secrets or `.env`):
+
+`postgres://USER:PASSWORD@HOST:PORT/DATABASE`
+
 1. Copy production `data/` to a staging environment.
 2. Apply SQL schema migration:
-   - `psql "$DATABASE_URL" -f prep-appointments/migrations/0001_init.sql`
+   - `psql 'postgres://USER:PASSWORD@HOST:PORT/DATABASE' -f prep-appointments/migrations/0001_init.sql`
 3. Run dry-run migration:
-   - `DRY_RUN=true MIGRATE_DATA_DIR=/path/to/data DATABASE_URL=... /app/migrate_json_to_pg`
+   - `DRY_RUN=true MIGRATE_DATA_DIR=/path/to/data DATABASE_URL='postgres://USER:PASSWORD@HOST:PORT/DATABASE' /app/migrate_json_to_pg`
 4. Run real migration on staging and verify:
    - Account count parity
    - Form count parity (current + old)
@@ -31,16 +35,16 @@ This runbook covers a one-time (big-bang) migration from file-based JSON/CSV sto
 2. **Back up legacy storage**:
    - `tar -czf legacy-data-backup-$(date +%F-%H%M).tgz data/`
 3. **Create DB restore point**:
-   - `pg_dump "$DATABASE_URL" > pre-cutover-$(date +%F-%H%M).sql`
+   - `pg_dump 'postgres://USER:PASSWORD@HOST:PORT/DATABASE' > pre-cutover-$(date +%F-%H%M).sql`
 4. **Apply DB schema**:
-   - `psql "$DATABASE_URL" -f prep-appointments/migrations/0001_init.sql`
+   - `psql 'postgres://USER:PASSWORD@HOST:PORT/DATABASE' -f prep-appointments/migrations/0001_init.sql`
 5. **Run migration job**:
    - `kubectl apply -f k8s/migration-job.yaml`
    - `kubectl logs -n kingshot job/json-to-pg-migration -f`
 6. **Deploy backend with postgres storage**:
    - Ensure env includes:
      - `STORAGE_BACKEND=postgres`
-     - `DATABASE_URL=...`
+     - `DATABASE_URL` (same connection string as above)
 7. **Deploy frontend and ingress**:
    - `kubectl apply -f k8s/namespace.yaml`
    - `kubectl apply -f k8s/configmap.yaml`
@@ -53,6 +57,14 @@ This runbook covers a one-time (big-bang) migration from file-based JSON/CSV sto
    - Form submit
    - Schedule generate/read/update
    - Feedback submit/list
+
+## Schema update: Server Organisation / Tyrant (`0002`)
+
+For databases that already have `0001` applied (e.g. production after cutover), apply further migrations with the same URL form:
+
+```bash
+psql 'postgres://USER:PASSWORD@HOST:PORT/DATABASE' -f prep-appointments/migrations/0002_server_org.sql
+```
 
 ## Rollback
 

@@ -98,5 +98,22 @@
     "formStatisticsDescription": "View appointment statistics and time slot popularity",
     "loadingStatistics": "Loading statistics...",
     "dayTimeSlotPopularity": "{{day}} Day Time Slot Popularity",
-  "failedToLoadStatistics": "Failed to load statistics"
+    "failedToLoadStatistics": "Failed to load statistics",
+    "tyrantPageTitle": "Tyrant registration",
+    "tyrantPageSubtitle": "Server Organisation — troop level and troop gift (TG) snapshot.",
+    "tyrantSelectPlaceholder": "Select…",
+    "tyrantAllianceTagPlaceholder": "Enter your alliance tag",
+    "tyrantAllianceFreePlaceholder": "Alliance tag",
+    "troopLevelBand": "Troop level band",
+    "troopGiftBand": "Troop gift (TG) band",
+    "tyrantLevelBelow9": "Troop level below 9",
+    "tyrantLevel9to11": "Troop level 9–11",
+    "tyrantTgBelowTg5": "TG below TG5",
+    "tyrantTg5toTg8": "TG5–TG8",
+    "tyrantArcher": "Archer",
+    "tyrantCavalry": "Cavalry",
+    "tyrantInfantry": "Infantry",
+    "tyrantSuccessMessage": "Thank you — submission received.",
+    "tyrantLookupFailed": "Lookup failed.",
+    "tyrantSubmit": "Submit"
 }

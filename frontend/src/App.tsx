@@ -14,6 +14,7 @@ import AdminFeedbackPage from './pages/AdminFeedbackPage'
 import AdminAllianceApplicationsPage from './pages/AdminAllianceApplicationsPage'
 import FormPage from './pages/FormPage'
 import FormStatsPage from './pages/FormStatsPage'
+import TyrantFormPage from './pages/TyrantFormPage'
 
 function App() {
   return (
@@ -35,6 +36,9 @@ function App() {
       <Route path="/form/:code" element={<Layout formContext showSidebar={false} />}>
         <Route index element={<FormPage />} />
         <Route path="stats" element={<FormStatsPage />} />
+      </Route>
+      <Route path="/tyrant-form/:code" element={<Layout formContext showSidebar={false} />}>
+        <Route index element={<TyrantFormPage />} />
       </Route>
     </Routes>
   )

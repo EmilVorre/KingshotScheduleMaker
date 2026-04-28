@@ -16,7 +16,7 @@ const PREP_TABS = [
 ] as const
 
 export default function Sidebar() {
-  const { accountName, serverNumber, playerId, inGameName, isAdmin, allianceAccess, isValid, refresh } = useAuth()
+  const { accountName, serverNumber, playerId, inGameName, isAdmin, allianceAccess, serverOrgAccess, isValid, refresh } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [showLogin, setShowLogin] = useState(false)
@@ -24,6 +24,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [prepExpanded, setPrepExpanded] = useState(true)
   const [allianceExpanded, setAllianceExpanded] = useState(true)
+  const [serverOrgExpanded, setServerOrgExpanded] = useState(true)
   const [adminExpanded, setAdminExpanded] = useState(true)
 
   const isOnDashboard = location.pathname.startsWith('/dashboard/') && accountName
@@ -296,6 +297,61 @@ export default function Sidebar() {
           </div>
         )}
 
+        {/* Server Organisation */}
+        {!collapsed && (
+          <div className="mt-4 px-4 mb-4">
+            <button
+              onClick={() => setServerOrgExpanded((e) => !e)}
+              className="flex items-center gap-2 w-full text-left text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 hover:text-gray-400 transition-colors py-1 rounded"
+            >
+              <i className={`fas fa-chevron-down text-xs transition-transform duration-200 ${serverOrgExpanded ? '' : '-rotate-90'}`}></i>
+              Server Organisation
+            </button>
+            {serverOrgExpanded && (
+              <div className="mt-0.5 space-y-0.5">
+                {[
+                  { key: 'manage-server-org', label: 'Manage server', icon: 'fa-server' },
+                  { key: 'tyrant', label: 'Tyrant', icon: 'fa-dragon' },
+                ].map((tab) => {
+                  const canUse =
+                    isValid &&
+                    accountName &&
+                    (tab.key === 'manage-server-org' || serverOrgAccess)
+                  const isActive = isOnDashboard && currentTab === tab.key
+                  const tabContent = (
+                    <span className="flex items-center justify-between gap-2 flex-1">
+                      <span className="flex items-center gap-2">
+                        <i className={`fas ${tab.icon} w-4`}></i>
+                        {tab.label}
+                      </span>
+                      <i className="fas fa-chevron-right text-xs opacity-60"></i>
+                    </span>
+                  )
+                  return canUse ? (
+                    <Link
+                      key={tab.key}
+                      to={accountName ? `/dashboard/${accountName}?tab=${tab.key}` : '/'}
+                      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                        isActive ? 'bg-teal-700/90 text-white' : 'text-gray-400 hover:bg-gray-800/80 hover:text-white'
+                      }`}
+                    >
+                      {tabContent}
+                    </Link>
+                  ) : (
+                    <span
+                      key={tab.key}
+                      className="flex items-center px-3 py-2 rounded-lg text-sm text-gray-500 cursor-not-allowed opacity-70"
+                      title="Join a server workspace first (invite) or create one here after access"
+                    >
+                      {tabContent}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {isAdmin && collapsed && (
           <div className="mt-2 space-y-0.5">
             <Link
@@ -420,6 +476,35 @@ export default function Sidebar() {
                       key={tab.key}
                       className="flex justify-center py-2 rounded-lg mx-2 text-gray-500 cursor-not-allowed opacity-70"
                       title={`${tab.label} (requires approved alliance access)`}
+                    >
+                      <i className={`fas ${tab.icon} w-5`}></i>
+                    </span>
+                  )
+                })}
+                {[
+                  { key: 'manage-server-org', label: 'Manage server', icon: 'fa-server' },
+                  { key: 'tyrant', label: 'Tyrant', icon: 'fa-dragon' },
+                ].map((tab) => {
+                  const canUse = tab.key === 'manage-server-org' || serverOrgAccess
+                  const isActive = isOnDashboard && currentTab === tab.key
+                  return canUse ? (
+                    <Link
+                      key={tab.key}
+                      to={`/dashboard/${accountName}?tab=${tab.key}`}
+                      className={`flex justify-center py-2 rounded-lg mx-2 transition-all ${
+                        isActive
+                          ? 'bg-teal-700/90 text-white'
+                          : 'text-gray-400 hover:bg-gray-800/80 hover:text-white'
+                      }`}
+                      title={tab.label}
+                    >
+                      <i className={`fas ${tab.icon} w-5`}></i>
+                    </Link>
+                  ) : (
+                    <span
+                      key={tab.key}
+                      className="flex justify-center py-2 rounded-lg mx-2 text-gray-500 cursor-not-allowed opacity-70"
+                      title={`${tab.label} — create or join a server workspace first`}
                     >
                       <i className={`fas ${tab.icon} w-5`}></i>
                     </span>

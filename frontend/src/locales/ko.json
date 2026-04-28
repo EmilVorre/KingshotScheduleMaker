@@ -98,5 +98,22 @@
     "formStatisticsDescription": "임명 통계 및 시간대 인기 보기",
     "loadingStatistics": "통계 로드 중...",
     "dayTimeSlotPopularity": "{{day}} 일 시간대 인기",
-  "failedToLoadStatistics": "통계를 로드할 수 없습니다"
+    "failedToLoadStatistics": "통계를 로드할 수 없습니다",
+    "tyrantPageTitle": "폭정(Tyrant) 등록",
+    "tyrantPageSubtitle": "서버 조직 — 부대 레벨 및 TG(병 선물) 스냅샷입니다.",
+    "tyrantSelectPlaceholder": "선택…",
+    "tyrantAllianceTagPlaceholder": "동맹 태그 입력",
+    "tyrantAllianceFreePlaceholder": "동맹 태그",
+    "troopLevelBand": "부대 레벨 구간",
+    "troopGiftBand": "병 선물(TG) 구간",
+    "tyrantLevelBelow9": "부대 레벨 9 미만",
+    "tyrantLevel9to11": "부대 레벨 9–11",
+    "tyrantTgBelowTg5": "TG TG5 미만",
+    "tyrantTg5toTg8": "TG5–TG8",
+    "tyrantArcher": "궁병",
+    "tyrantCavalry": "기병",
+    "tyrantInfantry": "보병",
+    "tyrantSuccessMessage": "제출되었습니다. 감사합니다.",
+    "tyrantLookupFailed": "조회에 실패했습니다.",
+    "tyrantSubmit": "제출"
 }

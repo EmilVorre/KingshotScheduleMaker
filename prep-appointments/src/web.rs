@@ -13,6 +13,7 @@ mod oauth;
 mod oauth_signed;
 mod persistence;
 pub mod schedule;
+pub mod server_org;
 mod state;
 pub mod swordland;
 pub mod tri_alliance;
@@ -239,6 +240,18 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
                     .route(web::post().to(forms::submit_form_by_code)),
             )
             .service(
+                web::resource("/tyrant-form/{code}/api/config")
+                    .route(web::get().to(server_org::tyrant_public_config)),
+            )
+            .service(
+                web::resource("/tyrant-form/{code}/api/submit")
+                    .route(web::post().to(server_org::tyrant_public_submit)),
+            )
+            .service(
+                web::resource("/tyrant-form/{code}/api/player-lookup/{player_id}")
+                    .route(web::get().to(server_org::tyrant_player_lookup)),
+            )
+            .service(
                 web::resource("/{account_name}/{server}/api/form/create")
                     .route(web::post().to(forms::create_form)),
             )
@@ -370,6 +383,31 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
             .route(
                 "/{account_name}/{server}/api/alliances/{alliance_slug}/tri-alliance/attendance/{id}",
                 web::put().to(tri_alliance::update_attendance),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/server-org/workspaces")
+                    .route(web::get().to(server_org::list_my_workspaces))
+                    .route(web::post().to(server_org::create_workspace)),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/server-org/workspaces/{workspace_id}/invites")
+                    .route(web::post().to(server_org::create_workspace_invite)),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/server-org/invites")
+                    .route(web::get().to(server_org::list_server_org_invites)),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/server-org/invites/{invite_id}/accept")
+                    .route(web::post().to(server_org::accept_workspace_invite)),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/server-org/workspaces/{workspace_id}/tyrant-form")
+                    .route(web::post().to(server_org::ensure_tyrant_form)),
+            )
+            .service(
+                web::resource("/{account_name}/{server}/api/server-org/workspaces/{workspace_id}/tyrant-submissions")
+                    .route(web::get().to(server_org::list_tyrant_submissions)),
             )
     })
     .bind(("0.0.0.0", port))?

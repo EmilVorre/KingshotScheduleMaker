@@ -98,5 +98,22 @@
   "formStatisticsDescription": "Voir les statistiques de rendez-vous et la popularité des créneaux horaires",
   "loadingStatistics": "Chargement des statistiques...",
   "dayTimeSlotPopularity": "Popularité des créneaux - {{day}}",
-  "failedToLoadStatistics": "Échec du chargement des statistiques"
+  "failedToLoadStatistics": "Échec du chargement des statistiques",
+    "tyrantPageTitle": "Inscription Tyran",
+    "tyrantPageSubtitle": "Organisation du serveur — niveau des troupes et cadeaux de troupes (TG).",
+    "tyrantSelectPlaceholder": "Sélectionner…",
+    "tyrantAllianceTagPlaceholder": "Saisissez la balise d’alliance",
+    "tyrantAllianceFreePlaceholder": "Balise d’alliance",
+    "troopLevelBand": "Palier de niveau de troupes",
+    "troopGiftBand": "Palier de cadeau de troupes (TG)",
+    "tyrantLevelBelow9": "Niveau de troupes sous 9",
+    "tyrantLevel9to11": "Niveau de troupes 9–11",
+    "tyrantTgBelowTg5": "TG sous TG5",
+    "tyrantTg5toTg8": "TG5–TG8",
+    "tyrantArcher": "Archers",
+    "tyrantCavalry": "Cavalerie",
+    "tyrantInfantry": "Infanterie",
+    "tyrantSuccessMessage": "Merci — envoi bien reçu.",
+    "tyrantLookupFailed": "Échec de la recherche.",
+    "tyrantSubmit": "Envoyer"
 }

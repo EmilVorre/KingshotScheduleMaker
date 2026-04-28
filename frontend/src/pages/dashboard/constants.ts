@@ -46,6 +46,8 @@ export type Tab =
   | 'schedule'
   | 'alliance-application'
   | 'alliance-organisation'
+  | 'manage-server-org'
+  | 'tyrant'
   | 'giftcode-automation'
   | 'swordland'
   | 'tri-alliance'
@@ -60,6 +62,8 @@ export const TAB_KEYS: Tab[] = [
   'schedule',
   'alliance-application',
   'alliance-organisation',
+  'manage-server-org',
+  'tyrant',
   'giftcode-automation',
   'swordland',
   'tri-alliance',
@@ -76,3 +80,6 @@ export const ALLIANCE_LOCKED_TABS: Tab[] = [
   'swordland',
   'tri-alliance',
 ]
+
+/** Tyrant tab requires workspace membership; Manage server is reachable to create the first workspace. */
+export const SERVER_ORG_LOCKED_TABS: Tab[] = ['tyrant']

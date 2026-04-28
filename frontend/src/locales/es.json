@@ -98,5 +98,22 @@
   "formStatisticsDescription": "Ver estadísticas de citas y popularidad de horarios",
   "loadingStatistics": "Cargando estadísticas...",
   "dayTimeSlotPopularity": "Popularidad de horarios - {{day}}",
-  "failedToLoadStatistics": "Error al cargar las estadísticas"
+  "failedToLoadStatistics": "Error al cargar las estadísticas",
+    "tyrantPageTitle": "Registro Tyrant",
+    "tyrantPageSubtitle": "Organización del servidor — nivel de tropas y nivel de regalo de tropas (TG).",
+    "tyrantSelectPlaceholder": "Seleccionar…",
+    "tyrantAllianceTagPlaceholder": "Introduce la etiqueta de alianza",
+    "tyrantAllianceFreePlaceholder": "Etiqueta de alianza",
+    "troopLevelBand": "Banda de nivel de tropas",
+    "troopGiftBand": "Banda de regalo de tropas (TG)",
+    "tyrantLevelBelow9": "Nivel de tropas inferior a 9",
+    "tyrantLevel9to11": "Nivel de tropas 9–11",
+    "tyrantTgBelowTg5": "TG inferior a TG5",
+    "tyrantTg5toTg8": "TG5–TG8",
+    "tyrantArcher": "Arqueros",
+    "tyrantCavalry": "Caballería",
+    "tyrantInfantry": "Infantería",
+    "tyrantSuccessMessage": "Gracias — envío recibido.",
+    "tyrantLookupFailed": "Error de búsqueda.",
+    "tyrantSubmit": "Enviar"
 }

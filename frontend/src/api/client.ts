@@ -48,6 +48,7 @@ export const api = {
       in_game_name?: string
       is_admin?: boolean
       alliance_access?: boolean
+      server_org_access?: boolean
       friend_code?: string
     }>('/api/session'),
 
@@ -489,6 +490,90 @@ export const api = {
     apiFetch<{ success?: boolean }>(`/api/admin/alliance-applications/${encodeURIComponent(id)}/reject`, {
       method: 'POST',
     }),
+
+  listServerOrgWorkspaces: (account: string, server: number) =>
+    apiFetch<{
+      success?: boolean
+      workspaces?: Array<{
+        id: string
+        display_name: string
+        kingshot_server_number: number
+        owner_account_key: string
+        created_at?: string
+      }>
+    }>(`/${account}/${server}/api/server-org/workspaces`),
+
+  createServerOrgWorkspace: (account: string, server: number, display_name: string) =>
+    apiFetch<{ success?: boolean; workspace_id?: string; error?: string }>(
+      `/${account}/${server}/api/server-org/workspaces`,
+      { method: 'POST', body: JSON.stringify({ display_name }) }
+    ),
+
+  createServerOrgWorkspaceInvite: (account: string, server: number, workspace_id: string, friend_code: string) =>
+    apiFetch<{ success?: boolean; invite_id?: string }>(
+      `/${account}/${server}/api/server-org/workspaces/${encodeURIComponent(workspace_id)}/invites`,
+      { method: 'POST', body: JSON.stringify({ friend_code }) }
+    ),
+
+  listServerOrgInvites: (account: string, server: number) =>
+    apiFetch<{
+      success?: boolean
+      sent?: Array<Record<string, unknown>>
+      received?: Array<Record<string, unknown>>
+    }>(`/${account}/${server}/api/server-org/invites`),
+
+  acceptServerOrgInvite: (account: string, server: number, invite_id: string) =>
+    apiFetch<{ success?: boolean }>(
+      `/${account}/${server}/api/server-org/invites/${encodeURIComponent(invite_id)}/accept`,
+      { method: 'POST', body: JSON.stringify({}) }
+    ),
+
+  ensureTyrantForm: (
+    account: string,
+    server: number,
+    workspace_id: string,
+    config: { alliances?: string[]; include_non_of_above?: boolean; kingdom_id?: string; utc_slots_note?: string }
+  ) =>
+    apiFetch<{ success?: boolean; form_id?: string; public_code?: string }>(
+      `/${account}/${server}/api/server-org/workspaces/${encodeURIComponent(workspace_id)}/tyrant-form`,
+      { method: 'POST', body: JSON.stringify(config) }
+    ),
+
+  listTyrantSubmissions: (account: string, server: number, workspace_id: string, sort?: string) => {
+    const q = sort ? `?sort=${encodeURIComponent(sort)}` : ''
+    return apiFetch<{
+      success?: boolean
+      submissions?: Array<Record<string, unknown>>
+      sort?: string
+    }>(
+      `/${account}/${server}/api/server-org/workspaces/${encodeURIComponent(workspace_id)}/tyrant-submissions${q}`
+    )
+  },
+
+  /** Public Tyrant form (no credentials). */
+  getTyrantFormConfig: (code: string) =>
+    apiFetch<{ workspace_id?: string; config?: Record<string, unknown> }>(`/tyrant-form/${code}/api/config`),
+
+  tyrantSubmit: (
+    code: string,
+    data: {
+      player_id: string
+      alliance: string
+      archer: { level_band: string; tg_band: string }
+      cavalry: { level_band: string; tg_band: string }
+      infantry: { level_band: string; tg_band: string }
+      utc_slots?: string[]
+    }
+  ) =>
+    apiFetch<{ success?: boolean }>(`/tyrant-form/${code}/api/submit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  tyrantPlayerLookup: (code: string, playerId: string) =>
+    apiFetch<PlayerCard & { kingdom_mismatch?: boolean; success?: boolean; error?: string | unknown }>(
+      `/tyrant-form/${encodeURIComponent(code)}/api/player-lookup/${encodeURIComponent(playerId)}`
+    ),
 }
 
 export interface AllianceApplication {

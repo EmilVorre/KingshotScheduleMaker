@@ -98,5 +98,22 @@
   "formStatisticsDescription": "任命統計と時間帯の人気を表示",
   "loadingStatistics": "統計を読み込み中...",
   "dayTimeSlotPopularity": "{{day}} 時間帯の人気",
-  "failedToLoadStatistics": "統計を読み込めませんでした"
+  "failedToLoadStatistics": "統計を読み込めませんでした",
+    "tyrantPageTitle": "タイラント登録",
+    "tyrantPageSubtitle": "サーバー組織 — 部隊レベルとTGの申告です。",
+    "tyrantSelectPlaceholder": "選択…",
+    "tyrantAllianceTagPlaceholder": "同盟タグを入力",
+    "tyrantAllianceFreePlaceholder": "同盟タグ",
+    "troopLevelBand": "部隊レベル帯",
+    "troopGiftBand": "部隊贈り物（TG）帯",
+    "tyrantLevelBelow9": "部隊レベル9未満",
+    "tyrantLevel9to11": "部隊レベル9〜11",
+    "tyrantTgBelowTg5": "TG5未満",
+    "tyrantTg5toTg8": "TG5〜TG8",
+    "tyrantArcher": "弓兵",
+    "tyrantCavalry": "騎兵",
+    "tyrantInfantry": "歩兵",
+    "tyrantSuccessMessage": "送信ありがとうございます。",
+    "tyrantLookupFailed": "検索に失敗しました。",
+    "tyrantSubmit": "送信"
 }

@@ -98,5 +98,22 @@
     "formStatisticsDescription": "查看任命統計和時間段流行度",
     "loadingStatistics": "正在加載統計...",
     "dayTimeSlotPopularity": "{{day}} 時間段流行度",
-  "failedToLoadStatistics": "無法加載統計"
+  "failedToLoadStatistics": "無法加載統計",
+    "tyrantPageTitle": "暴君登記",
+    "tyrantPageSubtitle": "伺服器組織 — 部隊等級與軍團餽贈（TG）概況。",
+    "tyrantSelectPlaceholder": "選擇…",
+    "tyrantAllianceTagPlaceholder": "輸入盟軍標簽",
+    "tyrantAllianceFreePlaceholder": "盟軍標簽",
+    "troopLevelBand": "部隊等級區間",
+    "troopGiftBand": "軍團餽贈（TG）區間",
+    "tyrantLevelBelow9": "部隊等級低於 9",
+    "tyrantLevel9to11": "部隊等級 9–11",
+    "tyrantTgBelowTg5": "TG 低於 TG5",
+    "tyrantTg5toTg8": "TG5–TG8",
+    "tyrantArcher": "弓兵",
+    "tyrantCavalry": "騎兵",
+    "tyrantInfantry": "步兵",
+    "tyrantSuccessMessage": "已成功提交，感謝您。",
+    "tyrantLookupFailed": "查詢失敗。",
+    "tyrantSubmit": "提交"
 }

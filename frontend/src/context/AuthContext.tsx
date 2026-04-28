@@ -8,6 +8,7 @@ interface AuthState {
   inGameName: string | null
   isAdmin: boolean
   allianceAccess: boolean
+  serverOrgAccess: boolean
   friendCode: string | null
   isValid: boolean | null
 }
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     inGameName: null,
     isAdmin: false,
     allianceAccess: false,
+    serverOrgAccess: false,
     friendCode: null,
     isValid: null,
   })
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         inGameName: data.in_game_name ?? null,
         isAdmin: data.is_admin ?? false,
         allianceAccess: data.alliance_access ?? false,
+        serverOrgAccess: data.server_org_access ?? false,
         friendCode: data.friend_code ?? null,
         isValid: true,
       })
@@ -51,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         inGameName: null,
         isAdmin: false,
         allianceAccess: false,
+        serverOrgAccess: false,
         friendCode: null,
         isValid: false,
       })

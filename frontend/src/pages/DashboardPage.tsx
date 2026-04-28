@@ -15,11 +15,14 @@ import {
   TabGiftcodeAutomation,
   TabSwordland,
   TabTriAlliance,
+  TabManageServer,
+  TabTyrant,
   STANDARD_INTRO_TEXT,
   SUBMISSION_HEADERS,
   SCHEDULE_DAYS,
   TAB_KEYS,
   ALLIANCE_LOCKED_TABS,
+  SERVER_ORG_LOCKED_TABS,
   type Tab,
   type ScheduleDayKey,
 } from './dashboard'
@@ -40,7 +43,7 @@ interface ExtendedPredeterminedSlot extends PredeterminedSlot {
 
 export default function DashboardPage() {
   const { accountName } = useParams<{ accountName: string }>()
-  const { refresh: refreshAuth, allianceAccess, friendCode } = useAuth()
+  const { refresh: refreshAuth, allianceAccess, serverOrgAccess, friendCode } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as Tab | null
@@ -193,6 +196,16 @@ export default function DashboardPage() {
       setSearchParams({ tab: 'alliance-application' })
     }
   }, [accountName, allianceAccess, activeTab, setSearchParams])
+
+  useEffect(() => {
+    if (
+      accountName &&
+      !serverOrgAccess &&
+      SERVER_ORG_LOCKED_TABS.includes(activeTab)
+    ) {
+      setSearchParams({ tab: 'schedule' })
+    }
+  }, [accountName, serverOrgAccess, activeTab, setSearchParams])
 
   // Redirect to alliance-organisation when user with alliance_access tries to access alliance-application (tab hidden for them)
   useEffect(() => {
@@ -1434,6 +1447,14 @@ export default function DashboardPage() {
           {/* Tri Alliance Tab */}
           {activeTab === 'tri-alliance' && (
             <TabTriAlliance accountName={accountName ?? null} serverNumber={serverNumber} />
+          )}
+
+          {activeTab === 'manage-server-org' && (
+            <TabManageServer accountName={accountName ?? null} serverNumber={serverNumber} />
+          )}
+
+          {activeTab === 'tyrant' && (
+            <TabTyrant accountName={accountName ?? null} serverNumber={serverNumber} />
           )}
 
           {/* Statistics Tab */}
