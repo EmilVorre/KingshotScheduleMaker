@@ -118,6 +118,12 @@
     "tyrantCavalry": "Cavalry",
     "tyrantInfantry": "Infantry",
     "tyrantParticipateFullFiveHours": "I can participate for the full 5 hours",
+    "tyrantConfirmPlayerLookup": "Use Look up to load your in-game name before submitting.",
+    "tyrantSelectAutoHelpMonthCard": "Choose whether auto help / monthly card will be active.",
+    "tyrantAutoHelpMonthCard": "Auto help / Monthly card",
+    "tyrantAutoHelpMonthCardHint": "Will you have auto help and/or the monthly card active for Tyrant?",
+    "tyrantAutoHelpYes": "Yes — will be active",
+    "tyrantAutoHelpNo": "No — will not be active",
     "tyrantSuccessMessage": "Thank you — submission received.",
     "tyrantLookupFailed": "Lookup failed.",
     "tyrantSubmit": "Submit"

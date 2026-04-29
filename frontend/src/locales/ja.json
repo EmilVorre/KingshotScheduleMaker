@@ -118,6 +118,12 @@
     "tyrantCavalry": "騎兵",
     "tyrantInfantry": "歩兵",
     "tyrantParticipateFullFiveHours": "5時間フルで参加できます",
+    "tyrantConfirmPlayerLookup": "送信前に検索でゲーム内名を読み込んでください。",
+    "tyrantSelectAutoHelpMonthCard": "オートヘルプ／月額カードの有効可否を選んでください。",
+    "tyrantAutoHelpMonthCard": "オートヘルプ／月額カード",
+    "tyrantAutoHelpMonthCardHint": "タイラントでオートヘルプや月額カードを有効にしますか？",
+    "tyrantAutoHelpYes": "はい — 有効にする",
+    "tyrantAutoHelpNo": "いいえ — 有効にしない",
     "tyrantSuccessMessage": "送信ありがとうございます。",
     "tyrantLookupFailed": "検索に失敗しました。",
     "tyrantSubmit": "送信"

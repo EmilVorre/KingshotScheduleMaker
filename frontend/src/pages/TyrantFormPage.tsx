@@ -82,6 +82,8 @@ export default function TyrantFormPage() {
   const [infantry, setInfantry] = useState({ level_band: 'level_1_9', tg_band: 'below_tg5' })
 
   const [participateFullFiveHours, setParticipateFullFiveHours] = useState(false)
+  /** Empty until user selects yes/no (required to submit). */
+  const [autoHelpMonthCard, setAutoHelpMonthCard] = useState<'yes' | 'no' | ''>('')
 
   const [submitting, setSubmitting] = useState(false)
   const [submitOk, setSubmitOk] = useState(false)
@@ -112,6 +114,12 @@ export default function TyrantFormPage() {
       ] as const,
     [t, i18n.language]
   )
+
+  useEffect(() => {
+    if (playerCard && playerId.trim() !== String(playerCard.player_id ?? '')) {
+      setPlayerCard(null)
+    }
+  }, [playerId, playerCard])
 
   useEffect(() => {
     if (!code) return
@@ -185,16 +193,26 @@ export default function TyrantFormPage() {
       setSubmitErr(alliance === NON_OF ? t('pleaseEnterCustomAlliance') : t('pleaseSelectAlliance'))
       return
     }
+    if (!playerCard?.name?.trim()) {
+      setSubmitErr(t('tyrantConfirmPlayerLookup'))
+      return
+    }
+    if (autoHelpMonthCard !== 'yes' && autoHelpMonthCard !== 'no') {
+      setSubmitErr(t('tyrantSelectAutoHelpMonthCard'))
+      return
+    }
     setSubmitting(true)
     setSubmitErr('')
     const { ok, error: err } = await api.tyrantSubmit(code, {
       player_id: id,
+      player_name: playerCard.name.trim(),
       alliance: effectiveAlliance,
       archer,
       cavalry,
       infantry,
       utc_slots: [],
       participate_full_five_hours: participateFullFiveHours,
+      auto_help_month_card_active: autoHelpMonthCard === 'yes',
     })
     setSubmitting(false)
     if (ok) {
@@ -365,6 +383,20 @@ export default function TyrantFormPage() {
               onLevel={(v) => setInfantry((s) => ({ ...s, level_band: v }))}
               onTg={(v) => setInfantry((s) => ({ ...s, tg_band: v }))}
             />
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">{t('tyrantAutoHelpMonthCard')}</label>
+              <p className="text-xs text-gray-500 mb-2">{t('tyrantAutoHelpMonthCardHint')}</p>
+              <select
+                className="w-full px-4 py-3 rounded-xl bg-gray-900 border border-gray-600 text-white"
+                value={autoHelpMonthCard}
+                onChange={(e) => setAutoHelpMonthCard(e.target.value as 'yes' | 'no' | '')}
+              >
+                <option value="">{t('tyrantSelectPlaceholder')}</option>
+                <option value="yes">{t('tyrantAutoHelpYes')}</option>
+                <option value="no">{t('tyrantAutoHelpNo')}</option>
+              </select>
+            </div>
 
             <label className="flex items-start gap-3 cursor-pointer text-gray-200">
               <input

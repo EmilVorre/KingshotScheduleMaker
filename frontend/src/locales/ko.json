@@ -118,6 +118,12 @@
     "tyrantCavalry": "기병",
     "tyrantInfantry": "보병",
     "tyrantParticipateFullFiveHours": "5시간 내내 참여 가능합니다",
+    "tyrantConfirmPlayerLookup": "제출 전에 조회로 게임 내 이름을 불러오세요.",
+    "tyrantSelectAutoHelpMonthCard": "자동 도움 / 월간 카드 활성 여부를 선택하세요.",
+    "tyrantAutoHelpMonthCard": "자동 도움 / 월간 카드",
+    "tyrantAutoHelpMonthCardHint": "폭정(Tyrant)에 자동 도움 및/또는 월간 카드를 켤 예정인가요?",
+    "tyrantAutoHelpYes": "예 — 활성화 예정",
+    "tyrantAutoHelpNo": "아니요 — 비활성",
     "tyrantSuccessMessage": "제출되었습니다. 감사합니다.",
     "tyrantLookupFailed": "조회에 실패했습니다.",
     "tyrantSubmit": "제출"

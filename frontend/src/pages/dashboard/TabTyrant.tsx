@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 
 interface TabTyrantProps {
@@ -10,6 +10,7 @@ type WsRow = {
   id: string
   display_name: string
   kingshot_server_number: number
+  tyrant_public_code?: string | null
 }
 
 export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps) {
@@ -32,6 +33,18 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
 
   const [subs, setSubs] = useState<SubRow[]>([])
   const [subsLoading, setSubsLoading] = useState(false)
+  const [copyDone, setCopyDone] = useState(false)
+
+  const selectedWorkspace = useMemo(
+    () => workspaces.find((w) => w.id === selectedId) ?? null,
+    [workspaces, selectedId]
+  )
+
+  const tyrantFormUrl = useMemo(() => {
+    const code = selectedWorkspace?.tyrant_public_code?.trim()
+    if (!code) return null
+    return `${window.location.origin}/tyrant-form/${code}`
+  }, [selectedWorkspace?.tyrant_public_code])
 
   const loadWs = useCallback(async () => {
     if (!accountName || serverNumber == null) return
@@ -66,6 +79,10 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
     loadSubs()
   }, [loadSubs])
 
+  useEffect(() => {
+    setCopyDone(false)
+  }, [selectedId])
+
   if (!accountName || serverNumber == null) {
     return <p className="text-gray-400">Missing account.</p>
   }
@@ -79,7 +96,8 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
         <h2 className="text-3xl font-bold text-white mb-2">Tyrant registrations</h2>
         <p className="text-gray-400">
           Ranking uses the weakest troop across archer/cavalry/infantry (minimum tier wins). Duplicate player ids keep latest
-          submission.
+          submission. <strong className="text-gray-300">Ranks min L / TG</strong> are numeric sort keys derived from that minimum:
+          higher means stronger troop level band and Truegold band respectively.
         </p>
       </div>
 
@@ -121,6 +139,34 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
             </div>
           </div>
 
+          <div className="rounded-xl border border-teal-700/50 bg-teal-950/25 px-4 py-3 text-sm text-gray-200">
+            <p className="text-xs font-semibold uppercase tracking-wide text-teal-400/90 mb-2">Public Tyrant form link</p>
+            {tyrantFormUrl ? (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <code className="flex-1 break-all rounded-lg bg-gray-900/80 px-3 py-2 text-teal-100 border border-gray-700 text-xs sm:text-sm">
+                  {tyrantFormUrl}
+                </code>
+                <button
+                  type="button"
+                  className="shrink-0 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-medium text-sm"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(tyrantFormUrl).then(() => {
+                      setCopyDone(true)
+                      window.setTimeout(() => setCopyDone(false), 2000)
+                    })
+                  }}
+                >
+                  {copyDone ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            ) : (
+              <p className="text-gray-400">
+                No form URL yet for this workspace. Open <strong className="text-gray-300">Manage server</strong> and save Tyrant
+                form settings to create the public link.
+              </p>
+            )}
+          </div>
+
           {subsLoading ? (
             <p className="text-gray-400">
               <i className="fas fa-spinner fa-spin mr-2"></i>
@@ -132,8 +178,10 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                 <thead className="bg-gray-900/90 text-xs uppercase text-gray-400">
                   <tr>
                     <th className="px-4 py-3">#</th>
+                    <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Player id</th>
                     <th className="px-4 py-3">Alliance</th>
+                    <th className="px-4 py-3">Auto help / month card</th>
                     <th className="px-4 py-3">Full 5h</th>
                     <th className="px-4 py-3">Ranks min L / TG</th>
                     <th className="px-4 py-3">Archer</th>
@@ -146,18 +194,28 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                   {subs.map((row, i) => {
                     const p = (row.payload ?? {}) as {
                       alliance?: string
+                      player_name?: string
+                      auto_help_month_card_active?: boolean
                       participate_full_five_hours?: boolean
                       archer?: { level_band?: string; tg_band?: string }
                       cavalry?: { level_band?: string; tg_band?: string }
                       infantry?: { level_band?: string; tg_band?: string }
                     }
+                    const autoHelpLabel =
+                      p.auto_help_month_card_active === true
+                        ? 'Yes'
+                        : p.auto_help_month_card_active === false
+                          ? 'No'
+                          : '—'
                     const troop = (a?: { level_band?: string; tg_band?: string }) =>
                       `${a?.level_band ?? '?'} · ${a?.tg_band ?? '?'}`
                     return (
                       <tr key={`${row.id ?? row.player_id}-${row.created_at}`} className="border-t border-gray-700 hover:bg-gray-800/50">
                         <td className="px-4 py-2">{i + 1}</td>
+                        <td className="px-4 py-2 font-medium text-white">{p.player_name?.trim() || '—'}</td>
                         <td className="px-4 py-2 font-mono">{row.player_id}</td>
                         <td className="px-4 py-2">{p.alliance ?? '—'}</td>
+                        <td className="px-4 py-2 text-center">{autoHelpLabel}</td>
                         <td className="px-4 py-2 text-center">{p.participate_full_five_hours ? 'Yes' : '—'}</td>
                         <td className="px-4 py-2">
                           {row.rank_min_level ?? '—'} / {row.rank_min_tg ?? '—'}
@@ -171,7 +229,7 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                   })}
                   {subs.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                         No submissions yet for this workspace.
                       </td>
                     </tr>

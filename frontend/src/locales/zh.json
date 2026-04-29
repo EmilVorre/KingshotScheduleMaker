@@ -118,6 +118,12 @@
     "tyrantCavalry": "騎兵",
     "tyrantInfantry": "步兵",
     "tyrantParticipateFullFiveHours": "我可以全程參與完整的 5 小時",
+    "tyrantConfirmPlayerLookup": "提交前請先查詢以載入遊戲內名稱。",
+    "tyrantSelectAutoHelpMonthCard": "請選擇自動協助／月卡是否啟用。",
+    "tyrantAutoHelpMonthCard": "自動協助／月卡",
+    "tyrantAutoHelpMonthCardHint": "暴君活動期間是否會啟用自動協助及／或月卡？",
+    "tyrantAutoHelpYes": "是 — 會啟用",
+    "tyrantAutoHelpNo": "否 — 不會啟用",
     "tyrantSuccessMessage": "已成功提交，感謝您。",
     "tyrantLookupFailed": "查詢失敗。",
     "tyrantSubmit": "提交"

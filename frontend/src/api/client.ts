@@ -500,6 +500,8 @@ export const api = {
         kingshot_server_number: number
         owner_account_key: string
         created_at?: string
+        /** Present when a Tyrant form exists for this workspace. */
+        tyrant_public_code?: string | null
       }>
     }>(`/${account}/${server}/api/server-org/workspaces`),
 
@@ -558,12 +560,14 @@ export const api = {
     code: string,
     data: {
       player_id: string
+      player_name: string
       alliance: string
       archer: { level_band: string; tg_band: string }
       cavalry: { level_band: string; tg_band: string }
       infantry: { level_band: string; tg_band: string }
       utc_slots?: string[]
       participate_full_five_hours?: boolean
+      auto_help_month_card_active: boolean
     }
   ) =>
     apiFetch<{ success?: boolean }>(`/tyrant-form/${code}/api/submit`, {

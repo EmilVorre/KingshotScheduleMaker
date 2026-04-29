@@ -89,6 +89,12 @@ pub struct TyrantSubmissionPayload {
     pub utc_slots: Vec<String>,
     #[serde(default)]
     pub participate_full_five_hours: bool,
+    /// In-game name from lookup at submit time (older rows omit this).
+    #[serde(default)]
+    pub player_name: Option<String>,
+    /// Whether the player expects auto-help and/or monthly card to be active for Tyrant.
+    #[serde(default)]
+    pub auto_help_month_card_active: Option<bool>,
 }
 
 fn valid_band_level(s: &str) -> bool {
@@ -113,6 +119,16 @@ async fn bundle_load(state: &AppState) -> OrgBundle {
 
 async fn bundle_save(state: &AppState, b: &OrgBundle) -> std::io::Result<()> {
     save_domain_doc(&state.data_dir, "server_org", "bundle", b).await
+}
+
+/// Latest Tyrant form public code for a workspace (same rule as `ensure_tyrant_form`).
+fn latest_tyrant_public_code(bundle: &OrgBundle, workspace_id: &str) -> Option<String> {
+    bundle
+        .tyrant_forms
+        .iter()
+        .filter(|f| f.workspace_id == workspace_id)
+        .max_by(|a, b| a.created_at.cmp(&b.created_at))
+        .map(|f| f.public_code.clone())
 }
 
 fn next_submission_id(bundle: &OrgBundle) -> i64 {
@@ -302,13 +318,17 @@ pub async fn list_my_workspaces(
         b.workspaces
             .iter()
             .filter(|w| keys.contains(&w.id))
-            .map(|w| json!({
-                "id": w.id,
-                "display_name": w.display_name,
-                "kingshot_server_number": w.kingshot_server_number,
-                "owner_account_key": w.owner_account_key,
-                "created_at": w.created_at,
-            }))
+            .map(|w| {
+                let tyrant_public_code = latest_tyrant_public_code(&b, &w.id);
+                json!({
+                    "id": w.id,
+                    "display_name": w.display_name,
+                    "kingshot_server_number": w.kingshot_server_number,
+                    "owner_account_key": w.owner_account_key,
+                    "created_at": w.created_at,
+                    "tyrant_public_code": tyrant_public_code,
+                })
+            })
             .collect::<Vec<_>>()
     };
 
@@ -323,9 +343,16 @@ async fn pg_list_workspaces_for_account(
     let client = pool.client().await?;
     let rows = client
         .query(
-            "SELECT w.id, w.display_name, w.kingshot_server_number, w.owner_account_key, w.created_at::text \
+            "SELECT w.id, w.display_name, w.kingshot_server_number, w.owner_account_key, w.created_at::text, \
+                    tf.public_code \
              FROM server_workspaces w \
              INNER JOIN server_workspace_members m ON m.workspace_id = w.id \
+             LEFT JOIN LATERAL ( \
+                 SELECT public_code FROM tyrant_forms \
+                 WHERE workspace_id = w.id \
+                 ORDER BY created_at DESC \
+                 LIMIT 1 \
+             ) tf ON true \
              WHERE lower(m.account_key) = lower($1) \
              ORDER BY w.display_name ASC",
             &[&account],
@@ -333,12 +360,14 @@ async fn pg_list_workspaces_for_account(
         .await?;
     let mut out = Vec::new();
     for r in rows {
+        let code: Option<String> = r.get(5);
         out.push(json!({
             "id": r.get::<_, String>(0),
             "display_name": r.get::<_, String>(1),
             "kingshot_server_number": r.get::<_, i32>(2),
             "owner_account_key": r.get::<_, String>(3),
             "created_at": r.get::<_, String>(4),
+            "tyrant_public_code": code,
         }));
     }
     Ok(out)
@@ -847,6 +876,8 @@ async fn pg_find_tyrant_form(
 #[derive(Deserialize)]
 pub struct TyrantSubmitBody {
     pub player_id: String,
+    /// Must match a successful player-lookup name for this form (non-empty after trim).
+    pub player_name: String,
     pub alliance: String,
     pub archer: TyrantTroopBands,
     pub cavalry: TyrantTroopBands,
@@ -855,6 +886,7 @@ pub struct TyrantSubmitBody {
     pub utc_slots: Vec<String>,
     #[serde(default)]
     pub participate_full_five_hours: bool,
+    pub auto_help_month_card_active: bool,
 }
 
 /// POST /tyrant-form/{code}/api/submit
@@ -883,6 +915,11 @@ pub async fn tyrant_public_submit(
         return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid alliance"})));
     }
 
+    let pname = body.player_name.trim();
+    if pname.is_empty() || pname.len() > 200 {
+        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid player name"})));
+    }
+
     let allowed: Vec<String> = config
         .get("alliances")
         .and_then(|a| a.as_array())
@@ -907,6 +944,35 @@ pub async fn tyrant_public_submit(
         return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Alliance not allowed"})));
     }
 
+    let expected_kingdom = config
+        .get("kingdom_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let verified_name = match kingshot_api::fetch_player(pid).await {
+        Ok(player) => {
+            if player.nickname.trim() != pname {
+                return Ok(HttpResponse::BadRequest().json(
+                    json!({"success": false, "error": "Player name does not match player id"}),
+                ));
+            }
+            if let Some(ref exp) = expected_kingdom {
+                if player.kid.trim() != exp.as_str() {
+                    return Ok(HttpResponse::BadRequest().json(
+                        json!({"success": false, "error": "Player not in kingdom for this form"}),
+                    ));
+                }
+            }
+            player.nickname.trim().to_string()
+        }
+        Err(e) => {
+            return Ok(HttpResponse::BadRequest().json(
+                json!({"success": false, "error": format!("Could not verify player: {e}")}),
+            ));
+        }
+    };
+
     let payload = TyrantSubmissionPayload {
         alliance: alliance.to_string(),
         archer: body.archer.clone(),
@@ -914,6 +980,8 @@ pub async fn tyrant_public_submit(
         infantry: body.infantry.clone(),
         utc_slots: body.utc_slots.clone(),
         participate_full_five_hours: body.participate_full_five_hours,
+        player_name: Some(verified_name),
+        auto_help_month_card_active: Some(body.auto_help_month_card_active),
     };
     let payload_v = serde_json::to_value(&payload).map_err(|e| {
         actix_web::error::ErrorInternalServerError(e.to_string())

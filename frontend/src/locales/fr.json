@@ -118,6 +118,12 @@
     "tyrantCavalry": "Cavalerie",
     "tyrantInfantry": "Infanterie",
     "tyrantParticipateFullFiveHours": "Je peux participer pendant les 5 heures complètes",
+    "tyrantConfirmPlayerLookup": "Utilisez la recherche pour charger votre pseudo avant d’envoyer.",
+    "tyrantSelectAutoHelpMonthCard": "Indiquez si l’aide auto / la carte mensuelle seront actives.",
+    "tyrantAutoHelpMonthCard": "Aide auto / Carte mensuelle",
+    "tyrantAutoHelpMonthCardHint": "Aurez-vous l’aide automatique et/ou la carte mensuelle active pour le Tyran ?",
+    "tyrantAutoHelpYes": "Oui — seront actives",
+    "tyrantAutoHelpNo": "Non — ne seront pas actives",
     "tyrantSuccessMessage": "Merci — envoi bien reçu.",
     "tyrantLookupFailed": "Échec de la recherche.",
     "tyrantSubmit": "Envoyer"
