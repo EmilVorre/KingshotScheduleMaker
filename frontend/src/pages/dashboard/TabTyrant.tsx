@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 
+function escapeCsvField(value: string): string {
+  const needsQuotes = /[",\r\n]/.test(value)
+  let s = value.replace(/"/g, '""')
+  return needsQuotes ? `"${s}"` : s
+}
+
+function sanitizeFilenamePart(s: string): string {
+  return s.replace(/[<>:"/\\|?*]/g, '_').trim().slice(0, 80) || 'workspace'
+}
+
 interface TabTyrantProps {
   accountName: string | null
   serverNumber: number | null
@@ -21,6 +31,17 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const [sortMode, setSortMode] = useState<'level_then_tg' | 'tg_then_level'>('level_then_tg')
+
+  type TyrantPayload = {
+    alliance?: string
+    player_name?: string
+    auto_help_month_card_active?: boolean
+    participate_full_five_hours?: boolean
+    archer?: { level_band?: string; tg_band?: string }
+    cavalry?: { level_band?: string; tg_band?: string }
+    infantry?: { level_band?: string; tg_band?: string }
+    utc_slots?: string[]
+  }
 
   type SubRow = {
     player_id?: string
@@ -83,6 +104,64 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
     setCopyDone(false)
   }, [selectedId])
 
+  const exportSubsCsv = useCallback(() => {
+    if (!selectedWorkspace) return
+    const headers = [
+      'Rank',
+      'Player name',
+      'Player id',
+      'Alliance',
+      'Auto help / month card',
+      'Full 5h',
+      'Rank min level',
+      'Rank min TG',
+      'Archer level band',
+      'Archer TG band',
+      'Cavalry level band',
+      'Cavalry TG band',
+      'Infantry level band',
+      'Infantry TG band',
+      'UTC slots',
+      'Submitted',
+    ]
+    const lines = [headers.map((h) => escapeCsvField(h)).join(',')]
+    subs.forEach((row, i) => {
+      const p = (row.payload ?? {}) as TyrantPayload
+      const autoHelp =
+        p.auto_help_month_card_active === true ? 'Yes' : p.auto_help_month_card_active === false ? 'No' : ''
+      const utc =
+        Array.isArray(p.utc_slots) && p.utc_slots.length > 0 ? p.utc_slots.join('; ') : ''
+      const cells = [
+        String(i + 1),
+        p.player_name?.trim() ?? '',
+        row.player_id ?? '',
+        p.alliance ?? '',
+        autoHelp,
+        p.participate_full_five_hours ? 'Yes' : '',
+        row.rank_min_level != null ? String(row.rank_min_level) : '',
+        row.rank_min_tg != null ? String(row.rank_min_tg) : '',
+        p.archer?.level_band ?? '',
+        p.archer?.tg_band ?? '',
+        p.cavalry?.level_band ?? '',
+        p.cavalry?.tg_band ?? '',
+        p.infantry?.level_band ?? '',
+        p.infantry?.tg_band ?? '',
+        utc,
+        row.created_at ?? '',
+      ]
+      lines.push(cells.map((c) => escapeCsvField(c)).join(','))
+    })
+    const csv = '\uFEFF' + lines.join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const wsPart = sanitizeFilenamePart(selectedWorkspace.display_name)
+    a.download = `tyrant_submissions_${wsPart}_${serverNumber}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [selectedWorkspace, subs, serverNumber])
+
   if (!accountName || serverNumber == null) {
     return <p className="text-gray-400">Missing account.</p>
   }
@@ -136,6 +215,19 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                 <option value="level_then_tg">Troop level bands first</option>
                 <option value="tg_then_level">TG bands first</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Export</label>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white font-medium text-sm disabled:opacity-40 disabled:pointer-events-none"
+                disabled={subsLoading}
+                onClick={exportSubsCsv}
+                title="Download as CSV for Microsoft Excel or Google Sheets"
+              >
+                <i className="fas fa-file-excel mr-2" />
+                Export to Excel (CSV)
+              </button>
             </div>
           </div>
 
@@ -192,15 +284,7 @@ export default function TabTyrant({ accountName, serverNumber }: TabTyrantProps)
                 </thead>
                 <tbody>
                   {subs.map((row, i) => {
-                    const p = (row.payload ?? {}) as {
-                      alliance?: string
-                      player_name?: string
-                      auto_help_month_card_active?: boolean
-                      participate_full_five_hours?: boolean
-                      archer?: { level_band?: string; tg_band?: string }
-                      cavalry?: { level_band?: string; tg_band?: string }
-                      infantry?: { level_band?: string; tg_band?: string }
-                    }
+                    const p = (row.payload ?? {}) as TyrantPayload
                     const autoHelpLabel =
                       p.auto_help_month_card_active === true
                         ? 'Yes'
