@@ -3,16 +3,18 @@
 use actix_session::Session;
 use actix_web::{web, HttpResponse, Result};
 use once_cell::sync::Lazy;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use rand::Rng;
 
 use crate::kingshot_api;
 
-use super::persistence::{self, generate_form_code, is_postgres_backend, load_domain_doc, save_domain_doc};
+use super::persistence::{
+    self, generate_form_code, is_postgres_backend, load_domain_doc, save_domain_doc,
+};
 use super::state::AppState;
 
 static ORG_JSON_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
@@ -102,10 +104,7 @@ fn valid_band_level(s: &str) -> bool {
 }
 
 fn valid_band_tg(s: &str) -> bool {
-    matches!(
-        s,
-        "below_tg5" | "tg5" | "tg6" | "tg7" | "tg8"
-    )
+    matches!(s, "below_tg5" | "tg5" | "tg6" | "tg7" | "tg8")
 }
 
 async fn bundle_load(state: &AppState) -> OrgBundle {
@@ -153,7 +152,10 @@ pub async fn account_has_any_server_org(state: &AppState, account_key: &str) -> 
         .any(|m| m.account_key.to_lowercase() == key)
 }
 
-async fn pg_member_any(_state: &AppState, account_key: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+async fn pg_member_any(
+    _state: &AppState,
+    account_key: &str,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let pool = persistence::pg_pool().ok_or("no pool")?;
     let client = pool.client().await?;
     let row = client
@@ -173,9 +175,9 @@ async fn workspace_access(state: &AppState, workspace_id: &str, account: &str) -
             .unwrap_or(false);
     }
     let b = bundle_load(state).await;
-    b.members.iter().any(|m| {
-        m.workspace_id == workspace_id && m.account_key.to_lowercase() == ac
-    })
+    b.members
+        .iter()
+        .any(|m| m.workspace_id == workspace_id && m.account_key.to_lowercase() == ac)
 }
 
 async fn pg_has_access(
@@ -214,15 +216,20 @@ pub async fn create_workspace(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
     let Some((session_account, session_server)) = read_session(&session) else {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"}))
+        );
     };
     if session_account.to_lowercase() != url_account || session_server != server {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"}))
+        );
     }
 
     let name = body.display_name.trim();
     if name.is_empty() || name.len() > 200 {
-        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid display name"})));
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({"success": false, "error": "Invalid display name"})));
     }
 
     let id = Uuid::new_v4().to_string();
@@ -236,16 +243,13 @@ pub async fn create_workspace(
                     .json(json!({"success": false, "error": "Database not configured"})))
             }
         };
-        let client = pool.client().await.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("db: {e}"))
-        })?;
+        let client = pool
+            .client()
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("db: {e}")))?;
         let srv = server as i32;
-        let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] = &[
-            &id,
-            &name,
-            &srv,
-            &session_account,
-        ];
+        let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] =
+            &[&id, &name, &srv, &session_account];
         client
             .execute(
                 "INSERT INTO server_workspaces (id, display_name, kingshot_server_number, owner_account_key) VALUES ($1, $2, $3, $4)",
@@ -297,10 +301,14 @@ pub async fn list_my_workspaces(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
     let Some((session_account, session_server)) = read_session(&session) else {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"}))
+        );
     };
     if session_account.to_lowercase() != url_account || session_server != server {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"}))
+        );
     }
 
     let list = if is_postgres_backend() {
@@ -383,10 +391,14 @@ pub async fn create_workspace_invite(
     let (url_account, server, workspace_id) = path.into_inner();
     let url_account = url_account.to_lowercase();
     let Some((session_account, session_server)) = read_session(&session) else {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"}))
+        );
     };
     if session_account.to_lowercase() != url_account || session_server != server {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"}))
+        );
     }
 
     if !workspace_access(state.get_ref(), &workspace_id, &session_account).await {
@@ -403,7 +415,8 @@ pub async fn create_workspace_invite(
 
     let my_fc = session_friend_code(state.get_ref(), &session_account);
     if to_friend_code.eq_ignore_ascii_case(&my_fc) {
-        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Cannot invite yourself"})));
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({"success": false, "error": "Cannot invite yourself"})));
     }
 
     let invited_exists = resolve_friend_code_account(state.get_ref(), &to_friend_code).is_some();
@@ -414,19 +427,16 @@ pub async fn create_workspace_invite(
         })));
     }
 
-    let id = format!(
-        "srvinv_{}",
-        rand::thread_rng().gen::<u32>()
-    );
+    let id = format!("srvinv_{}", rand::thread_rng().gen::<u32>());
     let now = chrono::Utc::now().to_rfc3339();
 
     if is_postgres_backend() {
-        let pool = persistence::pg_pool().ok_or_else(|| {
-            actix_web::error::ErrorInternalServerError("no pool")
-        })?;
-        let client = pool.client().await.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("db: {e}"))
-        })?;
+        let pool = persistence::pg_pool()
+            .ok_or_else(|| actix_web::error::ErrorInternalServerError("no pool"))?;
+        let client = pool
+            .client()
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("db: {e}")))?;
         let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] = &[
             &id,
             &workspace_id,
@@ -517,21 +527,25 @@ pub async fn list_server_org_invites(
     let (url_account, server) = path.into_inner();
     let url_account = url_account.to_lowercase();
     let Some((session_account, session_server)) = read_session(&session) else {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"}))
+        );
     };
     if session_account.to_lowercase() != url_account || session_server != server {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"}))
+        );
     }
 
     let my_fc = session_friend_code(state.get_ref(), &session_account);
 
     if is_postgres_backend() {
-        let pool = persistence::pg_pool().ok_or_else(|| {
-            actix_web::error::ErrorInternalServerError("no pool")
-        })?;
-        let client = pool.client().await.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("db: {e}"))
-        })?;
+        let pool = persistence::pg_pool()
+            .ok_or_else(|| actix_web::error::ErrorInternalServerError("no pool"))?;
+        let client = pool
+            .client()
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("db: {e}")))?;
         let sent = client
             .query(
                 "SELECT id, workspace_id, to_friend_code, status, created_at::text FROM server_workspace_invites WHERE lower(from_account_key) = lower($1)",
@@ -625,21 +639,25 @@ pub async fn accept_workspace_invite(
     let (url_account, server, invite_id) = path.into_inner();
     let url_account = url_account.to_lowercase();
     let Some((session_account, session_server)) = read_session(&session) else {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"}))
+        );
     };
     if session_account.to_lowercase() != url_account || session_server != server {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"}))
+        );
     }
 
     let my_fc = session_friend_code(state.get_ref(), &session_account);
 
     if is_postgres_backend() {
-        let pool = persistence::pg_pool().ok_or_else(|| {
-            actix_web::error::ErrorInternalServerError("no pool")
-        })?;
-        let client = pool.client().await.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("db: {e}"))
-        })?;
+        let pool = persistence::pg_pool()
+            .ok_or_else(|| actix_web::error::ErrorInternalServerError("no pool"))?;
+        let client = pool
+            .client()
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("db: {e}")))?;
 
         let row = client
             .query_opt(
@@ -649,16 +667,20 @@ pub async fn accept_workspace_invite(
             .await
             .map_err(|e| actix_web::error::ErrorInternalServerError(format!("{e}")))?;
         let Some(row) = row else {
-            return Ok(HttpResponse::NotFound().json(json!({"success": false, "error": "Invite not found"})));
+            return Ok(HttpResponse::NotFound()
+                .json(json!({"success": false, "error": "Invite not found"})));
         };
         let wid: String = row.get(0);
         let to_fc: String = row.get(1);
         let status: String = row.get(2);
         if status != "pending" {
-            return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Not pending"})));
+            return Ok(
+                HttpResponse::BadRequest().json(json!({"success": false, "error": "Not pending"}))
+            );
         }
         if !to_fc.eq_ignore_ascii_case(&my_fc) {
-            return Ok(HttpResponse::Forbidden().json(json!({"success": false, "error": "Wrong recipient"})));
+            return Ok(HttpResponse::Forbidden()
+                .json(json!({"success": false, "error": "Wrong recipient"})));
         }
 
         client
@@ -691,14 +713,18 @@ pub async fn accept_workspace_invite(
         let inv = match b.invites.iter_mut().find(|i| i.id == invite_id) {
             Some(i) => i,
             None => {
-                return Ok(HttpResponse::NotFound().json(json!({"success": false, "error": "Invite not found"})));
+                return Ok(HttpResponse::NotFound()
+                    .json(json!({"success": false, "error": "Invite not found"})));
             }
         };
         if inv.status != "pending" {
-            return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Not pending"})));
+            return Ok(
+                HttpResponse::BadRequest().json(json!({"success": false, "error": "Not pending"}))
+            );
         }
         if !inv.to_friend_code.eq_ignore_ascii_case(&my_fc) {
-            return Ok(HttpResponse::Forbidden().json(json!({"success": false, "error": "Wrong recipient"})));
+            return Ok(HttpResponse::Forbidden()
+                .json(json!({"success": false, "error": "Wrong recipient"})));
         }
         inv.status = "accepted".to_string();
         let wid = inv.workspace_id.clone();
@@ -730,10 +756,14 @@ pub async fn ensure_tyrant_form(
     let (url_account, server, workspace_id) = path.into_inner();
     let url_account = url_account.to_lowercase();
     let Some((session_account, session_server)) = read_session(&session) else {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"}))
+        );
     };
     if session_account.to_lowercase() != url_account || session_server != server {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"}))
+        );
     }
 
     if !workspace_access(state.get_ref(), &workspace_id, &session_account).await {
@@ -743,12 +773,12 @@ pub async fn ensure_tyrant_form(
     let config = body.clone();
 
     if is_postgres_backend() {
-        let pool = persistence::pg_pool().ok_or_else(|| {
-            actix_web::error::ErrorInternalServerError("no pool")
-        })?;
-        let client = pool.client().await.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("db: {e}"))
-        })?;
+        let pool = persistence::pg_pool()
+            .ok_or_else(|| actix_web::error::ErrorInternalServerError("no pool"))?;
+        let client = pool
+            .client()
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("db: {e}")))?;
 
         let existing = client
             .query_opt(
@@ -839,7 +869,9 @@ pub async fn tyrant_public_config(
     let code = path.into_inner();
     let form = find_tyrant_form_by_code(state.get_ref(), &code).await;
     let Some((ws_id, config)) = form else {
-        return Ok(HttpResponse::NotFound().json(json!({"success": false, "error": "Form not found"})));
+        return Ok(
+            HttpResponse::NotFound().json(json!({"success": false, "error": "Form not found"}))
+        );
     };
     Ok(HttpResponse::Ok().json(json!({
         "workspace_id": ws_id,
@@ -898,26 +930,36 @@ pub async fn tyrant_public_submit(
     let code = path.into_inner();
     let form = find_tyrant_form_by_code(state.get_ref(), &code).await;
     let Some((workspace_id, config)) = form else {
-        return Ok(HttpResponse::NotFound().json(json!({"success": false, "error": "Form not found"})));
+        return Ok(
+            HttpResponse::NotFound().json(json!({"success": false, "error": "Form not found"}))
+        );
     };
 
     let pid = body.player_id.trim();
     if pid.is_empty() || !pid.chars().all(|c| c.is_ascii_digit()) {
-        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid player id"})));
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({"success": false, "error": "Invalid player id"})));
     }
 
-    if !validate_troop_bands(&body.archer) || !validate_troop_bands(&body.cavalry) || !validate_troop_bands(&body.infantry) {
-        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid troop bands"})));
+    if !validate_troop_bands(&body.archer)
+        || !validate_troop_bands(&body.cavalry)
+        || !validate_troop_bands(&body.infantry)
+    {
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({"success": false, "error": "Invalid troop bands"})));
     }
 
     let alliance = body.alliance.trim();
     if alliance.is_empty() || alliance.len() > 200 {
-        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid alliance"})));
+        return Ok(
+            HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid alliance"}))
+        );
     }
 
     let pname = body.player_name.trim();
     if pname.is_empty() || pname.len() > 200 {
-        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Invalid player name"})));
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({"success": false, "error": "Invalid player name"})));
     }
 
     let allowed: Vec<String> = config
@@ -938,10 +980,9 @@ pub async fn tyrant_public_submit(
     if non_of && !ok_list.iter().any(|s| s == NON) {
         ok_list.push(NON.to_string());
     }
-    if !allowed.is_empty()
-        && !ok_list.iter().any(|s| s == alliance)
-    {
-        return Ok(HttpResponse::BadRequest().json(json!({"success": false, "error": "Alliance not allowed"})));
+    if !allowed.is_empty() && !ok_list.iter().any(|s| s == alliance) {
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({"success": false, "error": "Alliance not allowed"})));
     }
 
     let expected_kingdom = config
@@ -983,27 +1024,21 @@ pub async fn tyrant_public_submit(
         player_name: Some(verified_name),
         auto_help_month_card_active: Some(body.auto_help_month_card_active),
     };
-    let payload_v = serde_json::to_value(&payload).map_err(|e| {
-        actix_web::error::ErrorInternalServerError(e.to_string())
-    })?;
+    let payload_v = serde_json::to_value(&payload)
+        .map_err(|e| actix_web::error::ErrorInternalServerError(e.to_string()))?;
 
     let form_record = find_tyrant_form_row_by_code(state.get_ref(), &code).await;
 
     if is_postgres_backend() {
-        let pool = persistence::pg_pool().ok_or_else(|| {
-            actix_web::error::ErrorInternalServerError("no pool")
-        })?;
-        let client = pool.client().await.map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!("db: {e}"))
-        })?;
+        let pool = persistence::pg_pool()
+            .ok_or_else(|| actix_web::error::ErrorInternalServerError("no pool"))?;
+        let client = pool
+            .client()
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(format!("db: {e}")))?;
         let form_uuid: Option<String> = form_record.map(|f| f.id);
-        let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] = &[
-            &workspace_id,
-            &form_uuid,
-            &code,
-            &pid,
-            &payload_v,
-        ];
+        let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] =
+            &[&workspace_id, &form_uuid, &code, &pid, &payload_v];
         client
             .execute(
                 "INSERT INTO tyrant_submissions (workspace_id, form_id, public_code, player_id, payload) VALUES ($1, $2, $3, $4, $5)",
@@ -1077,7 +1112,9 @@ pub async fn tyrant_player_lookup(
     let player_id = player_id.trim();
     let form = find_tyrant_form_by_code(state.get_ref(), &code).await;
     let Some((_, config)) = form else {
-        return Ok(HttpResponse::NotFound().json(json!({"success": false, "error": "Form not found"})));
+        return Ok(
+            HttpResponse::NotFound().json(json!({"success": false, "error": "Form not found"}))
+        );
     };
 
     let expected_kingdom = config
@@ -1122,20 +1159,21 @@ pub async fn list_tyrant_submissions(
     let (url_account, server, workspace_id) = path.into_inner();
     let url_account = url_account.to_lowercase();
     let Some((session_account, session_server)) = read_session(&session) else {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Not logged in"}))
+        );
     };
     if session_account.to_lowercase() != url_account || session_server != server {
-        return Ok(HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"})));
+        return Ok(
+            HttpResponse::Unauthorized().json(json!({"success": false, "error": "Unauthorized"}))
+        );
     }
 
     if !workspace_access(state.get_ref(), &workspace_id, &session_account).await {
         return Ok(HttpResponse::Forbidden().json(json!({"success": false, "error": "No access"})));
     }
 
-    let sort = q
-        .get("sort")
-        .map(|s| s.as_str())
-        .unwrap_or("level_then_tg");
+    let sort = q.get("sort").map(|s| s.as_str()).unwrap_or("level_then_tg");
 
     let mut rows = load_submissions_for_workspace(state.get_ref(), &workspace_id).await;
     rows = dedupe_latest_per_player(rows);

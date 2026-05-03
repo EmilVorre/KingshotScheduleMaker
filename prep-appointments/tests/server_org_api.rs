@@ -26,12 +26,15 @@ async fn tyrant_public_config_not_found() {
 
     let app = test::init_service(
         App::new().app_data(test_state(data_dir)).service(
-            web::resource("/tyrant-form/{code}/api/config").route(web::get().to(server_org::tyrant_public_config)),
+            web::resource("/tyrant-form/{code}/api/config")
+                .route(web::get().to(server_org::tyrant_public_config)),
         ),
     )
     .await;
 
-    let req = test::TestRequest::get().uri("/tyrant-form/noSuchCode/api/config").to_request();
+    let req = test::TestRequest::get()
+        .uri("/tyrant-form/noSuchCode/api/config")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     std::fs::remove_dir_all(&dir).ok();
@@ -69,12 +72,10 @@ async fn tyrant_submit_invalid_player_id() {
     .unwrap();
 
     let app = test::init_service(
-        App::new()
-            .app_data(test_state(data_dir.clone()))
-            .service(
-                web::resource("/tyrant-form/{code}/api/submit")
-                    .route(web::post().to(server_org::tyrant_public_submit)),
-            ),
+        App::new().app_data(test_state(data_dir.clone())).service(
+            web::resource("/tyrant-form/{code}/api/submit")
+                .route(web::post().to(server_org::tyrant_public_submit)),
+        ),
     )
     .await;
 
