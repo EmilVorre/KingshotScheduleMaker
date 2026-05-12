@@ -10,7 +10,7 @@ This directory contains baseline manifests for deploying Kingshot on a single-no
   - **`SESSION_SECRET`** must be a stable >=64 byte value (hex or base64); changing it logs every user out and invalidates any in-flight OAuth login. Generate with `openssl rand -hex 64`. If unset, the backend falls back to an ephemeral key and warns on startup.
 - `backend.yaml`: Rust API deployment/service
 - `frontend.yaml`: React frontend deployment/service
-- `ingress.yaml`: routes `/api` and `/form` to backend, everything else to frontend
+- `ingress.yaml`: routes `/api` to backend; other paths (including `/form/*` for the public form UI) go to frontend, which proxies `/form/{code}/api/*` to backend
 - `migration-job.yaml`: one-time JSON/CSV -> Postgres migration job
 
 ## HTTPS (Let's Encrypt + cert-manager, k3s Traefik)

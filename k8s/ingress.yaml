@@ -22,13 +22,7 @@ spec:
                 name: backend
                 port:
                   number: 8080
-          - path: /form
-            pathType: Prefix
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 8080
+          # /form/* must hit the SPA (frontend); nginx proxies only /form/{code}/api/* to backend
           - path: /
             pathType: Prefix
             backend:
