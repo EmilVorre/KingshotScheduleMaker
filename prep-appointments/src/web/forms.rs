@@ -222,9 +222,7 @@ pub async fn create_form(
         },
     };
 
-    if let Err(e) =
-        archive_old_forms(&state.data_dir, &url_account_name, server_number).await
-    {
+    if let Err(e) = archive_old_forms(&state.data_dir, &url_account_name, server_number).await {
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
             "error": format!("Failed to archive old forms: {}", e)
