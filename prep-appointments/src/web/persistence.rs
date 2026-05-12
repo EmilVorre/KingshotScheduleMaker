@@ -552,19 +552,6 @@ pub async fn load_forms(data_dir: &str) -> HashMap<String, FormData> {
     forms
 }
 
-/// Whether `code` is already present in Postgres (`forms.code` is unique across archived rows).
-pub async fn postgres_form_code_in_use(code: &str) -> std::io::Result<bool> {
-    if !is_postgres_backend() {
-        return Ok(false);
-    }
-    let client = require_pool().map_err(io_other)?.client().await.map_err(io_other)?;
-    let row = client
-        .query_opt("SELECT 1 FROM forms WHERE code = $1 LIMIT 1", &[&code])
-        .await
-        .map_err(io_other)?;
-    Ok(row.is_some())
-}
-
 pub async fn save_form(data_dir: &str, form_data: &FormData) -> std::io::Result<()> {
     if is_postgres_backend() {
         return pg_save_form(form_data).await.map_err(io_other);

@@ -10,8 +10,8 @@ use crate::parser::load_appointments_from_submissions;
 
 use super::persistence::{
     archive_old_forms, count_form_submissions, generate_form_code, get_current_form,
-    has_player_submission, list_old_forms, load_form_submissions, postgres_form_code_in_use,
-    reopen_old_form, save_current_forms, save_form, save_form_submission,
+    has_player_submission, list_old_forms, load_form_submissions, reopen_old_form,
+    save_current_forms, save_form, save_form_submission,
 };
 use super::state::{
     AppState, CreateFormRequest, FormConfig, FormData, FormStatsResponse, FormTimeSlotStats,
@@ -176,18 +176,7 @@ pub async fn create_form(
         let forms = state.forms.lock().unwrap();
         let in_memory = forms.contains_key(&code);
         drop(forms);
-
-        let taken_in_db = match postgres_form_code_in_use(&code).await {
-            Ok(v) => v,
-            Err(e) => {
-                return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                    "success": false,
-                    "error": format!("Failed to verify form code: {}", e)
-                })));
-            }
-        };
-
-        if !in_memory && !taken_in_db {
+        if !in_memory {
             break;
         }
 
