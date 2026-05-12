@@ -65,8 +65,28 @@ fn require_pool() -> Result<&'static PgPool, Box<dyn std::error::Error + Send + 
     pg_pool().ok_or_else(|| "Postgres pool not initialised".into())
 }
 
-fn io_other<E: std::fmt::Display>(e: E) -> std::io::Error {
-    std::io::Error::other(e.to_string())
+/// tokio-postgres uses `Display` = `"db error"` for SQL failures; the real message is on
+/// `Error::source()`. Walk the chain so API responses and logs are actionable.
+fn format_error_chain(e: &(dyn std::error::Error + 'static)) -> String {
+    use std::error::Error;
+    let mut parts: Vec<String> = Vec::new();
+    let mut cur: Option<&dyn Error> = Some(e);
+    while let Some(err) = cur {
+        let s = err.to_string();
+        if !s.is_empty() && s != "db error" {
+            parts.push(s);
+        }
+        cur = err.source();
+    }
+    if parts.is_empty() {
+        e.to_string()
+    } else {
+        parts.join(": ")
+    }
+}
+
+fn io_from_pg(e: Box<dyn std::error::Error + Send + Sync>) -> std::io::Error {
+    std::io::Error::other(format_error_chain(e.as_ref()))
 }
 
 /// Returns the schedule key for an account/server
@@ -134,7 +154,7 @@ pub async fn save_accounts(
     accounts: &HashMap<String, Account>,
 ) -> std::io::Result<()> {
     if is_postgres_backend() {
-        return pg_save_accounts(accounts).await.map_err(io_other);
+        return pg_save_accounts(accounts).await.map_err(io_from_pg);
     }
     std::fs::create_dir_all(data_dir)?;
     let accounts_path = format!("{}/accounts.json", data_dir);
@@ -203,7 +223,7 @@ pub async fn save_current_forms(
     current_forms: &HashMap<String, String>,
 ) -> std::io::Result<()> {
     if is_postgres_backend() {
-        return pg_save_current_forms(current_forms).await.map_err(io_other);
+        return pg_save_current_forms(current_forms).await.map_err(io_from_pg);
     }
     std::fs::create_dir_all(data_dir)?;
     let path = format!("{}/current_forms_map.json", data_dir);
@@ -254,7 +274,7 @@ pub async fn save_schedule(
     if is_postgres_backend() {
         return pg_save_schedule(account_name, server_number, schedule_data)
             .await
-            .map_err(io_other);
+            .map_err(io_from_pg);
     }
     let schedules_dir = format!("{}/schedules/{}", data_dir, account_name);
     std::fs::create_dir_all(&schedules_dir)?;
@@ -347,7 +367,7 @@ pub async fn save_statistics(
     if is_postgres_backend() {
         return pg_save_statistics(account_name, server_number, stats)
             .await
-            .map_err(io_other);
+            .map_err(io_from_pg);
     }
     let stats_dir = format!("{}/statistics/{}", data_dir, account_name);
     std::fs::create_dir_all(&stats_dir)?;
@@ -554,7 +574,7 @@ pub async fn load_forms(data_dir: &str) -> HashMap<String, FormData> {
 
 pub async fn save_form(data_dir: &str, form_data: &FormData) -> std::io::Result<()> {
     if is_postgres_backend() {
-        return pg_save_form(form_data).await.map_err(io_other);
+        return pg_save_form(form_data).await.map_err(io_from_pg);
     }
     let current_forms_dir = format!("{}/current_forms", data_dir);
     std::fs::create_dir_all(&current_forms_dir)?;
@@ -564,23 +584,21 @@ pub async fn save_form(data_dir: &str, form_data: &FormData) -> std::io::Result<
     Ok(())
 }
 
-pub async fn archive_old_forms(
+/// Remove current (non-archived) prep forms for this account/server before creating a new one.
+/// Drops associated submissions instead of archiving; previously archived rows are unchanged.
+pub async fn delete_active_forms_for_server(
     data_dir: &str,
     account_name: &str,
     server_number: u32,
 ) -> std::io::Result<()> {
     if is_postgres_backend() {
-        return pg_archive_old_forms(account_name, server_number)
+        return pg_delete_active_forms_for_server(account_name, server_number)
             .await
-            .map_err(io_other);
+            .map_err(io_from_pg);
     }
     let current_forms_dir = format!("{}/current_forms", data_dir);
-    let old_forms_dir = format!("{}/old_forms", data_dir);
-    std::fs::create_dir_all(&old_forms_dir)?;
 
     if let Ok(entries) = std::fs::read_dir(&current_forms_dir) {
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str() {
                 if file_name.ends_with(".json") {
@@ -590,22 +608,13 @@ pub async fn archive_old_forms(
                                 && form_data.server_number == server_number
                             {
                                 let code = &form_data.code;
-
-                                let old_form_json_path = format!(
-                                    "{}/{}_{}_{}_{}.json",
-                                    old_forms_dir, account_name, server_number, code, timestamp
-                                );
-                                std::fs::copy(entry.path(), &old_form_json_path)?;
+                                delete_domain_doc(data_dir, "form_submissions", code).await?;
                                 std::fs::remove_file(entry.path())?;
-
-                                let csv_file_name = format!("{}_submissions.csv", code);
-                                let csv_path = format!("{}/{}", current_forms_dir, csv_file_name);
+                                let csv_path = format!(
+                                    "{}/{}_submissions.csv",
+                                    current_forms_dir, code
+                                );
                                 if Path::new(&csv_path).exists() {
-                                    let old_csv_path = format!(
-                                        "{}/{}_{}_{}_{}_submissions.csv",
-                                        old_forms_dir, account_name, server_number, code, timestamp
-                                    );
-                                    std::fs::copy(&csv_path, &old_csv_path)?;
                                     std::fs::remove_file(&csv_path)?;
                                 }
                             }
@@ -704,22 +713,27 @@ async fn pg_save_form(
     Ok(())
 }
 
-async fn pg_archive_old_forms(
+async fn pg_delete_active_forms_for_server(
     account_name: &str,
     server_number: u32,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = require_pool()?.client().await?;
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let mut client = require_pool()?.client().await?;
     let server = server_number as i32;
-    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server, &timestamp];
-    client
-        .execute(
-            "UPDATE forms
-         SET archived = TRUE, archive_name = CONCAT(code, '_', $3), updated_at = NOW()
-         WHERE account_name = $1 AND server_number = $2 AND archived = FALSE",
-            params,
-        )
-        .await?;
+    let params: &[&(dyn ToSql + Sync)] = &[&account_name, &server];
+    let tx = client.transaction().await?;
+    tx.execute(
+        "DELETE FROM form_submissions WHERE form_code IN (
+            SELECT code FROM forms WHERE account_name = $1 AND server_number = $2 AND archived = FALSE
+        )",
+        params,
+    )
+    .await?;
+    tx.execute(
+        "DELETE FROM forms WHERE account_name = $1 AND server_number = $2 AND archived = FALSE",
+        params,
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -780,7 +794,7 @@ pub async fn load_feedback(data_dir: &str) -> Vec<FeedbackEntry> {
 
 pub async fn save_feedback(data_dir: &str, feedback: &[FeedbackEntry]) -> std::io::Result<()> {
     if is_postgres_backend() {
-        return pg_save_feedback(feedback).await.map_err(io_other);
+        return pg_save_feedback(feedback).await.map_err(io_from_pg);
     }
     std::fs::create_dir_all(data_dir)?;
     let path = format!("{}/feedback.json", data_dir);
@@ -832,7 +846,7 @@ pub async fn reopen_old_form(
     if is_postgres_backend() {
         return pg_reopen_old_form(account_name, server_number, archive_name)
             .await
-            .map_err(io_other);
+            .map_err(io_from_pg);
     }
     let old_forms_dir = format!("{}/old_forms", data_dir);
     let current_forms_dir = format!("{}/current_forms", data_dir);
@@ -920,7 +934,7 @@ pub async fn save_domain_doc<T: serde::Serialize + Send + Sync>(
     if is_postgres_backend() {
         return pg_save_domain_doc(domain, doc_key, value)
             .await
-            .map_err(io_other);
+            .map_err(io_from_pg);
     }
     save_domain_doc_json(data_dir, domain, doc_key, value)
 }
@@ -929,7 +943,7 @@ pub async fn delete_domain_doc(data_dir: &str, domain: &str, doc_key: &str) -> s
     if is_postgres_backend() {
         return pg_delete_domain_doc(domain, doc_key)
             .await
-            .map_err(io_other);
+            .map_err(io_from_pg);
     }
     delete_domain_doc_json(data_dir, domain, doc_key)
 }
@@ -958,7 +972,7 @@ pub async fn save_form_submission(
     if is_postgres_backend() {
         return pg_save_form_submission(form_code, submission)
             .await
-            .map_err(io_other);
+            .map_err(io_from_pg);
     }
     let mut submissions: Vec<FormSubmission> =
         load_domain_doc(data_dir, "form_submissions", form_code)

@@ -9,7 +9,7 @@ use crate::kingshot_api;
 use crate::parser::load_appointments_from_submissions;
 
 use super::persistence::{
-    archive_old_forms, count_form_submissions, generate_form_code, get_current_form,
+    count_form_submissions, delete_active_forms_for_server, generate_form_code, get_current_form,
     has_player_submission, list_old_forms, load_form_submissions, reopen_old_form,
     save_current_forms, save_form, save_form_submission,
 };
@@ -222,10 +222,12 @@ pub async fn create_form(
         },
     };
 
-    if let Err(e) = archive_old_forms(&state.data_dir, &url_account_name, server_number).await {
+    if let Err(e) =
+        delete_active_forms_for_server(&state.data_dir, &url_account_name, server_number).await
+    {
         return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
             "success": false,
-            "error": format!("Failed to archive old forms: {}", e)
+            "error": format!("Failed to replace previous forms: {}", e)
         })));
     }
 
