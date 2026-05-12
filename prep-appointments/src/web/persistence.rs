@@ -223,7 +223,9 @@ pub async fn save_current_forms(
     current_forms: &HashMap<String, String>,
 ) -> std::io::Result<()> {
     if is_postgres_backend() {
-        return pg_save_current_forms(current_forms).await.map_err(io_from_pg);
+        return pg_save_current_forms(current_forms)
+            .await
+            .map_err(io_from_pg);
     }
     std::fs::create_dir_all(data_dir)?;
     let path = format!("{}/current_forms_map.json", data_dir);
@@ -610,10 +612,8 @@ pub async fn delete_active_forms_for_server(
                                 let code = &form_data.code;
                                 delete_domain_doc(data_dir, "form_submissions", code).await?;
                                 std::fs::remove_file(entry.path())?;
-                                let csv_path = format!(
-                                    "{}/{}_submissions.csv",
-                                    current_forms_dir, code
-                                );
+                                let csv_path =
+                                    format!("{}/{}_submissions.csv", current_forms_dir, code);
                                 if Path::new(&csv_path).exists() {
                                     std::fs::remove_file(&csv_path)?;
                                 }
