@@ -10,8 +10,8 @@ use crate::parser::load_appointments_from_submissions;
 
 use super::persistence::{
     archive_old_forms, count_form_submissions, generate_form_code, get_current_form,
-    has_player_submission, list_old_forms, load_form_submissions, reopen_old_form,
-    save_current_forms, save_form, save_form_submission,
+    has_player_submission, list_old_forms, load_form_submissions, postgres_form_code_in_use,
+    reopen_old_form, save_current_forms, save_form, save_form_submission,
 };
 use super::state::{
     AppState, CreateFormRequest, FormConfig, FormData, FormStatsResponse, FormTimeSlotStats,
@@ -176,7 +176,18 @@ pub async fn create_form(
         let forms = state.forms.lock().unwrap();
         let in_memory = forms.contains_key(&code);
         drop(forms);
-        if !in_memory {
+
+        let taken_in_db = match postgres_form_code_in_use(&code).await {
+            Ok(v) => v,
+            Err(e) => {
+                return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                    "success": false,
+                    "error": format!("Failed to verify form code: {}", e)
+                })));
+            }
+        };
+
+        if !in_memory && !taken_in_db {
             break;
         }
 
@@ -222,14 +233,14 @@ pub async fn create_form(
         },
     };
 
-    archive_old_forms(&state.data_dir, &url_account_name, server_number)
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!(
-                "Failed to archive old forms: {}",
-                e
-            ))
-        })?;
+    if let Err(e) =
+        archive_old_forms(&state.data_dir, &url_account_name, server_number).await
+    {
+        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "error": format!("Failed to archive old forms: {}", e)
+        })));
+    }
 
     {
         let mut forms = state.forms.lock().unwrap();
@@ -239,9 +250,12 @@ pub async fn create_form(
         forms.insert(code.clone(), form_data.clone());
     }
 
-    save_form(&state.data_dir, &form_data).await.map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to save form: {}", e))
-    })?;
+    if let Err(e) = save_form(&state.data_dir, &form_data).await {
+        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "error": format!("Failed to save form: {}", e)
+        })));
+    }
 
     let cf_snapshot = {
         let mut current_forms = state.current_forms.lock().unwrap();
@@ -249,14 +263,12 @@ pub async fn create_form(
         current_forms.insert(key, code.clone());
         current_forms.clone()
     };
-    save_current_forms(&state.data_dir, &cf_snapshot)
-        .await
-        .map_err(|e| {
-            actix_web::error::ErrorInternalServerError(format!(
-                "Failed to save current forms: {}",
-                e
-            ))
-        })?;
+    if let Err(e) = save_current_forms(&state.data_dir, &cf_snapshot).await {
+        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "error": format!("Failed to save current forms: {}", e)
+        })));
+    }
 
     let form_url = format!("/form/{}", code);
 

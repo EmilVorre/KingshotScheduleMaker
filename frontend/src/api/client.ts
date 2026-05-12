@@ -11,11 +11,24 @@ export async function apiFetch<T>(
       },
       credentials: 'include',
     })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      return { ok: false, error: (data as { error?: string }).error || 'Request failed' }
+    const raw = await res.text()
+    let parsed: unknown = {}
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        parsed = {}
+      }
     }
-    return { ok: true, data: data as T }
+    const obj = parsed as { error?: string }
+    if (!res.ok) {
+      const fallback =
+        typeof obj.error === 'string'
+          ? obj.error
+          : raw.trim() || `Request failed (${res.status})`
+      return { ok: false, error: fallback }
+    }
+    return { ok: true, data: parsed as T }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Network error' }
   }
