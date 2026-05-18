@@ -22,8 +22,53 @@ export function sortTimeSlots(
   return Object.fromEntries(entries)
 }
 
+function formatSubmissionCell(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (Array.isArray(value)) return value.join(', ')
+  return String(value)
+}
+
+/** REST API (/api/form/submissions) uses stable snake_case fields; legacy CSV/Google-style keys fall back via fuzzy matching below. */
+const SUBMISSION_REST_API_KEY: Partial<Record<string, string>> = {
+  Timestamp: 'timestamp',
+  Name: 'character_name',
+  'Construction speedups': 'construction_speedups',
+  Truegold: 'construction_truegold',
+  'want Construction?': 'wants_construction',
+  'Construction times': 'construction_time_slots',
+  'Research Speedups': 'research_speedups',
+  'Truegold Dust': 'research_truegold_dust',
+  'want Research?': 'wants_research',
+  'Research times': 'research_time_slots',
+  'Troop Speedups': 'troops_speedups',
+  'Want troops?': 'wants_troops',
+  'Troop times': 'troops_time_slots',
+}
+
+function allianceCellFromSubmission(submission: Record<string, unknown>): string {
+  const base = submission['alliance']
+  const rawCustom = submission['custom_alliance']
+  const baseStr = base !== null && base !== undefined ? String(base).trim() : ''
+  let customStr = ''
+  if (rawCustom !== null && rawCustom !== undefined) customStr = String(rawCustom).trim()
+  if (customStr === '') return baseStr
+  if (baseStr === '' || baseStr === 'Non of the above') return customStr
+  if (customStr === baseStr) return baseStr
+  return `${baseStr} (${customStr})`
+}
+
 export function getSubmissionValue(submission: Record<string, unknown>, header: string): string {
   if (!submission || typeof submission !== 'object') return ''
+
+  if (header === 'Alliance') {
+    return allianceCellFromSubmission(submission)
+  }
+
+  const stableKey = SUBMISSION_REST_API_KEY[header]
+  if (stableKey !== undefined && submission[stableKey] !== undefined) {
+    return formatSubmissionCell(submission[stableKey])
+  }
+
   const keys = Object.keys(submission)
   const findKey = (patterns: string[]) => {
     for (const pattern of patterns) {
@@ -88,9 +133,9 @@ export function getSubmissionValue(submission: Record<string, unknown>, header: 
   }
   const columnKey = columnMap[header]
   if (columnKey && submission[columnKey] !== undefined) {
-    return String(submission[columnKey])
+    return formatSubmissionCell(submission[columnKey])
   }
-  return String(submission[header] ?? '')
+  return formatSubmissionCell(header in submission ? submission[header] : '')
 }
 
 export type BuildingResearchDaySlot = 'monday' | 'tuesday' | 'friday_full' | 'friday_sat'
