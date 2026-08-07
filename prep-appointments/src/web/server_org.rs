@@ -1008,7 +1008,9 @@ pub async fn tyrant_public_submit(
             player.nickname.trim().to_string()
         }
         Err(e) => {
-            eprintln!("Kingshot API fetch_player failed: {e}. Falling back to submitted name: {pname}");
+            eprintln!(
+                "Kingshot API fetch_player failed: {e}. Falling back to submitted name: {pname}"
+            );
             pname.to_string()
         }
     };

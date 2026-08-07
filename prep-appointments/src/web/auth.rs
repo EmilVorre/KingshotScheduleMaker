@@ -534,7 +534,9 @@ pub async fn kingshot_lookup_profile(
                 nickname: "".to_string(),
                 fid: player_id.to_string(),
                 stove_lv: 30,
-                kid: session_server.map(|s| s.to_string()).unwrap_or_else(|| "0".to_string()),
+                kid: session_server
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "0".to_string()),
                 avatar_image: None,
                 stove_lv_content: None,
             }
