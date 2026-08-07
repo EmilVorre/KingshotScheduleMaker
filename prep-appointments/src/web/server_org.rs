@@ -1008,9 +1008,10 @@ pub async fn tyrant_public_submit(
             player.nickname.trim().to_string()
         }
         Err(e) => {
-            return Ok(HttpResponse::BadRequest().json(
-                json!({"success": false, "error": format!("Could not verify player: {e}")}),
-            ));
+            eprintln!(
+                "Kingshot API fetch_player failed: {e}. Falling back to submitted name: {pname}"
+            );
+            pname.to_string()
         }
     };
 
@@ -1139,13 +1140,24 @@ pub async fn tyrant_player_lookup(
                 "castle_level": castle_level,
                 "kingdom": player.kid,
                 "kingdom_mismatch": kingdom_mismatch,
+                "is_fallback": false,
                 "error": if kingdom_mismatch { Some("This player is not in the kingdom this form is for") } else { None::<&str> }
             })))
         }
-        Err(e) => Ok(HttpResponse::Ok().json(json!({
-            "success": false,
-            "error": e
-        }))),
+        Err(_) => {
+            let fallback_kingdom = expected_kingdom.clone().unwrap_or_else(|| "0".to_string());
+            Ok(HttpResponse::Ok().json(json!({
+                "success": true,
+                "name": "",
+                "player_id": player_id,
+                "avatar_image": None::<String>,
+                "castle_level": "Level 30",
+                "kingdom": fallback_kingdom,
+                "kingdom_mismatch": false,
+                "is_fallback": true,
+                "error": None::<String>
+            })))
+        }
     }
 }
 

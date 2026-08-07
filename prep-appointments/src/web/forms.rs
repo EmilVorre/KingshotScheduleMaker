@@ -425,13 +425,24 @@ pub async fn player_lookup_by_code(
                 "castle_level": castle_level,
                 "kingdom": player.kid,
                 "kingdom_mismatch": kingdom_mismatch,
+                "is_fallback": false,
                 "error": if kingdom_mismatch { Some("This player is not in the kingdom this form is for") } else { None::<&str> }
             })))
         }
-        Err(e) => Ok(HttpResponse::Ok().json(serde_json::json!({
-            "success": false,
-            "error": e
-        }))),
+        Err(_) => {
+            let fallback_kingdom = expected_kingdom.clone().unwrap_or_else(|| "0".to_string());
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "success": true,
+                "name": "",
+                "player_id": player_id,
+                "avatar_image": None::<String>,
+                "castle_level": "Level 30",
+                "kingdom": fallback_kingdom,
+                "kingdom_mismatch": false,
+                "is_fallback": true,
+                "error": None::<String>
+            })))
+        }
     }
 }
 
