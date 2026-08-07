@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
-import { api, FormConfig, FormSubmission, PlayerCard } from '../api/client'
+import { api, FormConfig, FormSubmission } from '../api/client'
 import { LANGUAGE_OPTIONS, type SupportedLanguage } from '../i18n'
 import { calculateTimeSlots } from '../utils/timeSlots'
 
@@ -41,10 +41,6 @@ export default function FormPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const { t, i18n } = useTranslation()
-  const [lookupLoading, setLookupLoading] = useState(false)
-  const [lookupError, setLookupError] = useState('')
-  const [playerCard, setPlayerCard] = useState<PlayerCard | null>(null)
-  const [isNameEditable, setIsNameEditable] = useState(false)
   const [checkLoading, setCheckLoading] = useState(false)
 
   const baseUrl = `/form/${code}`
@@ -99,37 +95,6 @@ export default function FormPage() {
     setForm((f) => ({ ...f, submission_type: (ok && data?.has_submitted ? 'Re-Submission' : 'New submission') as SubmissionType }))
     setCheckLoading(false)
   }, [code, form.player_id])
-
-  const lookupPlayer = useCallback(async () => {
-    const id = form.player_id.trim()
-    if (!id || !/^[0-9]+$/.test(id)) {
-      setLookupError(t('playerIdMustBeNumber'))
-      return
-    }
-    setLookupLoading(true)
-    setLookupError('')
-    setPlayerCard(null)
-    setIsNameEditable(false)
-    const { ok, data } = await api.playerLookup(code!, id)
-    const d = data as { success?: boolean; name?: string; player_id?: string; kingdom_mismatch?: boolean; error?: string; castle_level?: number | string; kingdom?: string; avatar_image?: string; is_fallback?: boolean }
-    if (ok && d?.success && d?.name) {
-      setForm((f) => ({ ...f, character_name: d.name ?? '' }))
-      setPlayerCard({
-        player_id: d.player_id ?? id,
-        name: d.name,
-        castle_level: d.castle_level != null ? String(d.castle_level) : undefined,
-        kingdom: d.kingdom,
-        avatar_image: d.avatar_image,
-      })
-      if (d?.is_fallback) {
-        setIsNameEditable(true)
-      }
-      checkSubmission()
-    } else {
-      setLookupError(d?.kingdom_mismatch ? t('playerNotInKingdom') : (d?.error ?? t('failedToLoadConfig')))
-    }
-    setLookupLoading(false)
-  }, [code, form.player_id, checkSubmission, t])
 
   const handleAllianceChange = (alliance: string) => {
     setForm((f) => ({ ...f, alliance, custom_alliance: alliance === NON_OF_ABOVE ? f.custom_alliance : '' }))
@@ -236,8 +201,6 @@ export default function FormPage() {
   const resetForm = () => {
     setForm(initialForm)
     setSubmitted(false)
-    setPlayerCard(null)
-    setLookupError('')
   }
 
   const changeLang = (l: SupportedLanguage) => {
@@ -414,79 +377,34 @@ export default function FormPage() {
                       {t('playerIdQuestion')} <span className="text-red-400">*</span>
                     </label>
                     <p className="text-xs text-gray-500 mb-2">{t('playerIdNote')}</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={form.player_id}
-                        onChange={(e) => {
-                          setForm((f) => ({ ...f, player_id: e.target.value }))
-                          setPlayerCard(null)
-                          setLookupError('')
-                        }}
-                        onBlur={checkSubmission}
-                        required
-                        pattern="[0-9]+"
-                        className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
-                        placeholder={t('playerIdPlaceholder')}
-                      />
-                      <button
-                        type="button"
-                        onClick={lookupPlayer}
-                        disabled={lookupLoading || !form.player_id.trim()}
-                        className="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all whitespace-nowrap"
-                      >
-                        {lookupLoading ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-check mr-2"></i>}
-                        {lookupLoading ? t('lookingUp') : t('confirm')}
-                      </button>
-                    </div>
-                    {lookupError && <p className="text-xs text-red-400 mt-2">{lookupError}</p>}
-                    {playerCard && (
-                      <div className="mt-4 p-4 bg-gray-800/80 rounded-lg border border-dashed border-gray-500">
-                        <div className="flex items-start gap-4">
-                          <div className="flex-shrink-0">
-                            {playerCard.avatar_image ? (
-                              <img src={playerCard.avatar_image} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-gray-500" />
-                            ) : (
-                              <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center border-2 border-gray-500">
-                                <i className="fas fa-user text-2xl text-gray-400"></i>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="space-y-2 text-sm text-gray-300">
-                              {isNameEditable ? (
-                                <div className="space-y-1">
-                                  <label className="block text-xs font-semibold text-teal-400 uppercase tracking-wide">
-                                    {t('characterNameQuestion')}
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={form.character_name}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      setForm((f) => ({ ...f, character_name: val }))
-                                      setPlayerCard((p) => p ? { ...p, name: val } : null)
-                                    }}
-                                    required
-                                    className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all"
-                                    placeholder="Enter your in-game name"
-                                  />
-                                </div>
-                              ) : (
-                                playerCard.name && (
-                                  <p className="font-semibold text-white"><i className="fas fa-user text-blue-400 w-4 mr-2"></i>{playerCard.name}</p>
-                                )
-                              )}
-                              <p><i className="fas fa-id-card text-purple-400 w-4 mr-2"></i>ID: {playerCard.player_id}</p>
-                              {playerCard.castle_level != null && playerCard.castle_level !== '' && (
-                                <p><i className="fas fa-chess-rook text-amber-400 w-4 mr-2"></i> {t('castleLevel')}: {playerCard.castle_level}</p>
-                              )}
-                              {playerCard.kingdom && <p><i className="fas fa-globe text-blue-400 w-4 mr-2"></i>{t('kingdom')}: {playerCard.kingdom}</p>}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <input
+                      type="text"
+                      value={form.player_id}
+                      onChange={(e) => {
+                        setForm((f) => ({ ...f, player_id: e.target.value }))
+                      }}
+                      onBlur={checkSubmission}
+                      required
+                      pattern="[0-9]+"
+                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                      placeholder={t('playerIdPlaceholder')}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      {t('characterNameQuestion')} <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.character_name}
+                      onChange={(e) => {
+                        setForm((f) => ({ ...f, character_name: e.target.value }))
+                      }}
+                      required
+                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all"
+                      placeholder="Enter your in-game character name"
+                    />
                   </div>
 
                   <div>

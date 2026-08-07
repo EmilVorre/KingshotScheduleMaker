@@ -5,7 +5,6 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use std::collections::HashMap;
 
 use crate::form::{validate_submission, FormSubmission, FormSubmissionRequest};
-use crate::kingshot_api;
 use crate::parser::load_appointments_from_submissions;
 
 use super::persistence::{
@@ -31,7 +30,7 @@ pub async fn submit_form_by_code(
     let form_data = forms.get(&code).cloned();
     drop(forms);
 
-    let (config, _server_number) = if let Some(fd) = form_data {
+    let (_config, _server_number) = if let Some(fd) = form_data {
         (fd.config, fd.server_number)
     } else {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
@@ -45,18 +44,6 @@ pub async fn submit_form_by_code(
             "success": false,
             "error": err
         })));
-    }
-
-    // Verify player is in the kingdom this form is for
-    let expected_kingdom = config.kingdom_id.trim();
-
-    if let Ok(player) = kingshot_api::fetch_player(req.player_id.trim()).await {
-        if player.kid.trim() != expected_kingdom {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "success": false,
-                "error": "This player is not in the kingdom this form is for"
-            })));
-        }
     }
 
     let timestamp = chrono::Local::now().format("%d/%m/%Y %H.%M.%S").to_string();
@@ -407,43 +394,18 @@ pub async fn player_lookup_by_code(
             .map(|f| f.config.kingdom_id.trim().to_string())
     };
 
-    match kingshot_api::fetch_player(&player_id).await {
-        Ok(player) => {
-            let castle_level = kingshot_api::stove_lv_to_label(player.stove_lv);
-
-            let kingdom_mismatch = if let Some(ref exp) = expected_kingdom {
-                player.kid.trim() != exp.as_str()
-            } else {
-                false
-            };
-
-            Ok(HttpResponse::Ok().json(serde_json::json!({
-                "success": !kingdom_mismatch,
-                "name": player.nickname,
-                "player_id": player.fid,
-                "avatar_image": player.avatar_image,
-                "castle_level": castle_level,
-                "kingdom": player.kid,
-                "kingdom_mismatch": kingdom_mismatch,
-                "is_fallback": false,
-                "error": if kingdom_mismatch { Some("This player is not in the kingdom this form is for") } else { None::<&str> }
-            })))
-        }
-        Err(_) => {
-            let fallback_kingdom = expected_kingdom.clone().unwrap_or_else(|| "0".to_string());
-            Ok(HttpResponse::Ok().json(serde_json::json!({
-                "success": true,
-                "name": "",
-                "player_id": player_id,
-                "avatar_image": None::<String>,
-                "castle_level": "Level 30",
-                "kingdom": fallback_kingdom,
-                "kingdom_mismatch": false,
-                "is_fallback": true,
-                "error": None::<String>
-            })))
-        }
-    }
+    let fallback_kingdom = expected_kingdom.unwrap_or_else(|| "0".to_string());
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "name": "",
+        "player_id": player_id,
+        "avatar_image": None::<String>,
+        "castle_level": "Level 30",
+        "kingdom": fallback_kingdom,
+        "kingdom_mismatch": false,
+        "is_fallback": true,
+        "error": None::<String>
+    })))
 }
 
 /// Get form config by code (public)

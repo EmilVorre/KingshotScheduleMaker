@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
-import { api, type PlayerCard } from '../api/client'
+import { api } from '../api/client'
 import { LANGUAGE_OPTIONS, type SupportedLanguage } from '../i18n'
 
 const NON_OF = 'Non of the above'
@@ -70,10 +70,7 @@ export default function TyrantFormPage() {
   const [config, setConfig] = useState<Record<string, unknown> | null>(null)
 
   const [playerId, setPlayerId] = useState('')
-  const [lookupLoading, setLookupLoading] = useState(false)
-  const [lookupErr, setLookupErr] = useState('')
-  const [playerCard, setPlayerCard] = useState<PlayerCard | null>(null)
-  const [isNameEditable, setIsNameEditable] = useState(false)
+  const [playerName, setPlayerName] = useState('')
 
   const [alliance, setAlliance] = useState('')
   const [customAlliance, setCustomAlliance] = useState('')
@@ -117,12 +114,6 @@ export default function TyrantFormPage() {
   )
 
   useEffect(() => {
-    if (playerCard && playerId.trim() !== String(playerCard.player_id ?? '')) {
-      setPlayerCard(null)
-    }
-  }, [playerId, playerCard])
-
-  useEffect(() => {
     if (!code) return
     setLoading(true)
     setError(null)
@@ -145,48 +136,6 @@ export default function TyrantFormPage() {
 
   const effectiveAlliance = alliance === NON_OF ? customAlliance.trim() : alliance
 
-  async function lookupPlayer() {
-    const id = playerId.trim()
-    if (!id || !/^[0-9]+$/.test(id) || !code) {
-      setLookupErr(t('playerIdMustBeNumber'))
-      return
-    }
-    setLookupLoading(true)
-    setLookupErr('')
-    setPlayerCard(null)
-    setIsNameEditable(false)
-    const { ok, data } = await api.tyrantPlayerLookup(code, id)
-    setLookupLoading(false)
-    const d = data as PlayerCard & {
-      success?: boolean
-      kingdom_mismatch?: boolean
-      error?: string
-      name?: string
-      is_fallback?: boolean
-    }
-    if (ok && d?.success && d?.name) {
-      setPlayerCard({
-        player_id: d.player_id ?? id,
-        name: d.name,
-        castle_level: d.castle_level != null ? String(d.castle_level) : undefined,
-        kingdom: d.kingdom,
-        avatar_image: d.avatar_image,
-      })
-      if (d?.is_fallback) {
-        setIsNameEditable(true)
-      }
-    } else {
-      const errMsg = d?.error as string | undefined
-      setLookupErr(
-        d?.kingdom_mismatch
-          ? t('playerNotInKingdom')
-          : errMsg && errMsg.length > 0
-            ? errMsg
-            : t('tyrantLookupFailed')
-      )
-    }
-  }
-
   async function submit(ev: FormEvent) {
     ev.preventDefault()
     if (!code) return
@@ -199,8 +148,8 @@ export default function TyrantFormPage() {
       setSubmitErr(alliance === NON_OF ? t('pleaseEnterCustomAlliance') : t('pleaseSelectAlliance'))
       return
     }
-    if (!playerCard?.name?.trim()) {
-      setSubmitErr(t('tyrantConfirmPlayerLookup'))
+    if (!playerName.trim()) {
+      setSubmitErr(t('pleaseEnterCharacterName'))
       return
     }
     if (autoHelpMonthCard !== 'yes' && autoHelpMonthCard !== 'no') {
@@ -211,7 +160,7 @@ export default function TyrantFormPage() {
     setSubmitErr('')
     const { ok, error: err } = await api.tyrantSubmit(code, {
       player_id: id,
-      player_name: playerCard.name.trim(),
+      player_name: playerName.trim(),
       alliance: effectiveAlliance,
       archer,
       cavalry,
@@ -282,65 +231,31 @@ export default function TyrantFormPage() {
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-8 bg-gray-800/80 border border-gray-700 rounded-2xl p-8 shadow-xl">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">{t('playerIdQuestion')}</label>
-              <p className="text-xs text-gray-500 mb-2">{t('playerIdNote')}</p>
-              <div className="flex gap-2 flex-wrap">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">{t('playerIdQuestion')} <span className="text-red-400">*</span></label>
+                <p className="text-xs text-gray-500 mb-2">{t('playerIdNote')}</p>
                 <input
-                  className="flex-1 min-w-[200px] px-4 py-3 rounded-xl bg-gray-900 border border-gray-600 text-white font-mono"
+                  className="w-full px-4 py-3 rounded-xl bg-gray-900 border border-gray-600 text-white font-mono"
                   value={playerId}
                   onChange={(e) => setPlayerId(e.target.value.replace(/\D/g, ''))}
                   placeholder={t('playerIdPlaceholder')}
                   autoComplete="off"
+                  required
                 />
-                <button
-                  type="button"
-                  onClick={() => void lookupPlayer()}
-                  disabled={lookupLoading}
-                  className="px-4 py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-medium disabled:opacity-50"
-                >
-                  {lookupLoading ? t('lookingUp') : t('confirm')}
-                </button>
               </div>
-              {lookupErr && <p className="text-red-400 text-sm mt-2">{lookupErr}</p>}
-              {playerCard && (
-                <div className="mt-4 flex items-center gap-4 p-4 rounded-xl bg-gray-900/80 border border-gray-600">
-                  {playerCard.avatar_image ? (
-                    <img src={playerCard.avatar_image} alt="" className="w-14 h-14 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-14 h-14 rounded-full bg-teal-600 flex items-center justify-center text-xl text-white">
-                      {(playerCard.name || '?').charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    {isNameEditable ? (
-                      <div className="space-y-1">
-                        <label className="block text-xs font-semibold text-teal-400 uppercase tracking-wide">
-                          {t('characterNameQuestion')}
-                        </label>
-                        <input
-                          type="text"
-                          value={playerCard.name}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            setPlayerCard((p) => p ? { ...p, name: val } : null)
-                          }}
-                          required
-                          className="w-full max-w-xs px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-600 text-white text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500/50 outline-none transition-all"
-                          placeholder="Enter your in-game name"
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-white font-medium">{playerCard.name}</p>
-                    )}
-                    <p className="text-xs text-gray-400">
-                      {playerCard.player_id}
-                      {playerCard.castle_level ? ` · ${t('castleLevel')}: ${playerCard.castle_level}` : ''}
-                      {playerCard.kingdom ? ` · ${t('kingdom')}: ${playerCard.kingdom}` : ''}
-                    </p>
-                  </div>
-                </div>
-              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">{t('characterNameQuestion')} <span className="text-red-400">*</span></label>
+                <input
+                  className="w-full px-4 py-3 rounded-xl bg-gray-900 border border-gray-600 text-white"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  placeholder="Enter your in-game name"
+                  autoComplete="off"
+                  required
+                />
+              </div>
             </div>
 
             <div>
