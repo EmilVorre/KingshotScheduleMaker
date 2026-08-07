@@ -10,8 +10,6 @@ use std::collections::HashMap;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::kingshot_api;
-
 use super::persistence::{
     self, generate_form_code, is_postgres_backend, load_domain_doc, save_domain_doc,
 };
@@ -985,35 +983,13 @@ pub async fn tyrant_public_submit(
             .json(json!({"success": false, "error": "Alliance not allowed"})));
     }
 
-    let expected_kingdom = config
+    let _expected_kingdom = config
         .get("kingdom_id")
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
-    let verified_name = match kingshot_api::fetch_player(pid).await {
-        Ok(player) => {
-            if player.nickname.trim() != pname {
-                return Ok(HttpResponse::BadRequest().json(
-                    json!({"success": false, "error": "Player name does not match player id"}),
-                ));
-            }
-            if let Some(ref exp) = expected_kingdom {
-                if player.kid.trim() != exp.as_str() {
-                    return Ok(HttpResponse::BadRequest().json(
-                        json!({"success": false, "error": "Player not in kingdom for this form"}),
-                    ));
-                }
-            }
-            player.nickname.trim().to_string()
-        }
-        Err(e) => {
-            eprintln!(
-                "Kingshot API fetch_player failed: {e}. Falling back to submitted name: {pname}"
-            );
-            pname.to_string()
-        }
-    };
+    let verified_name = pname.to_string();
 
     let payload = TyrantSubmissionPayload {
         alliance: alliance.to_string(),
@@ -1124,41 +1100,18 @@ pub async fn tyrant_player_lookup(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
-    match kingshot_api::fetch_player(player_id).await {
-        Ok(player) => {
-            let castle_level = kingshot_api::stove_lv_to_label(player.stove_lv);
-            let kingdom_mismatch = if let Some(ref exp) = expected_kingdom {
-                player.kid.trim() != exp.as_str()
-            } else {
-                false
-            };
-            Ok(HttpResponse::Ok().json(json!({
-                "success": !kingdom_mismatch,
-                "name": player.nickname,
-                "player_id": player.fid,
-                "avatar_image": player.avatar_image,
-                "castle_level": castle_level,
-                "kingdom": player.kid,
-                "kingdom_mismatch": kingdom_mismatch,
-                "is_fallback": false,
-                "error": if kingdom_mismatch { Some("This player is not in the kingdom this form is for") } else { None::<&str> }
-            })))
-        }
-        Err(_) => {
-            let fallback_kingdom = expected_kingdom.clone().unwrap_or_else(|| "0".to_string());
-            Ok(HttpResponse::Ok().json(json!({
-                "success": true,
-                "name": "",
-                "player_id": player_id,
-                "avatar_image": None::<String>,
-                "castle_level": "Level 30",
-                "kingdom": fallback_kingdom,
-                "kingdom_mismatch": false,
-                "is_fallback": true,
-                "error": None::<String>
-            })))
-        }
-    }
+    let fallback_kingdom = expected_kingdom.unwrap_or_else(|| "0".to_string());
+    Ok(HttpResponse::Ok().json(json!({
+        "success": true,
+        "name": "",
+        "player_id": player_id,
+        "avatar_image": None::<String>,
+        "castle_level": "Level 30",
+        "kingdom": fallback_kingdom,
+        "kingdom_mismatch": false,
+        "is_fallback": true,
+        "error": None::<String>
+    })))
 }
 
 /// GET .../api/server-org/workspaces/{workspace_id}/tyrant-submissions?sort=level_then_tg|tg_then_level
