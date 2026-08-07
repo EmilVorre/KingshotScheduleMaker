@@ -228,10 +228,15 @@ pub async fn add_player(
     let player = match kingshot_api::fetch_player(player_id).await {
         Ok(p) => p,
         Err(e) => {
-            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "success": false,
-                "error": e
-            })));
+            eprintln!("Kingshot API fetch_player failed in add alliance player: {e}. Falling back to mock player data.");
+            kingshot_api::PlayerData {
+                nickname: "".to_string(),
+                fid: player_id.to_string(),
+                stove_lv: 30,
+                kid: server.to_string(),
+                avatar_image: None,
+                stove_lv_content: None,
+            }
         }
     };
 

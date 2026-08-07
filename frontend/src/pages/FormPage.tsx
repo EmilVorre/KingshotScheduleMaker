@@ -44,6 +44,7 @@ export default function FormPage() {
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState('')
   const [playerCard, setPlayerCard] = useState<PlayerCard | null>(null)
+  const [isNameEditable, setIsNameEditable] = useState(false)
   const [checkLoading, setCheckLoading] = useState(false)
 
   const baseUrl = `/form/${code}`
@@ -108,8 +109,9 @@ export default function FormPage() {
     setLookupLoading(true)
     setLookupError('')
     setPlayerCard(null)
+    setIsNameEditable(false)
     const { ok, data } = await api.playerLookup(code!, id)
-    const d = data as { success?: boolean; name?: string; player_id?: string; kingdom_mismatch?: boolean; error?: string; castle_level?: number | string; kingdom?: string; avatar_image?: string }
+    const d = data as { success?: boolean; name?: string; player_id?: string; kingdom_mismatch?: boolean; error?: string; castle_level?: number | string; kingdom?: string; avatar_image?: string; is_fallback?: boolean }
     if (ok && d?.success && d?.name) {
       setForm((f) => ({ ...f, character_name: d.name ?? '' }))
       setPlayerCard({
@@ -119,6 +121,9 @@ export default function FormPage() {
         kingdom: d.kingdom,
         avatar_image: d.avatar_image,
       })
+      if (d?.is_fallback) {
+        setIsNameEditable(true)
+      }
       checkSubmission()
     } else {
       setLookupError(d?.kingdom_mismatch ? t('playerNotInKingdom') : (d?.error ?? t('failedToLoadConfig')))
@@ -448,9 +453,29 @@ export default function FormPage() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="space-y-1 text-sm text-gray-300">
-                              {playerCard.name && (
-                                <p className="font-semibold text-white"><i className="fas fa-user text-blue-400 w-4 mr-2"></i>{playerCard.name}</p>
+                            <div className="space-y-2 text-sm text-gray-300">
+                              {isNameEditable ? (
+                                <div className="space-y-1">
+                                  <label className="block text-xs font-semibold text-teal-400 uppercase tracking-wide">
+                                    {t('characterNameQuestion')}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={form.character_name}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      setForm((f) => ({ ...f, character_name: val }))
+                                      setPlayerCard((p) => p ? { ...p, name: val } : null)
+                                    }}
+                                    required
+                                    className="w-full px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all"
+                                    placeholder="Enter your in-game name"
+                                  />
+                                </div>
+                              ) : (
+                                playerCard.name && (
+                                  <p className="font-semibold text-white"><i className="fas fa-user text-blue-400 w-4 mr-2"></i>{playerCard.name}</p>
+                                )
                               )}
                               <p><i className="fas fa-id-card text-purple-400 w-4 mr-2"></i>ID: {playerCard.player_id}</p>
                               {playerCard.castle_level != null && playerCard.castle_level !== '' && (

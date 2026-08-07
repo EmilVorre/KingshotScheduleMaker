@@ -73,6 +73,7 @@ export default function TyrantFormPage() {
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupErr, setLookupErr] = useState('')
   const [playerCard, setPlayerCard] = useState<PlayerCard | null>(null)
+  const [isNameEditable, setIsNameEditable] = useState(false)
 
   const [alliance, setAlliance] = useState('')
   const [customAlliance, setCustomAlliance] = useState('')
@@ -153,6 +154,7 @@ export default function TyrantFormPage() {
     setLookupLoading(true)
     setLookupErr('')
     setPlayerCard(null)
+    setIsNameEditable(false)
     const { ok, data } = await api.tyrantPlayerLookup(code, id)
     setLookupLoading(false)
     const d = data as PlayerCard & {
@@ -160,6 +162,7 @@ export default function TyrantFormPage() {
       kingdom_mismatch?: boolean
       error?: string
       name?: string
+      is_fallback?: boolean
     }
     if (ok && d?.success && d?.name) {
       setPlayerCard({
@@ -169,6 +172,9 @@ export default function TyrantFormPage() {
         kingdom: d.kingdom,
         avatar_image: d.avatar_image,
       })
+      if (d?.is_fallback) {
+        setIsNameEditable(true)
+      }
     } else {
       const errMsg = d?.error as string | undefined
       setLookupErr(
@@ -306,8 +312,27 @@ export default function TyrantFormPage() {
                       {(playerCard.name || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div>
-                    <p className="text-white font-medium">{playerCard.name}</p>
+                  <div className="flex-1 min-w-0">
+                    {isNameEditable ? (
+                      <div className="space-y-1">
+                        <label className="block text-xs font-semibold text-teal-400 uppercase tracking-wide">
+                          {t('characterNameQuestion')}
+                        </label>
+                        <input
+                          type="text"
+                          value={playerCard.name}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setPlayerCard((p) => p ? { ...p, name: val } : null)
+                          }}
+                          required
+                          className="w-full max-w-xs px-3 py-1.5 rounded-lg bg-gray-800 border border-gray-600 text-white text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500/50 outline-none transition-all"
+                          placeholder="Enter your in-game name"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-white font-medium">{playerCard.name}</p>
+                    )}
                     <p className="text-xs text-gray-400">
                       {playerCard.player_id}
                       {playerCard.castle_level ? ` · ${t('castleLevel')}: ${playerCard.castle_level}` : ''}
