@@ -125,6 +125,21 @@ pub fn generate_friend_code() -> String {
 pub struct DayTimeConfig {
     pub start_time: String,
     pub end_time: Option<String>,
+    #[serde(default)]
+    pub uniform_half_hour_slots: bool,
+}
+
+impl DayTimeConfig {
+    pub fn time_slots(&self) -> Vec<(u8, String)> {
+        if self.uniform_half_hour_slots {
+            crate::schedule::slot_utils::calculate_half_hour_slots(
+                &self.start_time,
+                self.end_time.as_deref(),
+            )
+        } else {
+            crate::schedule::calculate_time_slots(&self.start_time, self.end_time.as_deref())
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +189,8 @@ pub struct FormConfig {
     #[serde(default)]
     pub research_day_slot: Option<String>,
     #[serde(default)]
+    pub troops_day_slot: Option<String>,
+    #[serde(default)]
     pub predetermined_slots: Vec<PredeterminedSlot>,
     #[serde(default)]
     pub intro_text: Option<String>,
@@ -193,17 +210,21 @@ impl Default for FormConfig {
             construction_times: DayTimeConfig {
                 start_time: "00:00".to_string(),
                 end_time: None,
+                uniform_half_hour_slots: false,
             },
             research_times: DayTimeConfig {
                 start_time: "00:00".to_string(),
                 end_time: None,
+                uniform_half_hour_slots: false,
             },
             troops_times: DayTimeConfig {
                 start_time: "00:00".to_string(),
                 end_time: None,
+                uniform_half_hour_slots: false,
             },
             construction_day_slot: None,
             research_day_slot: None,
+            troops_day_slot: None,
             predetermined_slots: vec![],
             intro_text: None,
             support_person_name: None,
@@ -341,6 +362,8 @@ pub struct CreateFormRequest {
     pub construction_day_slot: Option<String>,
     #[serde(default)]
     pub research_day_slot: Option<String>,
+    #[serde(default)]
+    pub troops_day_slot: Option<String>,
     #[serde(default)]
     pub predetermined_slots: Vec<PredeterminedSlot>,
     #[serde(default)]

@@ -138,19 +138,29 @@ export function getSubmissionValue(submission: Record<string, unknown>, header: 
   return formatSubmissionCell(header in submission ? submission[header] : '')
 }
 
-export type BuildingResearchDaySlot = 'monday' | 'tuesday' | 'friday_full' | 'friday_sat'
+export type AppointmentDaySlot = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday_full' | 'friday_sat'
+
+export const APPOINTMENT_DAY_OPTIONS: Array<{ value: AppointmentDaySlot; label: string }> = [
+  { value: 'monday', label: 'Day 1 (Monday)' },
+  { value: 'tuesday', label: 'Day 2 (Tuesday)' },
+  { value: 'wednesday', label: 'Day 3 (Wednesday)' },
+  { value: 'thursday', label: 'Day 4 (Thursday)' },
+  { value: 'friday_full', label: 'Day 5 (Friday)' },
+]
 
 export function daySlotToTimes(
-  slot: BuildingResearchDaySlot
-): { start_time: string; end_time?: string } {
+  slot: AppointmentDaySlot,
+  uniformHalfHourSlots = false
+): { start_time: string; end_time?: string; uniform_half_hour_slots: boolean } {
+  if (uniformHalfHourSlots) return { start_time: '00:00', uniform_half_hour_slots: true }
   switch (slot) {
     case 'friday_sat':
-      return { start_time: '10:00', end_time: undefined }
+      return { start_time: '10:00', end_time: undefined, uniform_half_hour_slots: false }
     case 'monday':
     case 'tuesday':
     case 'friday_full':
     default:
-      return { start_time: '00:00', end_time: undefined }
+      return { start_time: '00:00', end_time: undefined, uniform_half_hour_slots: false }
   }
 }
 

@@ -151,6 +151,8 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
         oauth_hmac_key,
     });
 
+    alliance_application::approve_pending_applications(&app_state).await?;
+
     let secret_key = Key::derive_from(&session_secret);
 
     HttpServer::new(move || {

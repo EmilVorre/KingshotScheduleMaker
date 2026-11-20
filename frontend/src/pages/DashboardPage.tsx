@@ -7,6 +7,7 @@ import {
   type AlliancePlayer,
   type CreateFormRequest,
   type CurrentFormInfo,
+  type FormConfig,
   type PredeterminedSlot,
   type Schedule,
 } from '../api/client'
@@ -33,7 +34,8 @@ import {
   formatDate,
   copyToClipboard,
   daySlotToTimes,
-  type BuildingResearchDaySlot,
+  APPOINTMENT_DAY_OPTIONS,
+  type AppointmentDaySlot,
 } from './dashboard/utils'
 
 interface ExtendedPredeterminedSlot extends PredeterminedSlot {
@@ -87,8 +89,10 @@ export default function DashboardPage() {
     alliances: [] as string[],
     include_non_of_above: true,
     construction_truegold_mode: 'truegold_unlocked' as string,
-    construction_day_slot: 'monday' as BuildingResearchDaySlot,
-    research_day_slot: 'tuesday' as BuildingResearchDaySlot,
+    construction_day_slot: 'monday' as AppointmentDaySlot,
+    research_day_slot: 'tuesday' as AppointmentDaySlot,
+    troops_day_slot: 'thursday' as AppointmentDaySlot,
+    uniform_half_hour_slots: false,
   })
   const [creatingForm, setCreatingForm] = useState(false)
   const [configStatus, setConfigStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -285,7 +289,7 @@ export default function DashboardPage() {
     if (!accountName || !serverNumber) return
     const { ok, data } = await api.getPreviousFormConfig(accountName, serverNumber)
     if (ok && data?.config) {
-      const c = data.config
+      const c = data.config as FormConfig
       setConfig({
         form_name: '',
         kingdom_id: (c as { kingdom_id?: string }).kingdom_id ?? '',
@@ -295,9 +299,11 @@ export default function DashboardPage() {
         construction_truegold_mode:
           (c as { construction_truegold_mode?: string }).construction_truegold_mode ?? 'truegold_unlocked',
         construction_day_slot:
-          (c as { construction_day_slot?: BuildingResearchDaySlot }).construction_day_slot ?? 'monday',
+          (c as { construction_day_slot?: AppointmentDaySlot }).construction_day_slot ?? 'monday',
         research_day_slot:
-          (c as { research_day_slot?: BuildingResearchDaySlot }).research_day_slot ?? 'tuesday',
+          (c as { research_day_slot?: AppointmentDaySlot }).research_day_slot ?? 'tuesday',
+        troops_day_slot: c.troops_day_slot as AppointmentDaySlot ?? 'thursday',
+        uniform_half_hour_slots: c.construction_times?.uniform_half_hour_slots ?? false,
       })
     }
   }, [accountName, serverNumber])
@@ -471,10 +477,12 @@ export default function DashboardPage() {
       setConfigStatus({ type: 'error', message: 'Error: Kingdom ID is required' })
       return
     }
-    if (config.construction_day_slot === config.research_day_slot) {
+    const selectedDays = [config.construction_day_slot, config.research_day_slot, config.troops_day_slot]
+      .map((day) => day === 'friday_sat' ? 'friday_full' : day)
+    if (new Set(selectedDays).size !== selectedDays.length) {
       setConfigStatus({
         type: 'error',
-        message: 'Error: Construction and Research must be on different days. Please choose a different day for one of them.',
+        message: 'Error: Choose a different day for Building, Research, and Troops.',
       })
       return
     }
@@ -488,11 +496,12 @@ export default function DashboardPage() {
       alliances,
       include_non_of_above: config.include_non_of_above,
       construction_truegold_mode: config.construction_truegold_mode,
-      construction_times: daySlotToTimes(config.construction_day_slot),
-      research_times: daySlotToTimes(config.research_day_slot),
-      troops_times: { start_time: '00:00', end_time: undefined },
-      construction_day_slot: config.construction_day_slot,
-      research_day_slot: config.research_day_slot,
+      construction_times: daySlotToTimes(config.construction_day_slot, config.uniform_half_hour_slots),
+      research_times: daySlotToTimes(config.research_day_slot, config.uniform_half_hour_slots),
+      troops_times: daySlotToTimes(config.troops_day_slot, config.uniform_half_hour_slots),
+      construction_day_slot: config.uniform_half_hour_slots && config.construction_day_slot === 'friday_sat' ? 'friday_full' : config.construction_day_slot,
+      research_day_slot: config.uniform_half_hour_slots && config.research_day_slot === 'friday_sat' ? 'friday_full' : config.research_day_slot,
+      troops_day_slot: config.uniform_half_hour_slots && config.troops_day_slot === 'friday_sat' ? 'friday_full' : config.troops_day_slot,
       intro_text: STANDARD_INTRO_TEXT,
       support_person_name: config.support_person_name?.trim() || undefined,
     }
@@ -858,7 +867,7 @@ export default function DashboardPage() {
               <div className="bg-amber-900/30 border border-amber-600/50 rounded-lg p-4 mb-8">
                 <p className="text-amber-200 text-sm">
                   <i className="fas fa-info-circle mr-2"></i>
-                  This site is currently in development. To ensure stable performance and stay within our resource and external API limits, we ask alliances to apply before using these features. Approved applications will receive full access to the Alliance Organisation tools.
+                  Submit your alliance details to get access to the Alliance Organisation tools. Applications are approved automatically.
                 </p>
               </div>
 
@@ -1899,111 +1908,55 @@ export default function DashboardPage() {
 
                 <div className="bg-gray-700/50 rounded-lg p-6 border border-gray-600">
                   <h3 className="text-xl font-bold text-white mb-2">
-                    <i className="fas fa-calendar-day mr-2"></i>Construction &amp; Research Days
+                    <i className="fas fa-calendar-day mr-2"></i>Appointment Days
                   </h3>
                   <p className="text-sm text-gray-400 mb-4">
-                    Choose which day slot is used for Construction and which for Research. Each option can only be used once. The two Friday options are paired (same day, different time windows).
+                    Choose a day from 1 to 5 for each appointment type. Selecting a day already in use swaps the two types.
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-orange-300 mb-2">Construction day</label>
-                      <select
-                        value={config.construction_day_slot}
-                        onChange={(e) =>
-                          setConfig((c) => ({
-                            ...c,
-                            construction_day_slot: e.target.value as BuildingResearchDaySlot,
-                          }))
-                        }
-                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/50 outline-none"
-                      >
-                        <option value="monday" disabled={config.research_day_slot === 'monday'}>
-                          Monday 00:00 – 24:00
-                          {config.research_day_slot === 'monday' ? ' (used for Research)' : ''}
-                        </option>
-                        <option value="tuesday" disabled={config.research_day_slot === 'tuesday'}>
-                          Tuesday 00:00 – 24:00
-                          {config.research_day_slot === 'tuesday' ? ' (used for Research)' : ''}
-                        </option>
-                        <optgroup label="Friday">
-                          <option
-                            value="friday_full"
-                            disabled={
-                              config.research_day_slot === 'friday_full' ||
-                              config.research_day_slot === 'friday_sat'
-                            }
-                          >
-                            Friday 00:00 – 24:00
-                            {config.research_day_slot === 'friday_full' ? ' (used for Research)' : ''}
-                          </option>
-                          <option
-                            value="friday_sat"
-                            disabled={
-                              config.research_day_slot === 'friday_full' ||
-                              config.research_day_slot === 'friday_sat'
-                            }
-                          >
-                            Friday 10:00 – Saturday 10:00
-                            {config.research_day_slot === 'friday_sat' ? ' (used for Research)' : ''}
-                          </option>
-                        </optgroup>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-blue-300 mb-2">Research day</label>
-                      <select
-                        value={config.research_day_slot}
-                        onChange={(e) =>
-                          setConfig((c) => ({
-                            ...c,
-                            research_day_slot: e.target.value as BuildingResearchDaySlot,
-                          }))
-                        }
-                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 outline-none"
-                      >
-                        <option value="monday" disabled={config.construction_day_slot === 'monday'}>
-                          Monday 00:00 – 24:00
-                          {config.construction_day_slot === 'monday' ? ' (used for Construction)' : ''}
-                        </option>
-                        <option value="tuesday" disabled={config.construction_day_slot === 'tuesday'}>
-                          Tuesday 00:00 – 24:00
-                          {config.construction_day_slot === 'tuesday' ? ' (used for Construction)' : ''}
-                        </option>
-                        <optgroup label="Friday">
-                          <option
-                            value="friday_full"
-                            disabled={
-                              config.construction_day_slot === 'friday_full' ||
-                              config.construction_day_slot === 'friday_sat'
-                            }
-                          >
-                            Friday 00:00 – 24:00
-                            {config.construction_day_slot === 'friday_full' ? ' (used for Construction)' : ''}
-                          </option>
-                          <option
-                            value="friday_sat"
-                            disabled={
-                              config.construction_day_slot === 'friday_full' ||
-                              config.construction_day_slot === 'friday_sat'
-                            }
-                          >
-                            Friday 10:00 – Saturday 10:00
-                            {config.construction_day_slot === 'friday_sat' ? ' (used for Construction)' : ''}
-                          </option>
-                        </optgroup>
-                      </select>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {([
+                      ['construction_day_slot', 'Building'],
+                      ['research_day_slot', 'Research'],
+                      ['troops_day_slot', 'Troops'],
+                    ] as const).map(([key, label]) => (
+                      <div key={key}>
+                        <label htmlFor={key} className="block text-sm font-semibold text-gray-300 mb-2">{label} day</label>
+                        <select
+                          id={key}
+                          value={config[key]}
+                          onChange={(e) => {
+                            const selected = e.target.value as AppointmentDaySlot
+                            setConfig((previous) => {
+                              const next = { ...previous, [key]: selected }
+                              for (const other of ['construction_day_slot', 'research_day_slot', 'troops_day_slot'] as const) {
+                                const otherDay = previous[other] === 'friday_sat' ? 'friday_full' : previous[other]
+                                if (other !== key && otherDay === selected) next[other] = previous[key]
+                              }
+                              return next
+                            })
+                          }}
+                          className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-purple-500 outline-none"
+                        >
+                          {APPOINTMENT_DAY_OPTIONS.map((day) => (
+                            <option key={day.value} value={day.value}>{day.label}</option>
+                          ))}
+                          {config[key] === 'friday_sat' && (
+                            <option value="friday_sat">Day 5 (Friday 10:00 – Saturday 10:00)</option>
+                          )}
+                        </select>
+                      </div>
+                    ))}
                   </div>
-                  {(config.construction_day_slot === config.research_day_slot ||
-                    ((config.construction_day_slot === 'friday_full' ||
-                      config.construction_day_slot === 'friday_sat') &&
-                      (config.research_day_slot === 'friday_full' ||
-                        config.research_day_slot === 'friday_sat'))) && (
-                    <p className="text-sm text-amber-400 mt-2">
-                      <i className="fas fa-exclamation-triangle mr-1"></i>Construction and Research must be on different
-                      days. The two Friday options count as the same day.
-                    </p>
-                  )}
+                  <label htmlFor="slot-timing" className="block text-sm font-semibold text-gray-300 mt-6 mb-2">Slot timing (UTC)</label>
+                  <select
+                    id="slot-timing"
+                    value={config.uniform_half_hour_slots ? 'half-hour' : 'legacy'}
+                    onChange={(e) => setConfig((previous) => ({ ...previous, uniform_half_hour_slots: e.target.value === 'half-hour' }))}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-purple-500 outline-none"
+                  >
+                    <option value="legacy">Current timing: 00:00, 00:15, 00:45, …, 23:45</option>
+                    <option value="half-hour">30-minute slots: 00:00, 00:30, 01:00, …, 23:30 (24 hours)</option>
+                  </select>
                 </div>
 
                 <button

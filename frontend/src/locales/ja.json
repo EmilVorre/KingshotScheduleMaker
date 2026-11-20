@@ -91,6 +91,7 @@
   "introMoreInfo": "詳細情報：\n- このフォームの記入やフォーム提出の変更について質問がある場合は、フォームサポート：{{support}} および/または現在の司法大臣にお問い合わせください！",
   "scheduleDay_monday": "月曜日 00:00–24:00",
   "scheduleDay_tuesday": "火曜日 00:00–24:00",
+    "scheduleDay_wednesday": "水曜日 00:00–24:00",
   "scheduleDay_thursday": "木曜日 00:00–24:00",
   "scheduleDay_friday_full": "金曜日 00:00–24:00",
   "scheduleDay_friday_sat": "金曜日 10:00 – 土曜日 10:00",

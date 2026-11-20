@@ -383,3 +383,77 @@ async fn test_get_schedule_by_form_code_invalid_day() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status().as_u16(), 400);
 }
+
+#[actix_web::test]
+async fn half_hour_schedule_and_form_config_use_selected_days() {
+    let dir = std::env::temp_dir().join(format!("half-hour-api-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let state = make_test_app_state(dir.to_string_lossy().into_owned());
+    {
+        let mut forms = state.forms.lock().unwrap();
+        let config = &mut forms.get_mut("TESTCODE123").unwrap().config;
+        config.construction_day_slot = Some("tuesday".into());
+        config.research_day_slot = Some("monday".into());
+        config.troops_day_slot = Some("friday_full".into());
+        config.construction_times.uniform_half_hour_slots = true;
+        config.research_times.uniform_half_hour_slots = true;
+        config.troops_times.uniform_half_hour_slots = true;
+    }
+    let empty = DaySchedule {
+        appointments: HashMap::new(),
+        unassigned: vec![],
+    };
+    save_schedule(
+        &state.data_dir,
+        "testacct",
+        1,
+        &ScheduleData {
+            construction_schedule: Some(empty.clone()),
+            research_schedule: Some(empty.clone()),
+            troops_schedule: Some(empty),
+            entries: None,
+            scheduled_player_ids: None,
+        },
+    )
+    .await
+    .unwrap();
+    let app = test::init_service(
+        App::new()
+            .app_data(state)
+            .route(
+                "/form/{code}/api/config",
+                web::get().to(forms::get_form_config_by_code),
+            )
+            .route(
+                "/api/public-schedule/{account_name}/{form_code}/{day}",
+                web::get().to(schedule::get_schedule_by_form_code),
+            ),
+    )
+    .await;
+    let config: serde_json::Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::get()
+            .uri("/form/TESTCODE123/api/config")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(config["construction_day_slot"], "tuesday");
+    assert_eq!(config["research_day_slot"], "monday");
+    assert_eq!(config["troops_day_slot"], "friday_full");
+    assert_eq!(config["troops_times"]["uniform_half_hour_slots"], true);
+    for day in ["construction", "research", "troops"] {
+        let response: serde_json::Value = test::call_and_read_body_json(
+            &app,
+            test::TestRequest::get()
+                .uri(&format!("/api/public-schedule/testacct/TESTCODE123/{day}"))
+                .to_request(),
+        )
+        .await;
+        let slots = response["appointments"].as_array().unwrap();
+        assert_eq!(slots.len(), 48);
+        assert_eq!(slots[0]["time"], "00:00");
+        assert_eq!(slots[1]["time"], "00:30");
+        assert_eq!(slots[47]["time"], "23:30");
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}

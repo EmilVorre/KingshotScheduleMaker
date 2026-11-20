@@ -91,6 +91,7 @@
   "introMoreInfo": "Für weitere Informationen:\n- Kontaktieren Sie den Formularsupport: {{support}} wenn Sie Fragen zum Ausfüllen dieses Formulars oder Änderungen an Ihrer Formulareinreichung haben!",
   "scheduleDay_monday": "Montag 00:00–24:00",
   "scheduleDay_tuesday": "Dienstag 00:00–24:00",
+    "scheduleDay_wednesday": "Mittwoch 00:00–24:00",
   "scheduleDay_thursday": "Donnerstag 00:00–24:00",
   "scheduleDay_friday_full": "Freitag 00:00–24:00",
   "scheduleDay_friday_sat": "Freitag 10:00 – Samstag 10:00",

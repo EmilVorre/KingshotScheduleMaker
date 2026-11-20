@@ -1,5 +1,5 @@
-/** Replicate backend calculate_time_slots: Slot 1 = start, Slot 2 = start+15min, Slot 3+ = prev+30min. Returns slot numbers (1,2,3...) for API. */
-export function calculateTimeSlots(startTime: string, endTime?: string | null): Array<{ value: number; label: string }> {
+/** Returns slot numbers and times using the selected form timing. */
+export function calculateTimeSlots(startTime: string, endTime?: string | null, uniformHalfHourSlots = false): Array<{ value: number; label: string }> {
   const parseMinutes = (t: string): number => {
     const parts = t.split(':')
     if (parts.length !== 2) return 0
@@ -14,9 +14,15 @@ export function calculateTimeSlots(startTime: string, endTime?: string | null): 
 
   const startMinutes = parseMinutes(startTime)
   let endMinutes = endTime ? parseMinutes(endTime) : startMinutes + 24 * 60
-  if (endMinutes < startMinutes) endMinutes += 24 * 60
+  if (endMinutes < startMinutes || (uniformHalfHourSlots && endMinutes === startMinutes)) endMinutes += 24 * 60
 
   const slots: Array<{ value: number; label: string }> = []
+  if (uniformHalfHourSlots) {
+    for (let minutes = startMinutes; minutes < endMinutes; minutes += 30) {
+      slots.push({ value: slots.length + 1, label: toTime(minutes) })
+    }
+    return slots
+  }
   let currentMinutes = startMinutes
   let slotNum = 1
 

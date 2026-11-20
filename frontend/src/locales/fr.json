@@ -91,6 +91,7 @@
   "introMoreInfo": "Pour plus d'informations :\n- Contactez le support du formulaire : {{support}} si vous avez des questions sur le remplissage de ce formulaire ou des modifications à votre soumission de formulaire !",
   "scheduleDay_monday": "Lundi 00:00–24:00",
   "scheduleDay_tuesday": "Mardi 00:00–24:00",
+    "scheduleDay_wednesday": "Mercredi 00:00–24:00",
   "scheduleDay_thursday": "Jeudi 00:00–24:00",
   "scheduleDay_friday_full": "Vendredi 00:00–24:00",
   "scheduleDay_friday_sat": "Vendredi 10:00 – Samedi 10:00",

@@ -107,6 +107,22 @@ pub fn calculate_time_slots(start_time: &str, end_time: Option<&str>) -> Vec<(u8
     slots
 }
 
+/// Generates consecutive 30-minute slots, excluding the end of the time window.
+pub fn calculate_half_hour_slots(start_time: &str, end_time: Option<&str>) -> Vec<(u8, String)> {
+    let start = parse_time_to_minutes(start_time).unwrap_or(0);
+    let mut end = end_time
+        .and_then(parse_time_to_minutes)
+        .unwrap_or(start + 24 * 60);
+    if end <= start {
+        end += 24 * 60;
+    }
+    (start..end)
+        .step_by(30)
+        .enumerate()
+        .map(|(index, minutes)| ((index + 1) as u8, minutes_to_time_string(minutes)))
+        .collect()
+}
+
 /// Calculates slot rankings based on how many players requested each slot
 /// Returns a HashMap: slot -> request_count (higher count = higher rank/popularity)
 pub fn calculate_slot_rankings(available_slots_list: &[Vec<u8>]) -> HashMap<u8, u32> {

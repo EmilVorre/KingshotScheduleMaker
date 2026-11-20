@@ -1708,7 +1708,7 @@ dependencies = [
 
 [[package]]
 name = "prep-appointments"
-version = "0.1.0"
+version = "1.4.0"
 dependencies = [
  "actix-session",
  "actix-web",

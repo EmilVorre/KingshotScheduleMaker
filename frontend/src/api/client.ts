@@ -633,12 +633,13 @@ export interface CreateFormRequest {
   alliances: string[]
   include_non_of_above: boolean
   construction_truegold_mode: string
-  construction_times: { start_time: string; end_time?: string }
-  research_times: { start_time: string; end_time?: string }
-  troops_times: { start_time: string; end_time?: string }
+  construction_times: { start_time: string; end_time?: string; uniform_half_hour_slots?: boolean }
+  research_times: { start_time: string; end_time?: string; uniform_half_hour_slots?: boolean }
+  troops_times: { start_time: string; end_time?: string; uniform_half_hour_slots?: boolean }
    // Logical day slots (e.g. 'monday', 'tuesday', 'friday_full', 'friday_sat') for display/translation
   construction_day_slot?: string
   research_day_slot?: string
+  troops_day_slot?: string
   predetermined_slots?: PredeterminedSlot[]
   intro_text?: string
 }
@@ -681,11 +682,12 @@ export interface FormConfig {
   alliances?: string[]
   include_non_of_above?: boolean
   construction_truegold_mode?: string
-  construction_times?: { start_time: string; end_time?: string | null }
-  research_times?: { start_time: string; end_time?: string | null }
-  troops_times?: { start_time: string; end_time?: string | null }
+  construction_times?: { start_time: string; end_time?: string | null; uniform_half_hour_slots?: boolean }
+  research_times?: { start_time: string; end_time?: string | null; uniform_half_hour_slots?: boolean }
+  troops_times?: { start_time: string; end_time?: string | null; uniform_half_hour_slots?: boolean }
   construction_day_slot?: string | null
   research_day_slot?: string | null
+  troops_day_slot?: string | null
   intro_text?: string
   support_person_name?: string
   kingdom_id?: string

@@ -47,17 +47,17 @@ export default function FormPage() {
 
   const constructionSlots = useMemo(() => {
     const ct = config?.construction_times
-    return calculateTimeSlots(ct?.start_time ?? '00:00', ct?.end_time ?? null)
+    return calculateTimeSlots(ct?.start_time ?? '00:00', ct?.end_time ?? null, ct?.uniform_half_hour_slots ?? false)
   }, [config?.construction_times])
 
   const researchSlots = useMemo(() => {
     const rt = config?.research_times
-    return calculateTimeSlots(rt?.start_time ?? '00:00', rt?.end_time ?? null)
+    return calculateTimeSlots(rt?.start_time ?? '00:00', rt?.end_time ?? null, rt?.uniform_half_hour_slots ?? false)
   }, [config?.research_times])
 
   const troopsSlots = useMemo(() => {
     const tt = config?.troops_times
-    return calculateTimeSlots(tt?.start_time ?? '00:00', tt?.end_time ?? null)
+    return calculateTimeSlots(tt?.start_time ?? '00:00', tt?.end_time ?? null, tt?.uniform_half_hour_slots ?? false)
   }, [config?.troops_times])
 
   const tgMode = config?.construction_truegold_mode ?? 'truegold_unlocked'
@@ -216,7 +216,7 @@ export default function FormPage() {
 
     const constructionDayKey = `scheduleDay_${constructionSlot}`
     const researchDayKey = `scheduleDay_${researchSlot}`
-    const troopsDayKey = 'scheduleDay_thursday'
+    const troopsDayKey = `scheduleDay_${config.troops_day_slot ?? 'thursday'}`
 
     const constructionDay = t(constructionDayKey)
     const researchDay = t(researchDayKey)
@@ -247,6 +247,7 @@ export default function FormPage() {
     const key = `scheduleDay_${slotId}` as
       | 'scheduleDay_monday'
       | 'scheduleDay_tuesday'
+      | 'scheduleDay_wednesday'
       | 'scheduleDay_thursday'
       | 'scheduleDay_friday_full'
       | 'scheduleDay_friday_sat'
@@ -784,7 +785,7 @@ export default function FormPage() {
                         <p className="text-xs text-gray-500 mb-4">{t('troopsTimeSlotsNote')}</p>
                         <div className="space-y-2 bg-gray-900/50 p-4 rounded-lg">
                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                            {getDayTagLabel('thursday')}
+                            {getDayTagLabel(config?.troops_day_slot ?? 'thursday')}
                           </p>
                           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                             {troopsSlots.map((slot) => (

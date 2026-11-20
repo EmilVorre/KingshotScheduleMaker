@@ -16,7 +16,6 @@ use super::state::{
     AppState, CreateFormRequest, FormConfig, FormData, FormStatsResponse, FormTimeSlotStats,
     UpdateFormConfigRequest,
 };
-use crate::schedule::calculate_time_slots;
 
 /// Submit form by code (public)
 pub async fn submit_form_by_code(
@@ -157,6 +156,28 @@ pub async fn create_form(
         })));
     }
 
+    let day_index = |day: &str| match day {
+        "monday" => Some(1),
+        "tuesday" => Some(2),
+        "wednesday" => Some(3),
+        "thursday" => Some(4),
+        "friday_full" | "friday_sat" => Some(5),
+        _ => None,
+    };
+    let mut selected_days = std::collections::HashSet::new();
+    for day in [
+        body.construction_day_slot.as_deref().unwrap_or("monday"),
+        body.research_day_slot.as_deref().unwrap_or("tuesday"),
+        body.troops_day_slot.as_deref().unwrap_or("thursday"),
+    ] {
+        if day_index(day).is_none() || !selected_days.insert(day_index(day)) {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error": "Choose a different day from 1 to 5 for each appointment type"
+            })));
+        }
+    }
+
     let mut code = generate_form_code();
     let mut max_attempts = 100;
     loop {
@@ -202,6 +223,7 @@ pub async fn create_form(
             troops_times: body.troops_times.clone(),
             construction_day_slot: body.construction_day_slot.clone(),
             research_day_slot: body.research_day_slot.clone(),
+            troops_day_slot: body.troops_day_slot.clone(),
             predetermined_slots: body.predetermined_slots.clone(),
             intro_text: body.intro_text.clone(),
             support_person_name: body.support_person_name.clone(),
@@ -449,18 +471,9 @@ pub async fn get_form_stats_by_code(
         })));
     };
 
-    let construction_slots = calculate_time_slots(
-        &config.construction_times.start_time,
-        config.construction_times.end_time.as_deref(),
-    );
-    let research_slots = calculate_time_slots(
-        &config.research_times.start_time,
-        config.research_times.end_time.as_deref(),
-    );
-    let troops_slots = calculate_time_slots(
-        &config.troops_times.start_time,
-        config.troops_times.end_time.as_deref(),
-    );
+    let construction_slots = config.construction_times.time_slots();
+    let research_slots = config.research_times.time_slots();
+    let troops_slots = config.troops_times.time_slots();
 
     let construction_slots_ref: Vec<(u8, String)> = construction_slots.clone();
     let research_slots_ref: Vec<(u8, String)> = research_slots.clone();

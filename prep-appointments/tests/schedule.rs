@@ -340,3 +340,32 @@ fn test_apply_move_chain() {
     assert!(!used_slots.contains(&1));
     assert!(used_slots.contains(&2));
 }
+
+#[test]
+fn half_hour_slots_cover_exactly_one_day() {
+    use prep_appointments::schedule::slot_utils::calculate_half_hour_slots;
+    let slots = calculate_half_hour_slots("00:00", None);
+    assert_eq!(slots.len(), 48);
+    assert_eq!(slots[0], (1, "00:00".to_string()));
+    assert_eq!(slots[1], (2, "00:30".to_string()));
+    assert_eq!(slots[47], (48, "23:30".to_string()));
+    assert_eq!(slots, calculate_half_hour_slots("00:00", Some("00:00")));
+    let overnight = calculate_half_hour_slots("23:00", Some("01:00"));
+    assert_eq!(overnight.len(), 4);
+    assert_eq!(overnight[2].1, "00:00");
+}
+
+#[test]
+fn stored_form_timing_preserves_legacy_slots_and_supports_half_hours() {
+    use prep_appointments::web::DayTimeConfig;
+    let mut timing: DayTimeConfig = serde_json::from_value(serde_json::json!({
+        "start_time": "00:00", "end_time": null
+    }))
+    .unwrap();
+    assert_eq!(timing.time_slots()[1].1, "00:15");
+    timing.uniform_half_hour_slots = true;
+    let restored: DayTimeConfig =
+        serde_json::from_value(serde_json::to_value(timing).unwrap()).unwrap();
+    assert_eq!(restored.time_slots().len(), 48);
+    assert_eq!(restored.time_slots()[1].1, "00:30");
+}
